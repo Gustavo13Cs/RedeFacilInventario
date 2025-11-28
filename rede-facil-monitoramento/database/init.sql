@@ -46,7 +46,7 @@ CREATE TABLE alerts (
     id INT AUTO_INCREMENT PRIMARY KEY,
     machine_id INT NOT NULL,
     alert_type ENUM('warning', 'critical') NOT NULL,
-    message VARCHAR(255), -- Ex: "CPU acima de 90% por 5 min"
+    message VARCHAR(255), 
     is_resolved BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (machine_id) REFERENCES machines(id)
