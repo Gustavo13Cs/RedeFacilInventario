@@ -1,23 +1,29 @@
 {
-  "name": "backend",
+  "name": "sistema-inventario-redefacil",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "description": "API para o Sistema de Inventário e Monitoramento da Rede Fácil Financeira.",
+  "main": "src/server.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
     "start": "node src/server.js",
-    "dev": "nodemon src/server.js"
+    "dev": "nodemon src/server.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "keywords": [],
+  "keywords": [
+    "inventory",
+    "monitoring",
+    "telemetry",
+    "nodejs",
+    "mysql"
+  ],
   "author": "",
   "license": "ISC",
-  "type": "commonjs",
   "dependencies": {
     "cors": "^2.8.5",
-    "dotenv": "^17.2.3",
-    "express": "^5.1.0",
-    "mysql2": "^3.15.3",
-    "nodemon": "^3.1.11",
-    "socket.io": "^4.8.1"
+    "express": "^4.19.2",
+    "mysql2": "^3.9.7",
+    "socket.io": "^4.7.5"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.0"
   }
 }
