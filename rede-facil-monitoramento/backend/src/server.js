@@ -1,8 +1,18 @@
 const express = require('express');
+<<<<<<< HEAD
 const mysql = require('mysql2/promise');
+=======
+>>>>>>> origin/dev
 const cors = require('cors');
 const http = require('http');
 const { Server } = require('socket.io');
+
+// 1. IMPORTAÇÕES DA ESTRUTURA
+require('./config/db'); // 👈 Apenas carrega a conexão inicial
+const machineRoutes = require('./routes/machineRoutes');
+const setupSocketIo = require('./socket/socketHandler');
+const monitorService = require('./services/monitorService');
+
 
 const app = express();
 const server = http.createServer(app);
@@ -10,13 +20,21 @@ const server = http.createServer(app);
 app.use(cors());
 app.use(express.json());
 
+<<<<<<< HEAD
 const io = new Server(server, {
     cors: {
         origin: "*",
+=======
+// 2. Configuração do Socket.io
+const io = new Server(server, {
+    cors: {
+        origin: "*", 
+>>>>>>> origin/dev
         methods: ["GET", "POST"]
     }
 });
 
+<<<<<<< HEAD
 const db = mysql.createPool({
     host: process.env.DB_HOST || 'localhost',
     user: process.env.DB_USER || 'admin',
@@ -41,11 +59,19 @@ async function getMachineId(uuid) {
     return rows.length > 0 ? rows[0].id : null;
 }
 
+=======
+// 3. CONFIGURAÇÃO DE DEPENDÊNCIA CRUZADA (Service precisa do IO)
+monitorService.setSocketIo(io);
+setupSocketIo(io);
 
+>>>>>>> origin/dev
+
+// 4. ROTAS BASE E ROTAS DA API
 app.get('/', (req, res) => {
     res.json({ message: 'API Rede Fácil Financeira - Online 🚀' });
 });
 
+<<<<<<< HEAD
 app.post('/api/machines/register', async (req, res) => {
     const { 
         uuid, hostname, ip_address, os_name, 
@@ -328,6 +354,13 @@ io.on('connection', (socket) => {
 });
 
 
+=======
+// Todas as rotas da API agora começam com /api
+app.use('/api', machineRoutes);
+
+
+// 5. INICIALIZAÇÃO DO SERVIDOR
+>>>>>>> origin/dev
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, '0.0.0.0', () => {
     console.log(`🔥 Servidor rodando na porta ${PORT}`);
