@@ -7,4 +7,4 @@ function setupSocketIo(io) {
     });
 }
 
-module.exports = setupSocketIo;s
+module.exports = setupSocketIo; 
