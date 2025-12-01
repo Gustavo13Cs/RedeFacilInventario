@@ -1,11 +1,11 @@
-const monitorServices = require('../services/monitorServices');
+const monitorService = require('../services/monitorServices');
 
 exports.receiveTelemetry = async (req, res) => {
     const data = req.body;
     console.log("📊 Telemetria:", data);
     
-    if (monitorServices.processTelemetry) {
-        await monitorServices.processTelemetry(data);
+    if (monitorService.processTelemetry) {
+        await monitorService.processTelemetry(data);
     }
     res.status(200).json({ message: 'ok' });
 };

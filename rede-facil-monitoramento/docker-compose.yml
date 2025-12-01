@@ -27,7 +27,7 @@ services:
   backend:
     build: ./backend
     container_name: redefacil_api
-    restart: on-failure
+    restart: always
     ports:
       - "3001:3000" 
     environment:

@@ -1,11 +1,9 @@
-const monitorService = require('../services/monitorService');
-const { db, getMachineId } = require('../config/db'); // db só para consultas diretas
+const monitorService = require('../services/monitorServices');
+const { db, getMachineId } = require('../config/db'); 
 
-// ROTA 1: REGISTRO/ATUALIZAÇÃO DE MÁQUINAS
 exports.registerMachine = async (req, res) => {
     const data = req.body;
     
-    // Validação (deve ficar no Controller ou Middleware)
     if (!data.uuid || !data.hostname) {
         return res.status(400).json({ message: 'UUID e hostname são obrigatórios.' });
     }
