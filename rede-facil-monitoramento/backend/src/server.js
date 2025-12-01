@@ -1,5 +1,5 @@
 const express = require('express');
-const mysql = require('mysql2/promise'); // Usando a API promise para async/await
+const mysql = require('mysql2/promise');
 const cors = require('cors');
 const http = require('http');
 const { Server } = require('socket.io');
@@ -10,15 +10,13 @@ const server = http.createServer(app);
 app.use(cors());
 app.use(express.json());
 
-// Configuração do Socket.io
 const io = new Server(server, {
     cors: {
-        origin: "*", // Permite conexão de qualquer origem (ajuste em produção!)
+        origin: "*",
         methods: ["GET", "POST"]
     }
 });
 
-// Configuração e Conexão com o Banco de Dados (usando pool de conexões promise)
 const db = mysql.createPool({
     host: process.env.DB_HOST || 'localhost',
     user: process.env.DB_USER || 'admin',
@@ -29,7 +27,6 @@ const db = mysql.createPool({
     queueLimit: 0
 });
 
-// Verificação inicial da conexão
 db.getConnection()
     .then(connection => {
         console.log('✅ Conectado ao MySQL com sucesso!');
@@ -37,31 +34,23 @@ db.getConnection()
     })
     .catch(err => {
         console.error('❌ Erro ao conectar no MySQL:', err.message);
-        // Em um ambiente de produção, você pode querer sair do processo aqui
     });
 
-// Função Auxiliar: Busca o ID da máquina pelo UUID
 async function getMachineId(uuid) {
     const [rows] = await db.execute('SELECT id FROM machines WHERE uuid = ?', [uuid]);
     return rows.length > 0 ? rows[0].id : null;
 }
 
-// ----------------------------------------------------
-// ROTAS BASE
-// ----------------------------------------------------
 
 app.get('/', (req, res) => {
     res.json({ message: 'API Rede Fácil Financeira - Online 🚀' });
 });
 
-// ----------------------------------------------------
-// ROTA 1: REGISTRO/ATUALIZAÇÃO DE MÁQUINAS (INVENTÁRIO)
-// ----------------------------------------------------
 app.post('/api/machines/register', async (req, res) => {
     const { 
         uuid, hostname, ip_address, os_name, 
         cpu_model, ram_total_gb, disk_total_gb, mac_address,
-        installed_software // Array: [{ name: 'Software Name', version: '1.0', install_date: '2023-01-01' }]
+        installed_software 
     } = req.body;
 
     if (!uuid || !hostname) {
@@ -70,11 +59,8 @@ app.post('/api/machines/register', async (req, res) => {
 
     let connection;
     try {
-        // 1. Iniciar Transação
         connection = await db.getConnection();
         await connection.beginTransaction();
-
-        // 2. Inserir/Atualizar Máquina (tabela machines)
         await connection.execute(
             `INSERT INTO machines (uuid, hostname, ip_address, os_name, status) 
              VALUES (?, ?, ?, ?, 'online') 
@@ -83,30 +69,24 @@ app.post('/api/machines/register', async (req, res) => {
             [uuid, hostname, ip_address, os_name, hostname, ip_address, os_name]
         );
 
-        // 3. Obter o ID da máquina (novo ou existente)
         const [rows] = await connection.execute('SELECT id FROM machines WHERE uuid = ?', [uuid]);
         const machine_id = rows[0].id;
 
-        // 4. Inserir/Atualizar Specs de Hardware (tabela hardware_specs)
         const [specsRows] = await connection.execute('SELECT id FROM hardware_specs WHERE machine_id = ?', [machine_id]);
 
         if (specsRows.length === 0) {
-            // Inserir
             await connection.execute(
                 `INSERT INTO hardware_specs (machine_id, cpu_model, ram_total_gb, disk_total_gb, mac_address)
                  VALUES (?, ?, ?, ?, ?)`,
                 [machine_id, cpu_model || null, ram_total_gb || null, disk_total_gb || null, mac_address || null]
             );
         } else {
-            // Atualizar
             await connection.execute(
                 `UPDATE hardware_specs SET cpu_model=?, ram_total_gb=?, disk_total_gb=?, mac_address=? WHERE machine_id = ?`,
                 [cpu_model || null, ram_total_gb || null, disk_total_gb || null, mac_address || null, machine_id]
             );
         }
         
-        // 5. Inserir Software (tabela installed_software)
-        // Limpar softwares antigos e inserir novos (sincronização)
         await connection.execute('DELETE FROM installed_software WHERE machine_id = ?', [machine_id]);
         
         if (installed_software && Array.isArray(installed_software) && installed_software.length > 0) {
@@ -123,7 +103,6 @@ app.post('/api/machines/register', async (req, res) => {
             );
         }
 
-        // 6. Commit e Resposta
         await connection.commit();
         res.status(201).json({ message: 'Máquina registrada/atualizada com sucesso', machine_id });
 
@@ -140,9 +119,6 @@ app.post('/api/machines/register', async (req, res) => {
     }
 });
 
-// ----------------------------------------------------
-// ROTA 2: INGESTÃO E PROCESSAMENTO DE TELEMETRIA
-// ----------------------------------------------------
 app.post('/api/telemetry', async (req, res) => {
     const { uuid, cpu_usage_percent, ram_usage_percent, disk_free_percent, temperature_celsius } = req.body;
     
@@ -157,18 +133,15 @@ app.post('/api/telemetry', async (req, res) => {
             return res.status(404).json({ message: 'Máquina não encontrada. Registre-a primeiro.' });
         }
 
-        // 1. Salvar no Banco de Dados (telemetry_logs)
         await db.execute(
             `INSERT INTO telemetry_logs (machine_id, cpu_usage_percent, ram_usage_percent, disk_free_percent, temperature_celsius)
              VALUES (?, ?, ?, ?, ?)`,
             [machine_id, cpu_usage_percent, ram_usage_percent, disk_free_percent, temperature_celsius || null]
         );
 
-        // 2. Verificação de Alertas (Ex: CPU Crítica > 90%)
         if (cpu_usage_percent > 90) {
             const alert_message = `Uso de CPU crítico (${cpu_usage_percent.toFixed(2)}%) na máquina ${uuid} (${(await db.execute('SELECT hostname FROM machines WHERE id = ?', [machine_id]))[0][0].hostname}).`;
             
-            // Verifica se já existe um alerta similar e não resolvido na última hora para evitar spam
             const [existingAlerts] = await db.execute(
                 `SELECT id FROM alerts WHERE machine_id = ? AND alert_type = 'critical' AND is_resolved = FALSE AND created_at > DATE_SUB(NOW(), INTERVAL 1 HOUR)`,
                 [machine_id]
@@ -183,13 +156,10 @@ app.post('/api/telemetry', async (req, res) => {
             }
         }
         
-        // 3. Atualizar status da máquina (mantê-la 'online')
         await db.execute(
             `UPDATE machines SET status = 'online', last_seen = CURRENT_TIMESTAMP WHERE id = ?`,
             [machine_id]
         );
-
-        // 4. Transmitir em Tempo Real via Socket.io
         io.emit('new_telemetry', { uuid, cpu_usage_percent, ram_usage_percent, disk_free_percent });
 
 
@@ -200,11 +170,7 @@ app.post('/api/telemetry', async (req, res) => {
     }
 });
 
-// ----------------------------------------------------
-// ROTAS DE CONSULTA PARA O DASHBOARD
-// ----------------------------------------------------
 
-// ROTA 3: LISTAR TODAS AS MÁQUINAS (GET /api/machines)
 app.get('/api/machines', async (req, res) => {
     try {
         const [machines] = await db.execute(
@@ -222,11 +188,9 @@ app.get('/api/machines', async (req, res) => {
     }
 });
 
-// ROTA 4: DETALHES DE UMA MÁQUINA (GET /api/machines/:uuid)
 app.get('/api/machines/:uuid', async (req, res) => {
     const { uuid } = req.params;
     try {
-        // 1. Informações Básicas e Hardware
         const [details] = await db.execute(
             `SELECT 
                 m.uuid, m.hostname, m.ip_address, m.os_name, m.status, m.last_seen, m.created_at, m.id as machine_id,
@@ -243,13 +207,11 @@ app.get('/api/machines/:uuid', async (req, res) => {
 
         const machine_id = details[0].machine_id;
 
-        // 2. Software Instalado
         const [software] = await db.execute(
             `SELECT software_name, version, install_date FROM installed_software WHERE machine_id = ? ORDER BY software_name`,
             [machine_id]
         );
 
-        // 3. Última Telemetria
         const [lastTelemetry] = await db.execute(
             `SELECT cpu_usage_percent, ram_usage_percent, disk_free_percent, temperature_celsius, created_at 
              FROM telemetry_logs 
@@ -259,7 +221,6 @@ app.get('/api/machines/:uuid', async (req, res) => {
             [machine_id]
         );
 
-        // 4. Últimos Alertas Abertos
          const [openAlerts] = await db.execute(
             `SELECT alert_type, message, created_at FROM alerts WHERE machine_id = ? AND is_resolved = FALSE ORDER BY created_at DESC`,
             [machine_id]
@@ -273,7 +234,7 @@ app.get('/api/machines/:uuid', async (req, res) => {
             open_alerts: openAlerts
         };
 
-        delete response.machine_id; // Remove o ID interno da resposta
+        delete response.machine_id; 
         res.json(response);
 
     } catch (error) {
@@ -283,7 +244,6 @@ app.get('/api/machines/:uuid', async (req, res) => {
 });
 
 
-// ROTA 5: HISTÓRICO DE TELEMETRIA (GET /api/telemetry/:uuid/history)
 app.get('/api/telemetry/:uuid/history', async (req, res) => {
     const { uuid } = req.params;
     const { limit = 100 } = req.query; 
@@ -312,7 +272,6 @@ app.get('/api/telemetry/:uuid/history', async (req, res) => {
 });
 
 
-// ROTA 6: LISTAR ALERTAS (GET /api/alerts)
 app.get('/api/alerts', async (req, res) => {
     const { resolved = 'false', limit = 55 } = req.query; 
 
@@ -338,7 +297,7 @@ app.get('/api/alerts', async (req, res) => {
 });
 
 
-// ROTA 7: RESOLVER ALERTA (PUT /api/alerts/:id/resolve)
+
 app.put('/api/alerts/:id/resolve', async (req, res) => {
     const { id } = req.params;
 
@@ -359,9 +318,6 @@ app.put('/api/alerts/:id/resolve', async (req, res) => {
     }
 });
 
-// ----------------------------------------------------
-// SOCKET.IO (Tempo Real)
-// ----------------------------------------------------
 
 io.on('connection', (socket) => {
     console.log('🔌 Novo cliente conectado ao Dashboard:', socket.id);
@@ -371,9 +327,6 @@ io.on('connection', (socket) => {
     });
 });
 
-// ----------------------------------------------------
-// INICIALIZAÇÃO DO SERVIDOR
-// ----------------------------------------------------
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, '0.0.0.0', () => {
