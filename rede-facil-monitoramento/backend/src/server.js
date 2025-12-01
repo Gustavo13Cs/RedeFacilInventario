@@ -12,8 +12,9 @@ const monitorService = require('./services/monitorService');
 const app = express();
 const server = http.createServer(app);
 
-app.use(cors());
+
 app.use(express.json());
+app.use(cors());
 
 const io = new Server(server, {
     cors: {
