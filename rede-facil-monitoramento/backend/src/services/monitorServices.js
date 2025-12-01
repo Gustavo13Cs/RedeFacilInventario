@@ -1,115 +1,105 @@
-const { db, getMachineId } = require('../config/db');
+// CORREÇÃO 1: Importar o db diretamente, sem chaves {}
+const db = require('../config/db');
 
-// Esta função agora precisa receber 'io' para emitir alertas em tempo real
 let socketIo;
+
 function setSocketIo(ioInstance) {
     socketIo = ioInstance;
 }
 
-// Lógica de Registro/Atualização de Máquina (antiga ROTA 1)
+// Função auxiliar interna para pegar o ID numérico da máquina
+async function getMachineId(uuid) {
+    const [rows] = await db.execute('SELECT id, hostname FROM machines WHERE uuid = ?', [uuid]);
+    if (rows.length > 0) {
+        return rows[0];
+    }
+    return null;
+}
+
 async function registerOrUpdateMachine(data) {
-    // ... (Use a transação e toda a lógica complexa de DB da ROTA 1)
-    
-    // (O código da ROTA 1 vai aqui, dentro de uma função)
     const { 
         uuid, hostname, ip_address, os_name, 
         cpu_model, ram_total_gb, disk_total_gb, mac_address,
-        installed_software
+        installed_software 
     } = data;
-
-    // ... (Validação já foi feita no Controller)
 
     let connection;
     try {
-        // 1. Iniciar Transação
         connection = await db.getConnection();
         await connection.beginTransaction();
-
-        // 2. Inserir/Atualizar Máquina (machines)
+        
+        // 1. Tenta inserir ou atualizar a máquina
         await connection.execute(
-            `INSERT INTO machines (uuid, hostname, ip_address, os_name, status) 
-             VALUES (?, ?, ?, ?, 'online') 
+            `INSERT INTO machines (uuid, hostname, ip_address, os_name, status, last_seen) 
+             VALUES (?, ?, ?, ?, 'online', NOW()) 
              ON DUPLICATE KEY UPDATE 
-             hostname=?, ip_address=?, os_name=?, last_seen=CURRENT_TIMESTAMP, status='online'`,
+             hostname=?, ip_address=?, os_name=?, status='online', last_seen=NOW()`,
             [uuid, hostname, ip_address, os_name, hostname, ip_address, os_name]
         );
 
-        // 3. Obter o ID da máquina (novo ou existente)
+        // 2. Pega o ID da máquina recém salva
         const [rows] = await connection.execute('SELECT id FROM machines WHERE uuid = ?', [uuid]);
         const machine_id = rows[0].id;
 
-        // 4. Inserir/Atualizar Specs de Hardware (hardware_specs)
+        // 3. Verifica se já tem specs de hardware
         const [specsRows] = await connection.execute('SELECT id FROM hardware_specs WHERE machine_id = ?', [machine_id]);
 
         if (specsRows.length === 0) {
             await connection.execute(
                 `INSERT INTO hardware_specs (machine_id, cpu_model, ram_total_gb, disk_total_gb, mac_address)
                  VALUES (?, ?, ?, ?, ?)`,
-                [machine_id, cpu_model || null, ram_total_gb || null, disk_total_gb || null, mac_address || null]
+                [machine_id, cpu_model, ram_total_gb, disk_total_gb, mac_address]
             );
         } else {
             await connection.execute(
-                `UPDATE hardware_specs SET cpu_model=?, ram_total_gb=?, disk_total_gb=?, mac_address=? WHERE machine_id = ?`,
-                [cpu_model || null, ram_total_gb || null, disk_total_gb || null, mac_address || null, machine_id]
-            );
-        }
-        
-        // 5. Inserir Software (installed_software)
-        await connection.execute('DELETE FROM installed_software WHERE machine_id = ?', [machine_id]);
-        
-        if (installed_software && Array.isArray(installed_software) && installed_software.length > 0) {
-            const softwareValues = installed_software.map(s => [
-                machine_id, 
-                s.name, 
-                s.version || null, 
-                s.install_date || null
-            ]);
-            
-            await connection.query(
-                'INSERT INTO installed_software (machine_id, software_name, version, install_date) VALUES ?',
-                [softwareValues]
+                `UPDATE hardware_specs SET cpu_model=?, ram_total_gb=?, disk_total_gb=?, mac_address=? WHERE machine_id=?`,
+                [cpu_model, ram_total_gb, disk_total_gb, mac_address, machine_id]
             );
         }
 
-        // 6. Commit
         await connection.commit();
-        return machine_id; 
+        console.log(`✅ Máquina ${hostname} (${uuid}) registrada/atualizada.`);
+
+        // Emite evento para o front-end atualizar a lista
+        if (socketIo) {
+            socketIo.emit('machine_updated', { uuid, hostname, status: 'online' });
+        }
 
     } catch (error) {
-        if (connection) {
-            await connection.rollback();
-        }
-        throw error; // Propaga o erro para o Controller
+        if (connection) await connection.rollback();
+        console.error("Erro ao registrar máquina:", error);
+        throw error;
     } finally {
-        if (connection) {
-            connection.release();
-        }
+        if (connection) connection.release();
     }
 }
 
-// Lógica de Ingestão de Telemetria (antiga ROTA 2)
 async function processTelemetry(data) {
-    const { uuid, cpu_usage_percent, ram_usage_percent, disk_free_percent, temperature_celsius } = data;
-    
-    const machine_id = await getMachineId(uuid);
-    
-    if (!machine_id) {
-        throw new Error('Máquina não encontrada.');
+    const { machine_uuid, cpu_usage_percent, ram_usage_percent, disk_free_percent, temperature_celsius } = data;
+
+    // CORREÇÃO 2: Busca o ID da máquina antes de salvar a telemetria
+    const machineData = await getMachineId(machine_uuid);
+
+    if (!machineData) {
+        console.error(`⚠️ Telemetria recebida de máquina desconhecida: ${machine_uuid}`);
+        return; // Ignora se a máquina não estiver cadastrada
     }
 
-    // 1. Salvar no Banco de Dados (telemetry_logs)
+    const machine_id = machineData.id;
+    const hostname = machineData.hostname;
+
+    // Salva telemetria
     await db.execute(
-        `INSERT INTO telemetry_logs (machine_id, cpu_usage_percent, ram_usage_percent, disk_free_percent, temperature_celsius)
+        `INSERT INTO telemetry (machine_id, cpu_usage_percent, ram_usage_percent, disk_free_percent, temperature_celsius)
          VALUES (?, ?, ?, ?, ?)`,
         [machine_id, cpu_usage_percent, ram_usage_percent, disk_free_percent, temperature_celsius || null]
     );
 
-    // 2. Verificação de Alertas (Lógica de Negócio!)
+    // Lógica de Alerta (Exemplo: CPU > 90%)
     if (cpu_usage_percent > 90) {
-        const hostnameResult = await db.execute('SELECT hostname FROM machines WHERE id = ?', [machine_id]);
-        const hostname = hostnameResult[0][0].hostname;
-        const alert_message = `Uso de CPU crítico (${cpu_usage_percent.toFixed(2)}%) na máquina ${uuid} (${hostname}).`;
+        const alert_message = `Uso de CPU crítico (${cpu_usage_percent.toFixed(2)}%) na máquina ${hostname}.`;
         
+        // Verifica se já existe alerta recente (última 1 hora) para não flodar
         const [existingAlerts] = await db.execute(
             `SELECT id FROM alerts WHERE machine_id = ? AND alert_type = 'critical' AND is_resolved = FALSE AND created_at > DATE_SUB(NOW(), INTERVAL 1 HOUR)`,
             [machine_id]
@@ -120,28 +110,28 @@ async function processTelemetry(data) {
                 `INSERT INTO alerts (machine_id, alert_type, message) VALUES (?, 'critical', ?)`,
                 [machine_id, alert_message]
             );
-            // 🛑 EMITE O ALERTA VIA SOCKET.IO (Usando a instância salva)
+            
+            console.log(`🚨 ALERTA GERADO: ${alert_message}`);
+
             if (socketIo) {
-                socketIo.emit('new_alert', { machine_id, alert_type: 'critical', message: alert_message });
+                socketIo.emit('new_alert', { machine_id, hostname, alert_type: 'critical', message: alert_message });
             }
         }
     }
     
-    // 3. Atualizar status da máquina
-    await db.execute(
-        `UPDATE machines SET status = 'online', last_seen = CURRENT_TIMESTAMP WHERE id = ?`,
-        [machine_id]
-    );
-
-    // 4. Transmitir em Tempo Real via Socket.io
+    // Envia dados em tempo real para o gráfico no Frontend
     if (socketIo) {
-        socketIo.emit('new_telemetry', { uuid, cpu_usage_percent, ram_usage_percent, disk_free_percent });
+        socketIo.emit('new_telemetry', {
+            machine_uuid,
+            cpu_usage_percent,
+            ram_usage_percent,
+            timestamp: new Date()
+        });
     }
 }
 
-module.exports = { 
-    setSocketIo, 
-    registerOrUpdateMachine, 
+module.exports = {
+    setSocketIo,
+    registerOrUpdateMachine,
     processTelemetry
-    // Você também pode exportar aqui as funções de busca (GET)
 };
