@@ -1,4 +1,3 @@
-// CORREÇÃO 1: Importar o db diretamente, sem chaves {}
 const db = require('../config/db');
 
 let socketIo;
@@ -7,7 +6,6 @@ function setSocketIo(ioInstance) {
     socketIo = ioInstance;
 }
 
-// Função auxiliar interna para pegar o ID numérico da máquina
 async function getMachineId(uuid) {
     const [rows] = await db.execute('SELECT id, hostname FROM machines WHERE uuid = ?', [uuid]);
     if (rows.length > 0) {
@@ -28,7 +26,6 @@ async function registerOrUpdateMachine(data) {
         connection = await db.getConnection();
         await connection.beginTransaction();
         
-        // 1. Tenta inserir ou atualizar a máquina
         await connection.execute(
             `INSERT INTO machines (uuid, hostname, ip_address, os_name, status, last_seen) 
              VALUES (?, ?, ?, ?, 'online', NOW()) 
@@ -37,11 +34,8 @@ async function registerOrUpdateMachine(data) {
             [uuid, hostname, ip_address, os_name, hostname, ip_address, os_name]
         );
 
-        // 2. Pega o ID da máquina recém salva
         const [rows] = await connection.execute('SELECT id FROM machines WHERE uuid = ?', [uuid]);
         const machine_id = rows[0].id;
-
-        // 3. Verifica se já tem specs de hardware
         const [specsRows] = await connection.execute('SELECT id FROM hardware_specs WHERE machine_id = ?', [machine_id]);
 
         if (specsRows.length === 0) {
@@ -59,8 +53,6 @@ async function registerOrUpdateMachine(data) {
 
         await connection.commit();
         console.log(`✅ Máquina ${hostname} (${uuid}) registrada/atualizada.`);
-
-        // Emite evento para o front-end atualizar a lista
         if (socketIo) {
             socketIo.emit('machine_updated', { uuid, hostname, status: 'online' });
         }
@@ -77,29 +69,25 @@ async function registerOrUpdateMachine(data) {
 async function processTelemetry(data) {
     const { machine_uuid, cpu_usage_percent, ram_usage_percent, disk_free_percent, temperature_celsius } = data;
 
-    // CORREÇÃO 2: Busca o ID da máquina antes de salvar a telemetria
     const machineData = await getMachineId(machine_uuid);
 
     if (!machineData) {
         console.error(`⚠️ Telemetria recebida de máquina desconhecida: ${machine_uuid}`);
-        return; // Ignora se a máquina não estiver cadastrada
+        return; 
     }
 
     const machine_id = machineData.id;
     const hostname = machineData.hostname;
 
-    // Salva telemetria
     await db.execute(
         `INSERT INTO telemetry (machine_id, cpu_usage_percent, ram_usage_percent, disk_free_percent, temperature_celsius)
          VALUES (?, ?, ?, ?, ?)`,
         [machine_id, cpu_usage_percent, ram_usage_percent, disk_free_percent, temperature_celsius || null]
     );
 
-    // Lógica de Alerta (Exemplo: CPU > 90%)
     if (cpu_usage_percent > 90) {
         const alert_message = `Uso de CPU crítico (${cpu_usage_percent.toFixed(2)}%) na máquina ${hostname}.`;
         
-        // Verifica se já existe alerta recente (última 1 hora) para não flodar
         const [existingAlerts] = await db.execute(
             `SELECT id FROM alerts WHERE machine_id = ? AND alert_type = 'critical' AND is_resolved = FALSE AND created_at > DATE_SUB(NOW(), INTERVAL 1 HOUR)`,
             [machine_id]
@@ -119,7 +107,6 @@ async function processTelemetry(data) {
         }
     }
     
-    // Envia dados em tempo real para o gráfico no Frontend
     if (socketIo) {
         socketIo.emit('new_telemetry', {
             machine_uuid,
