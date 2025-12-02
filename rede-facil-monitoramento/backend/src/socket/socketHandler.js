@@ -11,18 +11,15 @@ module.exports = {
         });
 
         io.on('connection', (socket) => {
-            console.log('🔌 Cliente conectado ao Monitoramento:', socket.id);
-            
-            socket.on('disconnect', () => {
-                console.log('❌ Cliente desconectado:', socket.id);
-            });
+            console.log('🔌 Front-end conectado:', socket.id);
+            socket.on('disconnect', () => console.log('❌ Front-end desconectado:', socket.id));
         });
 
         return io;
     },
     getIO: () => {
         if (!io) {
-            throw new Error("Socket.io não foi inicializado!");
+            throw new Error("Socket.io não inicializado!");
         }
         return io;
     }
