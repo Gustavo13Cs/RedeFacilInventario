@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import io from 'socket.io-client';
 import axios from 'axios';
-import MachineDetails from './components/MachineDetails'; // <--- Importado
+import MachineDetails from './components/MachineDetails'; 
 
 const API_URL = "http://localhost:3001";
 const socket = io('http://localhost:3001');
@@ -16,7 +16,6 @@ function App() {
   const [lastTelemetry, setLastTelemetry] = useState(null);
   const [activeTab, setActiveTab] = useState('dashboard');
   
-  // NOVO ESTADO: Máquina selecionada para ver detalhes
   const [selectedMachine, setSelectedMachine] = useState(null);
 
   useEffect(() => {

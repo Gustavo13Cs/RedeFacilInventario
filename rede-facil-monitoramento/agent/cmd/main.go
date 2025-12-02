@@ -19,7 +19,7 @@ import (
 )
 
 // --- CONFIGURAÇÃO ---
-const API_BASE_URL = "http://localhost:3001/api" // Endpoint base para a API
+const API_BASE_URL = "http://localhost:3001/api" 
 const TELEMETRY_INTERVAL = 60 * time.Second 
 
 // --- ESTRUTURAS DE DADOS (Inalteradas) ---
