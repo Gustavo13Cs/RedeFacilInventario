@@ -7,8 +7,8 @@ import io from 'socket.io-client';
 import axios from 'axios';
 import MachineDetails from './components/MachineDetails'; // <--- Importado
 
-const API_URL = "http://localhost:3000";
-const socket = io(API_URL);
+const API_URL = "http://localhost:3001";
+const socket = io('http://localhost:3001');
 
 function App() {
   const [machines, setMachines] = useState([]);
