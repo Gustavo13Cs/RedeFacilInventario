@@ -20,7 +20,7 @@ import (
 
 // --- CONFIGURAÇÃO ---
 const API_BASE_URL = "http://localhost:3001/api" 
-const TELEMETRY_INTERVAL = 60 * time.Second 
+const TELEMETRY_INTERVAL = 5 * time.Second 
 
 // --- ESTRUTURAS DE DADOS (Inalteradas) ---
 type MachineInfo struct {
