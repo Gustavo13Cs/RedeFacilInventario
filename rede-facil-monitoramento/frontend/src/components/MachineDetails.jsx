@@ -17,27 +17,24 @@ export default function MachineDetails({ machine, onBack }) {
 
   useEffect(() => {
     socket.on('new_telemetry', (newData) => {
-      if (newData.machine_uuid === machine.uuid) {
         
-        const timeNow = new Date().toLocaleTimeString('pt-BR', { 
-            hour: '2-digit', minute: '2-digit', second: '2-digit' 
-        });
-        
-        setTelemetryData(prev => {
-          const newHistory = [...prev, { 
-            time: timeNow, 
-            cpu: Number(newData.cpu_usage_percent), 
-            ram: Number(newData.ram_usage_percent),
-            disk: Number(newData.disk_usage_percent || 0)
-          }];
-          
-          return newHistory.slice(-20); 
-        });
-      }
+        if (newData.machine_uuid === machine.uuid) {
+            
+            const timeNow = new Date().toLocaleTimeString();
+            
+            setTelemetryData(prev => {
+                const newHistory = [...prev, { 
+                    time: timeNow, 
+                    cpu: Number(newData.cpu_usage_percent), 
+                    ram: Number(newData.ram_usage_percent)
+                }];
+                return newHistory.slice(-20); 
+            });
+        }
     });
 
     return () => {
-      socket.off('new_telemetry');
+        socket.off('new_telemetry');
     };
   }, [machine.uuid]);
 

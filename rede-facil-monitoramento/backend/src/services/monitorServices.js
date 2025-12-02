@@ -1,28 +1,18 @@
-// monitorServices.js
-
-// Importa o pool de conexão e a função auxiliar de DB
 const { db, getMachineId } = require('../config/db');
 
-// Variável interna para armazenar a instância do Socket.io
+
 let globalIo; 
 
-// FUNÇÃO QUE O SERVER.JS CHAMA para injetar o Socket.io 
 exports.setSocketIo = (ioInstance) => {
     globalIo = ioInstance;
 };
 
-// ----------------------------------------------------
-// FUNÇÃO AUXILIAR: VALIDAÇÃO BÁSICA DE SOFTWARE
-// ----------------------------------------------------
+
 const isValidSoftware = (s) => {
-    // Garante que 's' é um objeto, tem a propriedade 'name' e que 'name' não é vazio.
     return s && typeof s.name === 'string' && s.name.trim().length > 0;
 };
 
 
-// ----------------------------------------------------
-// SERVIÇO 1: REGISTRO/ATUALIZAÇÃO DE MÁQUINAS (SQL com Transação)
-// ----------------------------------------------------
 exports.registerMachine = async ({
     uuid, hostname, ip_address, os_name, 
     cpu_model, ram_total_gb, disk_total_gb, mac_address,
@@ -36,9 +26,7 @@ exports.registerMachine = async ({
     let connection;
     try {
         connection = await db.getConnection();
-        await connection.beginTransaction(); // Inicia transação
-
-        // 1. Inserir/Atualizar Máquina (UPSERT na tabela 'machines')
+        await connection.beginTransaction(); 
         await connection.execute(
             `INSERT INTO machines (uuid, hostname, ip_address, os_name, status) 
              VALUES (?, ?, ?, ?, 'online') 
@@ -47,11 +35,8 @@ exports.registerMachine = async ({
             [uuid, hostname, ip_address, os_name, hostname, ip_address, os_name]
         );
 
-        // 2. Obter o ID da máquina
         const [rows] = await connection.execute('SELECT id FROM machines WHERE uuid = ?', [uuid]);
         const machine_id = rows[0].id;
-
-        // 3. Inserir/Atualizar Specs de Hardware (tabela 'hardware_specs')
         const [specsRows] = await connection.execute('SELECT id FROM hardware_specs WHERE machine_id = ?', [machine_id]);
         
         const specsData = [
@@ -74,7 +59,6 @@ exports.registerMachine = async ({
             );
         }
         
-        // 4. Sincroniza Software (tabela 'installed_software')
         await connection.execute('DELETE FROM installed_software WHERE machine_id = ?', [machine_id]);
         
         const validSoftware = (installed_software || []).filter(isValidSoftware);
@@ -89,13 +73,13 @@ exports.registerMachine = async ({
             await connection.query('INSERT INTO installed_software (machine_id, software_name, version, install_date) VALUES ?', [softwareValues]);
         }
 
-        await connection.commit(); // Confirma transação
+        await connection.commit(); 
         return { message: 'Máquina registrada/atualizada com sucesso', machine_id };
 
     } catch (error) {
         if (connection) {
             console.error('❌ Transação de Registro/Atualização Desfeita:', error.message);
-            await connection.rollback(); // Desfaz em caso de erro
+            await connection.rollback(); 
         }
         throw error; 
     } finally {
@@ -103,13 +87,10 @@ exports.registerMachine = async ({
     }
 };
 
-// ----------------------------------------------------
-// SERVIÇO 2: INGESTÃO DE TELEMETRIA (SQL e Socket.io)
-// ----------------------------------------------------
+
 exports.processTelemetry = async ({
     uuid, cpu_usage_percent, ram_usage_percent, disk_free_percent, temperature_celsius
 }) => {
-    // Validação básica (Melhoria)
     if (!uuid) {
         throw new Error('UUID da máquina é obrigatório para telemetria.');
     }
@@ -121,21 +102,17 @@ exports.processTelemetry = async ({
             throw new Error('Máquina não encontrada. Registre-a primeiro.');
         }
         
-        // Formata os dados para garantir consistência numérica (Melhoria)
         const cpu_usage = parseFloat(cpu_usage_percent).toFixed(2);
         const ram_usage = parseFloat(ram_usage_percent).toFixed(2);
         const disk_free = parseFloat(disk_free_percent).toFixed(2);
         const temperature = temperature_celsius ? parseFloat(temperature_celsius).toFixed(2) : null;
 
-
-        // 1. Salvar no Banco de Dados (telemetry_logs)
         await db.execute(
             `INSERT INTO telemetry_logs (machine_id, cpu_usage_percent, ram_usage_percent, disk_free_percent, temperature_celsius)
              VALUES (?, ?, ?, ?, ?)`,
             [machine_id, cpu_usage, ram_usage, disk_free, temperature]
         );
 
-        // 2. Verificação de Alertas (Ex: CPU Crítica > 90%)
         if (cpu_usage > 90) {
             const [machineRow] = await db.execute('SELECT hostname FROM machines WHERE id = ?', [machine_id]);
             const hostname = machineRow[0].hostname;

@@ -5,13 +5,13 @@ module.exports = {
         const { Server } = require("socket.io");
         io = new Server(httpServer, {
             cors: {
-                origin: "*", 
+                origin: "*",
                 methods: ["GET", "POST"]
             }
         });
 
         io.on('connection', (socket) => {
-            console.log('🔌 Novo cliente conectado ao Dashboard:', socket.id);
+            console.log('🔌 Cliente conectado ao Monitoramento:', socket.id);
             
             socket.on('disconnect', () => {
                 console.log('❌ Cliente desconectado:', socket.id);

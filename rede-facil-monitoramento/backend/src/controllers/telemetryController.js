@@ -1,10 +1,11 @@
 const monitorService = require('../services/monitorServices');
 const socketHandler = require('../socket/socketHandler'); 
-
 exports.receiveTelemetry = async (req, res) => {
     try {
         const data = req.body;
-        console.log("📊 Telemetria recebida:", data.machine_uuid); 
+        
+        console.log(`📊 Dados recebidos da máquina: ${data.hostname} (${data.cpu_usage_percent}%)`);
+
         if (monitorService.processTelemetry) {
             await monitorService.processTelemetry(data);
         }
