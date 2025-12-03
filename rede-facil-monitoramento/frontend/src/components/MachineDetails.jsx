@@ -1,40 +1,47 @@
 import React, { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button"; 
-import { ArrowLeft, Cpu, HardDrive, Activity } from 'lucide-react';
+import { ArrowLeft, Cpu, HardDrive, Activity, Thermometer } from 'lucide-react'; // Adicionado Thermometer
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
 export default function MachineDetails({ machine, onBack, socket }) {
   const [telemetryData, setTelemetryData] = useState([
-    { time: '00:00', cpu: 0, ram: 0 },
-    // ... dados iniciais
+    { time: '00:00', cpu: 0, ram: 0, temp: 0 },
+    { time: '00:05', cpu: 0, ram: 0, temp: 0 },
+    { time: '00:10', cpu: 0, ram: 0, temp: 0 },
   ]);
 
-useEffect(() => {
-    if (!socket) return;
-    const handleNewTelemetry = (newData) => {
-        console.log("📊 Dados recebidos no Gráfico:", newData);
+  const [currentTemp, setCurrentTemp] = useState(0);
 
+  useEffect(() => {
+    if (!socket) return;
+
+    const handleNewTelemetry = (newData) => {
         if (newData.machine_uuid === machine.uuid) {
+            
             const timeNow = new Date().toLocaleTimeString();
+            const tempValue = Number(newData.temperature_celsius || 0);
+
+            setCurrentTemp(tempValue);
             
             setTelemetryData(prev => {
                 const newHistory = [...prev, { 
                     time: timeNow, 
                     cpu: Number(newData.cpu_usage_percent), 
-                    ram: Number(newData.ram_usage_percent)
+                    ram: Number(newData.ram_usage_percent),
+                    temp: tempValue 
                 }];
                 return newHistory.slice(-20); 
             });
         }
     };
+
     socket.on('new_telemetry', handleNewTelemetry);
 
     return () => {
         socket.off('new_telemetry', handleNewTelemetry);
     };
-  }, [machine.uuid, socket]); 
+  }, [machine.uuid, socket]);
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
@@ -59,8 +66,8 @@ useEffect(() => {
         </div>
       </div>
 
-      {/* Cards de Info Rápida */}
-      <div className="grid gap-4 md:grid-cols-3">
+      {/* Cards de Info Rápida - Atualizado com Temperatura */}
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium text-slate-600">Sistema Operacional</CardTitle>
@@ -95,10 +102,25 @@ useEffect(() => {
             <p className="text-xs text-slate-500">DDR4 / DDR5</p>
           </CardContent>
         </Card>
+
+        {/* Novo Card de Temperatura Atual */}
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-slate-600">Temp. Atual</CardTitle>
+            <Thermometer className="h-4 w-4 text-orange-500" />
+          </CardHeader>
+          <CardContent>
+            <div className={`text-lg font-bold ${currentTemp > 80 ? 'text-red-600' : 'text-slate-800'}`}>
+                {currentTemp}°C
+            </div>
+            <p className="text-xs text-slate-500">Monitoramento em tempo real</p>
+          </CardContent>
+        </Card>
       </div>
 
-      {/* Gráficos */}
-      <div className="grid gap-6 md:grid-cols-2">
+      {/* Área dos Gráficos */}
+      <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
+        
         {/* Gráfico CPU */}
         <Card className="p-4">
             <CardHeader className="p-0 mb-4">
@@ -107,24 +129,14 @@ useEffect(() => {
                     Uso de CPU (%)
                 </CardTitle>
             </CardHeader>
-            <div className="h-[250px] w-full">
+            <div className="h-[200px] w-full">
                 <ResponsiveContainer width="100%" height="100%">
                     <LineChart data={telemetryData}>
                         <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
                         <XAxis dataKey="time" hide />
                         <YAxis domain={[0, 100]} tick={{fontSize: 12, fill: '#64748b'}} axisLine={false} tickLine={false} />
-                        <Tooltip 
-                            contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
-                        />
-                        <Line 
-                            type="monotone" 
-                            dataKey="cpu" 
-                            stroke="#3b82f6" 
-                            strokeWidth={3} 
-                            dot={false} 
-                            activeDot={{ r: 6 }} 
-                            animationDuration={500}
-                        />
+                        <Tooltip contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
+                        <Line type="monotone" dataKey="cpu" stroke="#3b82f6" strokeWidth={3} dot={false} activeDot={{ r: 6 }} animationDuration={500} />
                     </LineChart>
                 </ResponsiveContainer>
             </div>
@@ -138,28 +150,41 @@ useEffect(() => {
                     Uso de Memória (%)
                 </CardTitle>
             </CardHeader>
-            <div className="h-[250px] w-full">
+            <div className="h-[200px] w-full">
                 <ResponsiveContainer width="100%" height="100%">
                     <LineChart data={telemetryData}>
                         <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
                         <XAxis dataKey="time" hide />
                         <YAxis domain={[0, 100]} tick={{fontSize: 12, fill: '#64748b'}} axisLine={false} tickLine={false} />
-                        <Tooltip 
-                             contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
-                        />
-                        <Line 
-                            type="monotone" 
-                            dataKey="ram" 
-                            stroke="#a855f7" 
-                            strokeWidth={3} 
-                            dot={false} 
-                            activeDot={{ r: 6 }}
-                            animationDuration={500}
-                        />
+                        <Tooltip contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
+                        <Line type="monotone" dataKey="ram" stroke="#a855f7" strokeWidth={3} dot={false} activeDot={{ r: 6 }} animationDuration={500} />
                     </LineChart>
                 </ResponsiveContainer>
             </div>
         </Card>
+
+        {/* NOVO: Gráfico Temperatura */}
+        <Card className="p-4 md:col-span-2 xl:col-span-1">
+            <CardHeader className="p-0 mb-4">
+                <CardTitle className="text-md font-semibold text-slate-700 flex items-center gap-2">
+                    <div className="w-2 h-2 rounded-full bg-orange-500"></div>
+                    Temperatura (°C)
+                </CardTitle>
+            </CardHeader>
+            <div className="h-[200px] w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={telemetryData}>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                        <XAxis dataKey="time" hide />
+                        {/* Domínio ajustado para 0 a 100 graus (ou mais se necessário) */}
+                        <YAxis domain={[0, 100]} tick={{fontSize: 12, fill: '#64748b'}} axisLine={false} tickLine={false} />
+                        <Tooltip contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
+                        <Line type="monotone" dataKey="temp" stroke="#f97316" strokeWidth={3} dot={false} activeDot={{ r: 6 }} animationDuration={500} />
+                    </LineChart>
+                </ResponsiveContainer>
+            </div>
+        </Card>
+
       </div>
     </div>
   );
