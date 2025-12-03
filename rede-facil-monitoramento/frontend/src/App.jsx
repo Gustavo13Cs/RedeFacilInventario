@@ -117,7 +117,6 @@ function App() {
 
         <div className="flex-1 overflow-auto p-8 space-y-6">
           
-          {/* RENDERIZAÇÃO CONDICIONAL: DETALHES OU DASHBOARD */}
           {selectedMachine ? (
             <MachineDetails 
             machine={selectedMachine} 

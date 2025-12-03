@@ -1,52 +1,56 @@
 import React, { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, Cpu, HardDrive, Activity, Thermometer } from 'lucide-react';
+import { ArrowLeft, Cpu, HardDrive, Activity, Thermometer } from 'lucide-react'; // Adicionado Thermometer
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
 export default function MachineDetails({ machine, onBack, socket }) {
-  // Estado inicial com CPU, RAM e TEMPERATURA
+  // 1. Estado inicial agora inclui 'temp'
   const [telemetryData, setTelemetryData] = useState([
     { time: '00:00', cpu: 0, ram: 0, temp: 0 },
     { time: '00:05', cpu: 0, ram: 0, temp: 0 },
     { time: '00:10', cpu: 0, ram: 0, temp: 0 },
   ]);
 
+  // Estado para o card de "Temperatura Atual"
   const [currentTemp, setCurrentTemp] = useState(0);
 
   useEffect(() => {
+    // Se o socket não vier por props, não tenta conectar de novo para evitar duplicidade
     if (!socket) {
-        console.error("⚠️ Socket não recebido no componente MachineDetails");
+        console.error("⚠️ Socket não recebido em MachineDetails");
         return;
     }
 
     const handleNewTelemetry = (newData) => {
-        // Verifica se os dados recebidos são desta máquina específica
+        // Verifica se os dados são desta máquina
         if (newData.machine_uuid === machine.uuid) {
             
             const timeNow = new Date().toLocaleTimeString();
             
-            // CORREÇÃO: Math.round para remover casas decimais (ex: 45.32 -> 45)
-            const cpuVal = Math.round(Number(newData.cpu_usage_percent || 0));
-            const ramVal = Math.round(Number(newData.ram_usage_percent || 0));
-            const tempVal = Math.round(Number(newData.temperature_celsius || 0));
+            // 2. Arredonda os valores (Math.round) para remover as casas decimais
+            const tempValue = Math.round(Number(newData.temperature_celsius || 0));
+            const cpuValue = Math.round(Number(newData.cpu_usage_percent || 0));
+            const ramValue = Math.round(Number(newData.ram_usage_percent || 0));
 
-            setCurrentTemp(tempVal);
+            setCurrentTemp(tempValue);
             
             setTelemetryData(prev => {
                 const newHistory = [...prev, { 
                     time: timeNow, 
-                    cpu: cpuVal, 
-                    ram: ramVal,
-                    temp: tempVal
+                    cpu: cpuValue,
+                    ram: ramValue,
+                    temp: tempValue // Salva a temperatura no histórico
                 }];
-                return newHistory.slice(-20); // Mantém apenas os últimos 20 registros no gráfico
+                return newHistory.slice(-20); // Mantém apenas os últimos 20 pontos
             });
         }
     };
 
+    // Escuta o evento
     socket.on('new_telemetry', handleNewTelemetry);
 
+    // Limpa ao sair da tela
     return () => {
         socket.off('new_telemetry', handleNewTelemetry);
     };
@@ -106,7 +110,7 @@ export default function MachineDetails({ machine, onBack, socket }) {
           </CardContent>
         </Card>
 
-        {/* NOVO CARD: TEMPERATURA */}
+        {/* 3. NOVO CARD: TEMPERATURA */}
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium text-slate-600">Temperatura</CardTitle>
@@ -121,8 +125,9 @@ export default function MachineDetails({ machine, onBack, socket }) {
         </Card>
       </div>
 
-      {/* Gráficos */}
+      {/* Área dos Gráficos */}
       <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
+        
         {/* Gráfico CPU */}
         <Card className="p-4">
             <CardHeader className="p-0 mb-4">
@@ -165,7 +170,7 @@ export default function MachineDetails({ machine, onBack, socket }) {
             </div>
         </Card>
 
-        {/* NOVO GRÁFICO: TEMPERATURA */}
+        {/* 4. NOVO GRÁFICO: TEMPERATURA */}
         <Card className="p-4 md:col-span-2 xl:col-span-1">
             <CardHeader className="p-0 mb-4">
                 <CardTitle className="text-md font-semibold text-slate-700 flex items-center gap-2">
