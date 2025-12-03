@@ -7,8 +7,10 @@ import io from 'socket.io-client';
 import axios from 'axios';
 import MachineDetails from './components/MachineDetails'; 
 
-const API_URL = "http://localhost:3000";
-const socket = io('http://localhost:3000');
+const API_URL = "http://localhost:3001";
+const socket = io('http://localhost:3001', {
+  transports: ['websocket', 'polling'] 
+});
 
 function App() {
   const [machines, setMachines] = useState([]);
