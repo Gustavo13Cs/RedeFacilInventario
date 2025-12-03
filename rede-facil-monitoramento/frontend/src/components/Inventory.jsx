@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Edit2, Trash2, Box, CheckCircle, AlertOctagon, Monitor, Save, X, Filter, Search, FileSpreadsheet, FileText } from 'lucide-react';
+import { Plus, Edit2, Trash2, Box, CheckCircle, AlertOctagon, Monitor, Save, X, Filter, Search, FileSpreadsheet, FileText, AlertTriangle } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import axios from 'axios';
+import { createPortal } from 'react-dom';
 
 import { generateExcel, generatePDF } from '@/utils/exportUtils';
 
@@ -14,6 +15,8 @@ export default function Inventory() {
   const [filterType, setFilterType] = useState('Todos');
   const [filterStatus, setFilterStatus] = useState('Todos');
   const [searchTerm, setSearchTerm] = useState('');
+
+  const [itemToDelete, setItemToDelete] = useState(null);
 
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingId, setEditingId] = useState(null);
@@ -119,10 +122,20 @@ export default function Inventory() {
     setIsFormOpen(true);
   };
 
-  const handleDelete = async (id) => {
-    if (confirm('Tem certeza?')) {
-      try { await axios.delete(`${API_URL}/${id}`); fetchInventory(); } 
-      catch (error) { console.error("Erro ao deletar:", error); }
+  const requestDelete = (id) => {
+    setItemToDelete(id);
+  };
+
+  const confirmDelete = async () => {
+    if (itemToDelete) {
+      try {
+        await axios.delete(`${API_URL}/${itemToDelete}`);
+        fetchInventory(); // Atualiza a lista
+        setItemToDelete(null); // Fecha o modal
+      } catch (error) {
+        console.error("Erro ao deletar:", error);
+        alert("Erro ao excluir item.");
+      }
     }
   };
 
@@ -251,7 +264,7 @@ export default function Inventory() {
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-2">
                           <Button variant="outline" size="sm" onClick={() => startEdit(item)} className="h-8 w-8 p-0 text-blue-600 border-blue-200"><Edit2 className="h-4 w-4" /></Button>
-                          <Button variant="outline" size="sm" onClick={() => handleDelete(item.id)} className="h-8 w-8 p-0 text-red-600 border-red-200"><Trash2 className="h-4 w-4" /></Button>
+                          <Button variant="outline" size="sm" onClick={() => requestDelete(item.id)} className="h-8 w-8 p-0 text-red-600 border-red-200"><Trash2 className="h-4 w-4" /></Button>
                       </div>
                     </TableCell>
                   </TableRow>
@@ -265,36 +278,119 @@ export default function Inventory() {
         </Card>
       </div>
 
-      {/* MODAL */}
-      {isFormOpen && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[9999] backdrop-blur-sm p-4">
-          <Card className="w-full max-w-md animate-in zoom-in-95 duration-200 shadow-2xl bg-white">
+      {/* MODAL FORMULÁRIO */}
+      {isFormOpen && createPortal(
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center">
+          
+          <div 
+            className="absolute inset-0 bg-black/60 backdrop-blur-sm" 
+            onClick={closeForm} 
+          />
+
+          <Card className="relative z-10 w-full max-w-md animate-in zoom-in-95 duration-200 shadow-2xl bg-white border-none">
             <CardHeader className="flex flex-row items-center justify-between border-b border-slate-100 pb-4 bg-white rounded-t-lg">
                 <CardTitle className="text-slate-800 text-xl">{editingId ? 'Editar' : 'Cadastrar'}</CardTitle>
-                <button onClick={closeForm} className="text-slate-400 hover:text-slate-600 p-1"><X className="h-5 w-5" /></button>
+                <button onClick={closeForm} className="text-slate-400 hover:text-slate-600 p-1 rounded-full transition-colors hover:bg-slate-100">
+                    <X className="h-5 w-5" />
+                </button>
             </CardHeader>
             <CardContent className="pt-6 bg-white rounded-b-lg">
                 <form onSubmit={handleSubmit} className="space-y-4">
+
                     <div>
                         <label className="block text-sm font-semibold text-slate-700 mb-1">Tipo</label>
-                        <select name="type" value={formData.type} onChange={handleInputChange} className="w-full rounded-md border border-slate-300 bg-white text-slate-900 p-2.5 text-sm outline-none">
-                            <option value="Monitor">Monitor</option><option value="Mouse">Mouse</option><option value="Teclado">Teclado</option><option value="Computador">Computador</option><option value="Mousepad">Mousepad</option><option value="Câmera">Câmera</option><option value="Headset">Headset</option><option value="Outro">Outro</option>
+                        <select name="type" value={formData.type} onChange={handleInputChange} className="w-full rounded-md border border-slate-300 bg-white text-slate-900 p-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-500">
+                            <option value="Monitor">Monitor</option>
+                            <option value="Mouse">Mouse</option>
+                            <option value="Teclado">Teclado</option>
+                            <option value="Computador">Computador</option>
+                            <option value="Mousepad">Mousepad</option>
+                            <option value="Câmera">Câmera</option>
+                            <option value="Headset">Headset</option>
+                            <option value="Outro">Outro</option>
                         </select>
                     </div>
-                    <div><label className="block text-sm font-semibold text-slate-700 mb-1">Modelo</label><input type="text" name="model" value={formData.model} onChange={handleInputChange} required className="w-full rounded-md border border-slate-300 bg-white text-slate-900 p-2.5 text-sm outline-none" /></div>
-                    <div className="grid grid-cols-2 gap-4">
-                        <div><label className="block text-sm font-semibold text-slate-700 mb-1">Serial</label><input type="text" name="serial" value={formData.serial} onChange={handleInputChange} className="w-full rounded-md border border-slate-300 bg-white text-slate-900 p-2.5 text-sm outline-none" /></div>
-                        <div><label className="block text-sm font-semibold text-slate-700 mb-1">Status</label>
-                        <select name="status" value={formData.status} onChange={handleInputChange} className="w-full rounded-md border border-slate-300 bg-white text-slate-900 p-2.5 text-sm outline-none">
-                            <option value="disponivel">Disponível</option><option value="em_uso">Em Uso</option><option value="falta">Defeito/Falta</option>
-                        </select></div>
+                    <div>
+                        <label className="block text-sm font-semibold text-slate-700 mb-1">Modelo</label>
+                        <input type="text" name="model" value={formData.model} onChange={handleInputChange} required className="w-full rounded-md border border-slate-300 bg-white text-slate-900 p-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-500" />
                     </div>
-                    <div><label className="block text-sm font-semibold text-slate-700 mb-1">Local</label><input type="text" name="assigned_to" value={formData.assigned_to} onChange={handleInputChange} className="w-full rounded-md border border-slate-300 bg-white text-slate-900 p-2.5 text-sm outline-none" /></div>
-                    <div className="flex justify-end gap-3 pt-4 border-t border-slate-100 mt-4"><Button type="button" variant="outline" onClick={closeForm} className="bg-white text-slate-700 border-slate-300">Cancelar</Button><Button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white"><Save className="mr-2 h-4 w-4" /> Salvar</Button></div>
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
+                            <label className="block text-sm font-semibold text-slate-700 mb-1">Serial</label>
+                            <input type="text" name="serial" value={formData.serial} onChange={handleInputChange} className="w-full rounded-md border border-slate-300 bg-white text-slate-900 p-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-500" />
+                        </div>
+                        <div>
+                            <label className="block text-sm font-semibold text-slate-700 mb-1">Status</label>
+                            <select name="status" value={formData.status} onChange={handleInputChange} className="w-full rounded-md border border-slate-300 bg-white text-slate-900 p-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-500">
+                                <option value="disponivel">Disponível</option>
+                                <option value="em_uso">Em Uso</option>
+                                <option value="falta">Defeito/Falta</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div>
+                        <label className="block text-sm font-semibold text-slate-700 mb-1">Local</label>
+                        <input type="text" name="assigned_to" value={formData.assigned_to} onChange={handleInputChange} className="w-full rounded-md border border-slate-300 bg-white text-slate-900 p-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-500" />
+                    </div>
+                    
+                    <div className="flex justify-end gap-3 pt-4 border-t border-slate-100 mt-4">
+                        <Button type="button" variant="outline" onClick={closeForm} className="bg-white text-slate-700 border-slate-300 hover:bg-slate-50">Cancelar</Button>
+                        <Button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white font-medium shadow-sm"><Save className="mr-2 h-4 w-4" /> Salvar</Button>
+                    </div>
                 </form>
             </CardContent>
           </Card>
-        </div>
+        </div>,
+        document.body 
+      )}
+
+      {/* MODAL DE CONFIRMAÇÃO DE EXCLUSÃO */}
+      {itemToDelete && createPortal(
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center">
+          <div 
+            className="absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity" 
+            onClick={() => setItemToDelete(null)}
+          />
+
+          <Card className="relative z-10 w-full max-w-sm bg-white shadow-2xl animate-in zoom-in-95 duration-200 border-none p-0 overflow-hidden">
+            
+            <div className="p-6 flex flex-col items-center text-center">
+              <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mb-4">
+                <AlertTriangle className="h-6 w-6 text-red-600" />
+              </div>
+
+              <h3 className="text-lg font-bold text-slate-800 mb-2">
+                Confirmar Exclusão
+              </h3>
+              
+              <p className="text-sm text-slate-500 mb-6">
+                Tem certeza que deseja remover este item permanentemente? <br/>
+                Essa ação não pode ser desfeita.
+              </p>
+
+              <div className="flex gap-3 w-full">
+                <Button 
+                  variant="outline" 
+                  onClick={() => setItemToDelete(null)}
+                  className="flex-1 border-slate-200 text-slate-700 hover:bg-slate-50"
+                >
+                  Cancelar
+                </Button>
+                <Button 
+                  onClick={confirmDelete}
+                  className="flex-1 bg-red-600 hover:bg-red-700 text-white shadow-sm"
+                >
+                  Sim, Excluir
+                </Button>
+              </div>
+            </div>
+        
+            <div className="h-1 w-full bg-red-100">
+               <div className="h-full w-full bg-red-500/20" />
+            </div>
+          </Card>
+        </div>,
+        document.body
       )}
     </>
   );
