@@ -20,16 +20,19 @@ export default function MachineDetails({ machine, onBack, socket }) {
         if (newData.machine_uuid === machine.uuid) {
             
             const timeNow = new Date().toLocaleTimeString();
-            const tempValue = Number(newData.temperature_celsius || 0);
+
+            const tempValue = Math.round(Number(newData.temperature_celsius || 0));
+            const cpuValue = Math.round(Number(newData.cpu_usage_percent || 0));
+            const ramValue = Math.round(Number(newData.ram_usage_percent || 0));
 
             setCurrentTemp(tempValue);
             
             setTelemetryData(prev => {
                 const newHistory = [...prev, { 
                     time: timeNow, 
-                    cpu: Number(newData.cpu_usage_percent), 
-                    ram: Number(newData.ram_usage_percent),
-                    temp: tempValue 
+                    cpu: cpuValue, 
+                    ram: ramValue, 
+                    temp: tempValue
                 }];
                 return newHistory.slice(-20); 
             });
