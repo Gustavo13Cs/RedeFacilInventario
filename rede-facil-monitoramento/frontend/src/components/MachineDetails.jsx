@@ -4,22 +4,19 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button"; 
 import { ArrowLeft, Cpu, HardDrive, Activity } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import io from 'socket.io-client';
 
-const socket = io('http://localhost:3000');
-
-export default function MachineDetails({ machine, onBack }) {
+export default function MachineDetails({ machine, onBack, socket }) {
   const [telemetryData, setTelemetryData] = useState([
     { time: '00:00', cpu: 0, ram: 0 },
-    { time: '00:05', cpu: 0, ram: 0 },
-    { time: '00:10', cpu: 0, ram: 0 },
+    // ... dados iniciais
   ]);
 
-  useEffect(() => {
-    socket.on('new_telemetry', (newData) => {
-        
+useEffect(() => {
+    if (!socket) return;
+    const handleNewTelemetry = (newData) => {
+        console.log("📊 Dados recebidos no Gráfico:", newData);
+
         if (newData.machine_uuid === machine.uuid) {
-            
             const timeNow = new Date().toLocaleTimeString();
             
             setTelemetryData(prev => {
@@ -31,12 +28,13 @@ export default function MachineDetails({ machine, onBack }) {
                 return newHistory.slice(-20); 
             });
         }
-    });
+    };
+    socket.on('new_telemetry', handleNewTelemetry);
 
     return () => {
-        socket.off('new_telemetry');
+        socket.off('new_telemetry', handleNewTelemetry);
     };
-  }, [machine.uuid]);
+  }, [machine.uuid, socket]); 
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">

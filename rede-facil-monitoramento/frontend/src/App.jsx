@@ -7,8 +7,8 @@ import io from 'socket.io-client';
 import axios from 'axios';
 import MachineDetails from './components/MachineDetails'; 
 
-const API_URL = "http://localhost:3001";
-const socket = io('http://localhost:3001');
+const API_URL = "http://localhost:3000";
+const socket = io('http://localhost:3000');
 
 function App() {
   const [machines, setMachines] = useState([]);
@@ -117,7 +117,10 @@ function App() {
           
           {/* RENDERIZAÇÃO CONDICIONAL: DETALHES OU DASHBOARD */}
           {selectedMachine ? (
-            <MachineDetails machine={selectedMachine} onBack={handleBack} />
+            <MachineDetails 
+            machine={selectedMachine} 
+            onBack={handleBack}
+            socket={socket} />
           ) : (
             <>
               {/* CARDS DE ESTATÍSTICAS */}
