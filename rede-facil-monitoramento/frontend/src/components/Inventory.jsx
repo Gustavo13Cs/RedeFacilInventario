@@ -12,6 +12,17 @@ export default function Inventory() {
   const [items, setItems] = useState([]); 
   const API_URL = "http://localhost:3001/api/inventory";
 
+  const [isFormOpen, setIsFormOpen] = useState(false);
+  const [editingId, setEditingId] = useState(null);
+
+  const [formData, setFormData] = useState({
+    type: 'Monitor',
+    model: '',
+    serial: '',
+    status: 'disponivel',
+    assignedTo: ''
+  });
+
   useEffect(() => {
     fetchInventory();
   }, []);
