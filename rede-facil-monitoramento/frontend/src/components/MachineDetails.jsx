@@ -1,34 +1,28 @@
 import React, { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, Cpu, HardDrive, Activity, Thermometer } from 'lucide-react'; // Adicionado Thermometer
+import { ArrowLeft, Cpu, HardDrive, Activity, Thermometer } from 'lucide-react'; 
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
 export default function MachineDetails({ machine, onBack, socket }) {
-  // 1. Estado inicial agora inclui 'temp'
   const [telemetryData, setTelemetryData] = useState([
     { time: '00:00', cpu: 0, ram: 0, temp: 0 },
     { time: '00:05', cpu: 0, ram: 0, temp: 0 },
     { time: '00:10', cpu: 0, ram: 0, temp: 0 },
   ]);
 
-  // Estado para o card de "Temperatura Atual"
   const [currentTemp, setCurrentTemp] = useState(0);
 
   useEffect(() => {
-    // Se o socket não vier por props, não tenta conectar de novo para evitar duplicidade
     if (!socket) {
         console.error("⚠️ Socket não recebido em MachineDetails");
         return;
     }
 
     const handleNewTelemetry = (newData) => {
-        // Verifica se os dados são desta máquina
         if (newData.machine_uuid === machine.uuid) {
             
             const timeNow = new Date().toLocaleTimeString();
-            
-            // 2. Arredonda os valores (Math.round) para remover as casas decimais
             const tempValue = Math.round(Number(newData.temperature_celsius || 0));
             const cpuValue = Math.round(Number(newData.cpu_usage_percent || 0));
             const ramValue = Math.round(Number(newData.ram_usage_percent || 0));
@@ -40,17 +34,15 @@ export default function MachineDetails({ machine, onBack, socket }) {
                     time: timeNow, 
                     cpu: cpuValue,
                     ram: ramValue,
-                    temp: tempValue // Salva a temperatura no histórico
+                    temp: tempValue 
                 }];
-                return newHistory.slice(-20); // Mantém apenas os últimos 20 pontos
+                return newHistory.slice(-20); 
             });
         }
     };
 
-    // Escuta o evento
     socket.on('new_telemetry', handleNewTelemetry);
 
-    // Limpa ao sair da tela
     return () => {
         socket.off('new_telemetry', handleNewTelemetry);
     };

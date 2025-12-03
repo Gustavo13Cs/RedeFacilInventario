@@ -1,11 +1,12 @@
 import React, { useEffect, useState } from 'react';
-import { LayoutDashboard, Server, AlertCircle, Activity, HardDrive, AlertTriangle } from 'lucide-react';
+import { LayoutDashboard, Server, AlertCircle, Activity, HardDrive, AlertTriangle, Package } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import io from 'socket.io-client';
 import axios from 'axios';
-import MachineDetails from './components/MachineDetails'; 
+import MachineDetails from './components/MachineDetails';
+import Inventory from './components/Inventory'; 
 
 const API_URL = "http://localhost:3001";
 const socket = io('http://localhost:3001', {
@@ -17,6 +18,7 @@ function App() {
   const [stats, setStats] = useState({ total: 0, online: 0, critical: 0 });
   const [lastTelemetry, setLastTelemetry] = useState(null);
   const [activeTab, setActiveTab] = useState('dashboard');
+  
   
   const [selectedMachine, setSelectedMachine] = useState(null);
 
@@ -86,7 +88,14 @@ function App() {
             <LayoutDashboard className="mr-3 h-5 w-5 text-blue-500" />
             Visão Geral
           </button>
-          {/* Outros botões... */}
+
+          <button 
+            onClick={() => { setActiveTab('inventory'); setSelectedMachine(null); }}
+            className={`w-full flex items-center px-3 py-2.5 text-sm font-medium rounded-md transition-colors ${activeTab === 'inventory' ? 'bg-slate-800 text-white' : 'hover:bg-slate-800/50 hover:text-white'}`}
+          >
+            <Package className="mr-3 h-5 w-5 text-emerald-500" />
+            Inventário
+          </button>
         </nav>
 
         <div className="p-4 border-t border-slate-800">

@@ -6,6 +6,7 @@ require('./config/db');
 const monitorRoutes = require('./routes/monitorRoutes');
 const telemetryRoutes = require('./routes/telemetryRoutes');
 const alertRoutes = require('./routes/alertRoutes');
+const inventoryRoutes = require('./routes/inventoryRoutes');
 
 
 const socketHandler = require('./socket/socketHandler'); 
@@ -32,6 +33,7 @@ app.get('/', (req, res) => {
 app.use('/api', monitorRoutes); 
 app.use('/api/telemetry', telemetryRoutes); 
 app.use('/api/alerts', alertRoutes);
+app.use('/api/inventory', inventoryRoutes);
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, '0.0.0.0', () => {

@@ -51,3 +51,13 @@ CREATE TABLE alerts (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (machine_id) REFERENCES machines(id)
 );
+
+CREATE TABLE inventory_items (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    type VARCHAR(50) NOT NULL,            
+    model VARCHAR(100) NOT NULL,          
+    serial VARCHAR(100),                  
+    status VARCHAR(20) DEFAULT 'disponivel', 
+    assigned_to VARCHAR(100),             
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);

@@ -16,9 +16,9 @@ const isValidSoftware = (s) => {
 exports.registerMachine = async ({
     uuid, hostname, ip_address, os_name, 
     cpu_model, ram_total_gb, disk_total_gb, mac_address,
-    installed_software // Array
+    installed_software 
 }) => {
-    // Validação básica (Melhoria)
+
     if (!uuid || !hostname || !ip_address || !os_name) {
         throw new Error('Dados essenciais de registro (uuid, hostname, ip_address, os_name) estão faltando.');
     }
@@ -118,31 +118,28 @@ exports.processTelemetry = async ({
             const hostname = machineRow[0].hostname;
             const alert_message = `Uso de CPU crítico (${cpu_usage}%) na máquina ${hostname} (${uuid}).`;
             
-            // Checa por alertas recentes (para evitar spam)
             const [existingAlerts] = await db.execute(
                 `SELECT id FROM alerts WHERE machine_id = ? AND alert_type = 'critical' AND is_resolved = FALSE AND created_at > DATE_SUB(NOW(), INTERVAL 1 HOUR)`,
                 [machine_id]
             );
 
-            if (existingAlerts.length === 0) { // Cria o alerta
+            if (existingAlerts.length === 0) { 
                 await db.execute(
                     `INSERT INTO alerts (machine_id, alert_type, message) VALUES (?, 'critical', ?)`,
                     [machine_id, alert_message]
                 );
-                // 3. Emite para o Dashboard via Socket.io 
+ 
                 if (globalIo) {
                     globalIo.emit('new_alert', { machine_id, uuid, alert_type: 'critical', message: alert_message, created_at: new Date() });
                 }
             }
         }
         
-        // 4. Atualizar status da máquina (mantê-la 'online')
         await db.execute(
             `UPDATE machines SET status = 'online', last_seen = CURRENT_TIMESTAMP WHERE id = ?`,
             [machine_id]
         );
 
-        // 5. Transmitir em Tempo Real via Socket.io 
         if (globalIo) {
             globalIo.emit('new_telemetry', { 
                 machine_uuid: uuid, 
@@ -160,12 +157,9 @@ exports.processTelemetry = async ({
     }
 };
 
-// ----------------------------------------------------
-// SERVIÇO 3: CONSULTAS (Listar Máquinas)
-// ----------------------------------------------------
+
 exports.listMachines = async () => {
-    try { // CORREÇÃO: Envolver a lógica em try/catch corretamente
-        // Consulta JOIN para obter dados de inventário e hardware (mantendo a versão limpa)
+    try { 
         const [machines] = await db.execute(
             `SELECT m.uuid, m.hostname, m.ip_address, m.os_name, m.status, m.last_seen, h.cpu_model, h.ram_total_gb, h.disk_total_gb FROM machines m LEFT JOIN hardware_specs h ON m.id = h.machine_id ORDER BY m.status DESC, m.hostname`
         );
@@ -177,11 +171,9 @@ exports.listMachines = async () => {
 };
 
 
-// ----------------------------------------------------
-// SERVIÇO 4: DETALHES DE UMA MÁQUINA (GET /api/machines/:uuid)
-// ----------------------------------------------------
+
 exports.getMachineDetails = async (uuid) => {
-    if (!uuid) return null; // Validação básica
+    if (!uuid) return null; 
     
     try {
         const machine_id = await getMachineId(uuid);
@@ -189,7 +181,6 @@ exports.getMachineDetails = async (uuid) => {
             return null;
         }
 
-        // 1. Informações Básicas e Hardware (JOIN)
         const [details] = await db.execute(
             `SELECT 
                 m.uuid, m.hostname, m.ip_address, m.os_name, m.status, m.last_seen, m.created_at, m.id as machine_id,
@@ -204,13 +195,11 @@ exports.getMachineDetails = async (uuid) => {
             return null;
         }
         
-        // 2. Software Instalado (SELECT separado)
         const [software] = await db.execute(
             `SELECT software_name, version, install_date FROM installed_software WHERE machine_id = ? ORDER BY software_name`,
             [machine_id]
         );
 
-        // 3. Última Telemetria 
         const [lastTelemetry] = await db.execute(
             `SELECT cpu_usage_percent, ram_usage_percent, disk_free_percent, temperature_celsius, created_at 
              FROM telemetry_logs 
@@ -220,7 +209,6 @@ exports.getMachineDetails = async (uuid) => {
             [machine_id]
         );
 
-        // 4. Últimos Alertas Abertos
         const [openAlerts] = await db.execute(
             `SELECT id, alert_type, message, created_at FROM alerts WHERE machine_id = ? AND is_resolved = FALSE ORDER BY created_at DESC`,
             [machine_id]
@@ -233,7 +221,7 @@ exports.getMachineDetails = async (uuid) => {
             open_alerts: openAlerts
         };
 
-        delete response.machine_id; // Remove o ID interno
+        delete response.machine_id; 
         return response;
 
     } catch (error) {
@@ -242,9 +230,6 @@ exports.getMachineDetails = async (uuid) => {
     }
 };
 
-// ----------------------------------------------------
-// SERVIÇO 5: HISTÓRICO DE TELEMETRIA (GET /api/telemetry/:uuid/history)
-// ----------------------------------------------------
 exports.getTelemetryHistory = async (uuid, limit = 100) => {
     if (!uuid) return []; // Validação básica
 
@@ -254,10 +239,8 @@ exports.getTelemetryHistory = async (uuid, limit = 100) => {
             return [];
         }
 
-        // Garante que limit é um número inteiro positivo (Melhoria)
         const numericLimit = Math.max(1, parseInt(limit, 10));
 
-        // Busca o histórico de logs de telemetria
         const [history] = await db.execute(
             `SELECT 
                 cpu_usage_percent, ram_usage_percent, disk_free_percent, temperature_celsius, created_at
