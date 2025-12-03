@@ -145,10 +145,11 @@ exports.processTelemetry = async ({
         // 5. Transmitir em Tempo Real via Socket.io 
         if (globalIo) {
             globalIo.emit('new_telemetry', { 
-                uuid, 
+                machine_uuid: uuid, 
                 cpu_usage_percent: cpu_usage, 
                 ram_usage_percent: ram_usage, 
-                disk_free_percent: disk_free 
+                disk_free_percent: disk_free,
+                temperature_celsius: temperature
             });
         }
 
