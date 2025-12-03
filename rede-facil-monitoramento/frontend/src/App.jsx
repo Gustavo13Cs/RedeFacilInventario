@@ -126,12 +126,15 @@ function App() {
 
         <div className="flex-1 overflow-auto p-8 space-y-6">
           
-          {selectedMachine ? (
-            <MachineDetails 
-            machine={selectedMachine} 
-            onBack={handleBack}
-            socket={socket} />
-          ) : (
+          {activeTab === 'inventory' ? (
+              <Inventory />
+            ) : selectedMachine ? (
+              <MachineDetails 
+                machine={selectedMachine} 
+                onBack={() => setSelectedMachine(null)}
+                socket={socket} 
+              />
+            ) : (
             <>
               {/* CARDS DE ESTATÍSTICAS */}
               <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
