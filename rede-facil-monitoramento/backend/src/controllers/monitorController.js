@@ -39,7 +39,10 @@ exports.processTelemetry = async (req, res) => {
                 machine_uuid: data.uuid, 
                 cpu_usage_percent: data.cpu_usage_percent,
                 ram_usage_percent: data.ram_usage_percent,
-                temperature_celsius: data.temperature_celsius
+                temperature_celsius: data.temperature_celsius,
+
+                disk_free_percent: data.disk_free_percent,
+                disk_smart_status: data.disk_smart_status || 'OK'
             };
 
             io.emit('new_telemetry', telemetryPayload);
