@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { Plus, Trash2, Users, Shield, Mail, Key, X, Save } from 'lucide-react';
+import { Plus, Trash2, Users, Shield, Mail, Key, X, Save,AlertTriangle ,CheckCircle,XCircle} from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -10,6 +10,9 @@ import axios from 'axios';
 export default function UserManagement() {
   const [users, setUsers] = useState([]);
   const [isFormOpen, setIsFormOpen] = useState(false);
+  const [userToDelete, setUserToDelete] = useState(null);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [errorModal, setErrorModal] = useState(null);
   
   const [formData, setFormData] = useState({
     name: '',
@@ -42,21 +45,29 @@ export default function UserManagement() {
     e.preventDefault();
     try {
       await axios.post(`${API_URL}/register`, formData);
-      alert("Usuário criado com sucesso!");
       fetchUsers();
       closeForm();
+      setShowSuccessModal(true); 
+
     } catch (error) {
-      alert("Erro ao criar usuário: " + (error.response?.data?.message || error.message));
+      const msg = error.response?.data?.message || "Erro desconhecido ao criar usuário.";
+      setErrorModal(msg);
     }
   };
 
-  const handleDelete = async (id) => {
-    if (confirm('Tem certeza que deseja remover este usuário? Ele perderá o acesso.')) {
+  const requestDelete = (user) => {
+    setUserToDelete(user);
+  };
+
+  const confirmDelete = async () => {
+    if (userToDelete) {
       try {
-        await axios.delete(`${API_URL}/${id}`);
-        fetchUsers();
+        await axios.delete(`${API_URL}/${userToDelete.id}`);
+        fetchUsers(); 
+        setUserToDelete(null); 
       } catch (error) {
         console.error("Erro ao deletar:", error);
+        alert("Erro ao excluir usuário.");
       }
     }
   };
@@ -107,7 +118,7 @@ export default function UserManagement() {
                     {new Date(user.created_at).toLocaleDateString()}
                   </TableCell>
                   <TableCell className="text-right">
-                    <Button variant="ghost" size="icon" onClick={() => handleDelete(user.id)} className="text-red-500 hover:bg-red-50">
+                    <Button variant="ghost" size="icon" onClick={() => requestDelete(user)} className="text-red-500 hover:bg-red-50 hover:text-red-70">
                         <Trash2 className="h-4 w-4" />
                     </Button>
                   </TableCell>
@@ -165,6 +176,124 @@ export default function UserManagement() {
                     </div>
                 </form>
             </CardContent>
+          </Card>
+        </div>,
+        document.body
+      )}
+      
+      {/* NOVO MODAL DE CONFIRMAÇÃO DE EXCLUSÃO */}
+      {userToDelete && createPortal(
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center">
+          <div 
+            className="absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity" 
+            onClick={() => setUserToDelete(null)}
+          />
+          <Card className="relative z-10 w-full max-w-sm bg-white shadow-2xl animate-in zoom-in-95 duration-200 border-none p-0 overflow-hidden">
+            <div className="p-6 flex flex-col items-center text-center">
+              <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mb-4">
+                <AlertTriangle className="h-6 w-6 text-red-600" />
+              </div>
+
+              <h3 className="text-lg font-bold text-slate-800 mb-2">
+                Remover Usuário?
+              </h3>
+              
+              <p className="text-sm text-slate-500 mb-4">
+                Você está prestes a remover o acesso de: <br/>
+                <strong>{userToDelete.name}</strong> ({userToDelete.email})
+              </p>
+              <p className="text-xs text-red-500 font-medium mb-6 bg-red-50 px-3 py-1 rounded-full">
+                Essa ação não pode ser desfeita.
+              </p>
+
+              <div className="flex gap-3 w-full">
+                <Button 
+                  variant="outline" 
+                  onClick={() => setUserToDelete(null)}
+                  className="flex-1 border-slate-200 text-slate-700 hover:bg-slate-50"
+                >
+                  Cancelar
+                </Button>
+                <Button 
+                  onClick={confirmDelete}
+                  className="flex-1 bg-red-600 hover:bg-red-700 text-white shadow-sm font-medium"
+                >
+                  Sim, Remover
+                </Button>
+              </div>
+            </div>
+          </Card>
+        </div>,
+        document.body
+      )}
+
+      {/* MODAL DE SUCESSO (CADASTRADO COM SUCESSO) */}
+      {showSuccessModal && createPortal(
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center">
+          <div 
+            className="absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity" 
+            onClick={() => setShowSuccessModal(false)}
+          />
+
+          <Card className="relative z-10 w-full max-w-sm bg-white shadow-2xl animate-in zoom-in-95 duration-200 border-none p-0 overflow-hidden">
+            <div className="p-6 flex flex-col items-center text-center">
+              
+              <div className="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center mb-4 animate-in zoom-in duration-300">
+                <CheckCircle className="h-8 w-8 text-emerald-600" />
+              </div>
+
+              <h3 className="text-xl font-bold text-slate-800 mb-2">
+                Sucesso!
+              </h3>
+              
+              <p className="text-sm text-slate-500 mb-6">
+                O novo usuário foi cadastrado e já pode acessar o sistema com as credenciais informadas.
+              </p>
+
+              <Button 
+                onClick={() => setShowSuccessModal(false)}
+                className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-medium shadow-sm h-11"
+              >
+                Entendido
+              </Button>
+            </div>
+            
+            <div className="h-1.5 w-full bg-emerald-500" />
+          </Card>
+        </div>,
+        document.body
+      )}
+
+
+      {/* MODAL DE ERRO (E-MAIL DUPLICADO, ETC) */}
+      {errorModal && createPortal(
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center">
+          <div 
+            className="absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity" 
+            onClick={() => setErrorModal(null)}
+          />
+          <Card className="relative z-10 w-full max-w-sm bg-white shadow-2xl animate-in zoom-in-95 duration-200 border-none p-0 overflow-hidden">
+            <div className="p-6 flex flex-col items-center text-center">
+              <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mb-4 animate-in shake duration-300">
+                <XCircle className="h-8 w-8 text-red-600" />
+              </div>
+
+              <h3 className="text-xl font-bold text-slate-800 mb-2">
+                Atenção
+              </h3>
+              
+              <p className="text-sm text-slate-500 mb-6 px-2">
+                {errorModal} 
+              </p>
+
+              <Button 
+                onClick={() => setErrorModal(null)}
+                className="w-full bg-red-600 hover:bg-red-700 text-white font-medium shadow-sm h-11"
+              >
+                Tentar Novamente
+              </Button>
+            </div>
+            <div className="h-1.5 w-full bg-red-500" />
           </Card>
         </div>,
         document.body

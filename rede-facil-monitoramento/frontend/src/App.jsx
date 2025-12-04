@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { LayoutDashboard, Server, AlertCircle, Activity, HardDrive, AlertTriangle, Package ,LogOut, Users} from 'lucide-react';
+import { LayoutDashboard, Server, AlertCircle, Activity, HardDrive, AlertTriangle, Package ,LogOut, Users,Loader2} from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -27,6 +27,8 @@ function App() {
 
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [currentUser, setCurrentUser] = useState('');
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [userRole, setUserRole] = useState('');
 
   const updateStats = (data) => {
     const total = data.length;
@@ -48,9 +50,12 @@ function App() {
   useEffect(() => {
     const token = localStorage.getItem('token');
     const user = localStorage.getItem('user_name');
+    const role = localStorage.getItem('user_role');
+
     if (token) {
       setIsAuthenticated(true);
       setCurrentUser(user || 'Usuário');
+      setUserRole(role || 'suporte');
       fetchMachines(); 
     }
     
@@ -80,14 +85,26 @@ function App() {
   const handleLoginSuccess = (user) => {
     setIsAuthenticated(true);
     setCurrentUser(user.name);
+    setUserRole(user.role);
+    localStorage.setItem('user_role', user.role);
     fetchMachines();
   };
 
   const handleLogout = () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('user_name');
-    setIsAuthenticated(false);
-    setMachines([]); 
+    setIsLoggingOut(true);
+
+    setTimeout(() => {
+      localStorage.removeItem('token');
+      localStorage.removeItem('user_name');
+      localStorage.removeItem('user_role');
+      
+      setMachines([]); 
+      setSelectedMachine(null);
+      setActiveTab('dashboard');
+      setIsAuthenticated(false); 
+      setUserRole('');
+      setIsLoggingOut(false); 
+    }, 1500); 
   };
 
   const handleMachineClick = (machine) => {
@@ -127,31 +144,55 @@ function App() {
             Inventário
           </button>
 
-          <button 
-            onClick={() => { setActiveTab('users'); setSelectedMachine(null); }}
-            className={`w-full flex items-center px-3 py-2.5 text-sm font-medium rounded-md transition-colors ${activeTab === 'users' ? 'bg-slate-800 text-white' : 'hover:bg-slate-800/50 hover:text-white'}`}
-          >
-            <Users className="mr-3 h-5 w-5 text-purple-500" />
-            Usuários
-          </button>
+          {userRole === 'admin' && (
+            <button 
+              onClick={() => { setActiveTab('users'); setSelectedMachine(null); }}
+              className={`w-full flex items-center px-3 py-2.5 text-sm font-medium rounded-md transition-colors ${activeTab === 'users' ? 'bg-slate-800 text-white' : 'hover:bg-slate-800/50 hover:text-white'}`}
+            >
+              <Users className="mr-3 h-5 w-5 text-purple-500" />
+              Usuários
+            </button>
+          )}
         </nav>
 
-        <div className="p-4 border-t border-slate-800">
-          <div className="flex items-center gap-3">
-            <div className="bg-blue-900/50 rounded-full h-10 w-10 flex items-center justify-center text-blue-200 font-bold text-sm border border-blue-800">
+        {/* FOOTER DA SIDEBAR MELHORADO */}
+        <div className="p-4 border-t border-slate-800/50 bg-[#0a0f1d]">
+          <div className="flex items-center gap-3 mb-4 pl-1">
+            <div className="bg-gradient-to-tr from-blue-600 to-blue-400 rounded-lg h-10 w-10 flex items-center justify-center text-white font-bold text-sm shadow-sm">
               {currentUser.substring(0, 2).toUpperCase()}
             </div>
-            <div>
-              <p className="text-sm font-medium text-white">{currentUser}</p>
-              <p className="text-xs text-slate-500">Online</p>
+            <div className="flex flex-col justify-center">
+              <p className="text-sm font-semibold text-white leading-tight truncate max-w-[140px]" title={currentUser}>
+                {currentUser}
+              </p>
+              <div className="flex items-center gap-1.5 pt-0.5">
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                </span>
+                <p className="text-[11px] text-emerald-400/90 font-medium">Online</p>
+              </div>
             </div>
           </div>
-
+          
           <button 
             onClick={handleLogout}
-            className="w-full flex items-center justify-center gap-2 bg-slate-800 hover:bg-red-900/30 hover:text-red-400 text-slate-400 py-2 rounded-md transition-all text-sm font-medium"
+            disabled={isLoggingOut}
+            className={`w-full flex items-center justify-center gap-2 py-2.5 rounded-lg transition-all text-sm font-medium border ${
+              isLoggingOut 
+                ? 'bg-slate-800/50 text-slate-500 border-transparent cursor-not-allowed' 
+                : 'bg-slate-800/80 text-slate-300 border-slate-700/50 hover:bg-red-500/10 hover:text-red-400 hover:border-red-500/20'
+            }`}
           >
-            <LogOut className="h-4 w-4" /> Sair do Sistema
+            {isLoggingOut ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" /> Saindo...
+              </>
+            ) : (
+              <>
+                <LogOut className="h-4 w-4" /> Sair do Sistema
+              </>
+            )}
           </button>
         </div>
       </aside>
@@ -172,7 +213,7 @@ function App() {
         <div className="flex-1 overflow-auto p-8 space-y-6">
           
           {activeTab === 'inventory' ? (
-              <Inventory />
+              <Inventory userRole={userRole} />
             ) : activeTab === 'users' ? ( 
               <UserManagement />
             ) : selectedMachine ? (
@@ -195,7 +236,6 @@ function App() {
                     <p className="text-xs text-slate-500">Registradas na base</p>
                   </CardContent>
                 </Card>
-                {/* ... Outros cards iguais ao anterior ... */}
                 <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                         <CardTitle className="text-sm font-medium text-slate-600">Online Agora</CardTitle>

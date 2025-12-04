@@ -9,7 +9,7 @@ import { createPortal } from 'react-dom';
 
 import { generateExcel, generatePDF } from '@/utils/exportUtils';
 
-export default function Inventory() {
+export default function Inventory({ userRole }) {
   const [items, setItems] = useState([]);
   
   const [filterType, setFilterType] = useState('Todos');
@@ -201,9 +201,11 @@ export default function Inventory() {
                   <Button variant="outline" onClick={handleExportPDF} className="flex-1 md:flex-none gap-2 text-red-700 border-red-200 hover:bg-red-50">
                       <FileText className="h-4 w-4" /> PDF
                   </Button>
-                  <Button onClick={() => setIsFormOpen(true)} className="flex-1 md:flex-none bg-blue-600 hover:bg-blue-700 text-white shadow-md gap-2">
+                  {userRole === 'admin' && (
+                           <Button onClick={() => setIsFormOpen(true)} className="flex-1 md:flex-none bg-blue-600 hover:bg-blue-700 text-white shadow-md gap-2">
                       <Plus className="h-4 w-4" /> Novo
                   </Button>
+                  )}
               </div>
             </div>
 
@@ -262,10 +264,14 @@ export default function Inventory() {
                     <TableCell>{getStatusBadge(item.status)}</TableCell>
                     <TableCell className="text-slate-700">{item.assigned_to || '-'}</TableCell>
                     <TableCell className="text-right">
-                      <div className="flex justify-end gap-2">
+                      {userRole === 'admin' ? (
+                         <div className="flex justify-end gap-2">
                           <Button variant="outline" size="sm" onClick={() => startEdit(item)} className="h-8 w-8 p-0 text-blue-600 border-blue-200"><Edit2 className="h-4 w-4" /></Button>
                           <Button variant="outline" size="sm" onClick={() => requestDelete(item.id)} className="h-8 w-8 p-0 text-red-600 border-red-200"><Trash2 className="h-4 w-4" /></Button>
                       </div>
+                      ) : (
+                        <span className="text-sm text-slate-400 italic">Visualizar</span>
+                      )}
                     </TableCell>
                   </TableRow>
                 ))}
