@@ -73,8 +73,8 @@ exports.registerMachine = async ({
             await connection.query('INSERT INTO installed_software (machine_id, software_name, version, install_date) VALUES ?', [softwareValues]);
         }
 
-        await connection.commit(); 
-        return { message: 'Máquina registrada/atualizada com sucesso', machine_id };
+       await connection.commit(); 
+        return { message: 'Máquina registrada/atualizada com sucesso', machine_id, ip_address };
 
     } catch (error) {
         if (connection) {
