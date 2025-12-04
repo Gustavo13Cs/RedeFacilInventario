@@ -1,12 +1,15 @@
 import React, { useEffect, useState } from 'react';
-import { LayoutDashboard, Server, AlertCircle, Activity, HardDrive, AlertTriangle, Package } from 'lucide-react';
+import { LayoutDashboard, Server, AlertCircle, Activity, HardDrive, AlertTriangle, Package ,LogOut, Users} from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import io from 'socket.io-client';
 import axios from 'axios';
+
+import Login from './components/Login';
 import MachineDetails from './components/MachineDetails';
 import Inventory from './components/Inventory'; 
+import UserManagement from './components/UserManagement';
 
 const API_URL = "http://localhost:3001";
 const socket = io('http://localhost:3001', {
@@ -14,16 +17,45 @@ const socket = io('http://localhost:3001', {
 });
 
 function App() {
+
   const [machines, setMachines] = useState([]);
   const [stats, setStats] = useState({ total: 0, online: 0, critical: 0 });
   const [lastTelemetry, setLastTelemetry] = useState(null);
-  const [activeTab, setActiveTab] = useState('dashboard');
-  
-  
+
   const [selectedMachine, setSelectedMachine] = useState(null);
+  const [activeTab, setActiveTab] = useState('dashboard');
+
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [currentUser, setCurrentUser] = useState('');
+
+  const updateStats = (data) => {
+    const total = data.length;
+    const online = data.filter((m) => m.status === 'online').length;
+    const critical = data.filter((m) => m.status === 'critical').length; 
+    setStats({ total, online, critical });
+  };
+
+    const fetchMachines = async () => {
+    try {
+      const res = await axios.get(`${API_URL}/api/machines`);
+      setMachines(res.data);
+      updateStats(res.data);
+    } catch (error) {
+      console.error("Erro ao buscar máquinas:", error);
+    }
+  };
 
   useEffect(() => {
-    fetchMachines();
+    const token = localStorage.getItem('token');
+    const user = localStorage.getItem('user_name');
+    if (token) {
+      setIsAuthenticated(true);
+      setCurrentUser(user || 'Usuário');
+      fetchMachines(); 
+    }
+    
+
+
 
     socket.on("connect", () => console.log("🟢 Conectado ao WebSocket"));
     
@@ -45,29 +77,27 @@ function App() {
     };
   }, []);
 
-  const fetchMachines = async () => {
-    try {
-      const res = await axios.get(`${API_URL}/api/machines`);
-      setMachines(res.data);
-      updateStats(res.data);
-    } catch (error) {
-      console.error("Erro ao buscar máquinas:", error);
-    }
+  const handleLoginSuccess = (user) => {
+    setIsAuthenticated(true);
+    setCurrentUser(user.name);
+    fetchMachines();
   };
 
-  const updateStats = (data) => {
-    const total = data.length;
-    const online = data.filter((m) => m.status === 'online').length;
-    const critical = data.filter((m) => m.status === 'critical').length; 
-    setStats({ total, online, critical });
+  const handleLogout = () => {
+    localStorage.removeItem('token');
+    localStorage.removeItem('user_name');
+    setIsAuthenticated(false);
+    setMachines([]); 
   };
+
   const handleMachineClick = (machine) => {
     setSelectedMachine(machine);
   };
 
-  const handleBack = () => {
-    setSelectedMachine(null);
-  };
+   if (!isAuthenticated) {
+    return <Login onLoginSuccess={handleLoginSuccess} />;
+  }
+
 
   return (
     <div className="flex h-screen w-full bg-slate-50">
@@ -96,18 +126,33 @@ function App() {
             <Package className="mr-3 h-5 w-5 text-emerald-500" />
             Inventário
           </button>
+
+          <button 
+            onClick={() => { setActiveTab('users'); setSelectedMachine(null); }}
+            className={`w-full flex items-center px-3 py-2.5 text-sm font-medium rounded-md transition-colors ${activeTab === 'users' ? 'bg-slate-800 text-white' : 'hover:bg-slate-800/50 hover:text-white'}`}
+          >
+            <Users className="mr-3 h-5 w-5 text-purple-500" />
+            Usuários
+          </button>
         </nav>
 
         <div className="p-4 border-t border-slate-800">
           <div className="flex items-center gap-3">
             <div className="bg-blue-900/50 rounded-full h-10 w-10 flex items-center justify-center text-blue-200 font-bold text-sm border border-blue-800">
-              AD
+              {currentUser.substring(0, 2).toUpperCase()}
             </div>
             <div>
-              <p className="text-sm font-medium text-white">Administrador</p>
-              <p className="text-xs text-slate-500">TI Suporte</p>
+              <p className="text-sm font-medium text-white">{currentUser}</p>
+              <p className="text-xs text-slate-500">Online</p>
             </div>
           </div>
+
+          <button 
+            onClick={handleLogout}
+            className="w-full flex items-center justify-center gap-2 bg-slate-800 hover:bg-red-900/30 hover:text-red-400 text-slate-400 py-2 rounded-md transition-all text-sm font-medium"
+          >
+            <LogOut className="h-4 w-4" /> Sair do Sistema
+          </button>
         </div>
       </aside>
 
@@ -128,6 +173,8 @@ function App() {
           
           {activeTab === 'inventory' ? (
               <Inventory />
+            ) : activeTab === 'users' ? ( 
+              <UserManagement />
             ) : selectedMachine ? (
               <MachineDetails 
                 machine={selectedMachine} 

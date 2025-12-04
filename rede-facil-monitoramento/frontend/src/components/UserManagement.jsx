@@ -1,0 +1,174 @@
+import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
+import { Plus, Trash2, Users, Shield, Mail, Key, X, Save } from 'lucide-react';
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import axios from 'axios';
+
+export default function UserManagement() {
+  const [users, setUsers] = useState([]);
+  const [isFormOpen, setIsFormOpen] = useState(false);
+  
+  const [formData, setFormData] = useState({
+    name: '',
+    email: '',
+    password: '',
+    role: 'admin'
+  });
+
+  const API_URL = "http://localhost:3001/auth";
+
+  useEffect(() => {
+    fetchUsers();
+  }, []);
+
+  const fetchUsers = async () => {
+    try {
+      const res = await axios.get(API_URL);
+      setUsers(res.data);
+    } catch (error) {
+      console.error("Erro ao buscar usuários:", error);
+    }
+  };
+
+  const handleInputChange = (e) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({ ...prev, [name]: value }));
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    try {
+      await axios.post(`${API_URL}/register`, formData);
+      alert("Usuário criado com sucesso!");
+      fetchUsers();
+      closeForm();
+    } catch (error) {
+      alert("Erro ao criar usuário: " + (error.response?.data?.message || error.message));
+    }
+  };
+
+  const handleDelete = async (id) => {
+    if (confirm('Tem certeza que deseja remover este usuário? Ele perderá o acesso.')) {
+      try {
+        await axios.delete(`${API_URL}/${id}`);
+        fetchUsers();
+      } catch (error) {
+        console.error("Erro ao deletar:", error);
+      }
+    }
+  };
+
+  const closeForm = () => {
+    setIsFormOpen(false);
+    setFormData({ name: '', email: '', password: '', role: 'admin' });
+  };
+
+  return (
+    <div className="space-y-6 animate-in fade-in duration-500">
+        
+      <div className="flex justify-between items-center">
+        <div>
+            <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
+                <Users className="h-6 w-6 text-blue-600" /> Gestão de Acessos
+            </h2>
+            <p className="text-slate-500">Gerencie quem pode acessar o sistema da Rede Fácil.</p>
+        </div>
+        <Button onClick={() => setIsFormOpen(true)} className="bg-blue-600 hover:bg-blue-700 text-white shadow-md gap-2">
+            <Plus className="h-4 w-4" /> Novo Usuário
+        </Button>
+      </div>
+
+      <Card className="border-slate-200 shadow-sm">
+        <CardContent className="p-0">
+          <Table>
+            <TableHeader>
+              <TableRow className="bg-slate-50">
+                <TableHead>Nome</TableHead>
+                <TableHead>E-mail</TableHead>
+                <TableHead>Cargo</TableHead>
+                <TableHead>Data Criação</TableHead>
+                <TableHead className="text-right">Ações</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {users.map((user) => (
+                <TableRow key={user.id}>
+                  <TableCell className="font-medium text-slate-900">{user.name}</TableCell>
+                  <TableCell className="text-slate-600">{user.email}</TableCell>
+                  <TableCell>
+                    <Badge variant={user.role === 'admin' ? 'default' : 'secondary'} className="uppercase text-[10px]">
+                        {user.role}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="text-slate-500 text-xs">
+                    {new Date(user.created_at).toLocaleDateString()}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <Button variant="ghost" size="icon" onClick={() => handleDelete(user.id)} className="text-red-500 hover:bg-red-50">
+                        <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+
+      {isFormOpen && createPortal(
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={closeForm} />
+          
+          <Card className="relative z-10 w-full max-w-md animate-in zoom-in-95 bg-white border-none shadow-2xl">
+            <CardHeader className="border-b border-slate-100 bg-white rounded-t-lg flex flex-row justify-between items-center">
+                <CardTitle>Novo Usuário</CardTitle>
+                <button onClick={closeForm}><X className="h-5 w-5 text-slate-400" /></button>
+            </CardHeader>
+            <CardContent className="pt-6 bg-white rounded-b-lg">
+                <form onSubmit={handleSubmit} className="space-y-4">
+                    
+                    <div>
+                        <label className="block text-sm font-semibold text-slate-700 mb-1">Nome Completo</label>
+                        <input type="text" name="name" value={formData.name} onChange={handleInputChange} required className="w-full border border-slate-300 rounded-md p-2 outline-none focus:ring-2 focus:ring-blue-500" placeholder="Ex: João Silva" />
+                    </div>
+
+                    <div>
+                        <label className="block text-sm font-semibold text-slate-700 mb-1">E-mail de Acesso</label>
+                        <div className="relative">
+                            <Mail className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+                            <input type="email" name="email" value={formData.email} onChange={handleInputChange} required className="w-full border border-slate-300 rounded-md pl-9 p-2 outline-none focus:ring-2 focus:ring-blue-500" placeholder="usuario@redefacil.com" />
+                        </div>
+                    </div>
+
+                    <div>
+                        <label className="block text-sm font-semibold text-slate-700 mb-1">Senha</label>
+                        <div className="relative">
+                            <Key className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+                            <input type="password" name="password" value={formData.password} onChange={handleInputChange} required className="w-full border border-slate-300 rounded-md pl-9 p-2 outline-none focus:ring-2 focus:ring-blue-500" placeholder="••••••••" />
+                        </div>
+                    </div>
+
+                    <div>
+                        <label className="block text-sm font-semibold text-slate-700 mb-1">Cargo / Permissão</label>
+                        <select name="role" value={formData.role} onChange={handleInputChange} className="w-full border border-slate-300 rounded-md p-2 outline-none focus:ring-2 focus:ring-blue-500 bg-white">
+                            <option value="admin">Administrador (Acesso Total)</option>
+                            <option value="suporte">Suporte (Visualização)</option>
+                        </select>
+                    </div>
+
+                    <div className="flex justify-end gap-3 pt-4 border-t border-slate-100 mt-4">
+                        <Button type="button" variant="outline" onClick={closeForm}>Cancelar</Button>
+                        <Button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white"><Save className="mr-2 h-4 w-4" /> Criar Usuário</Button>
+                    </div>
+                </form>
+            </CardContent>
+          </Card>
+        </div>,
+        document.body
+      )}
+    </div>
+  );
+}

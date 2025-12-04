@@ -5,8 +5,9 @@ const http = require('http');
 require('./config/db'); 
 const monitorRoutes = require('./routes/monitorRoutes');
 const telemetryRoutes = require('./routes/telemetryRoutes');
-const alertRoutes = require('./routes/alertRoutes');
 const inventoryRoutes = require('./routes/inventoryRoutes');
+const alertRoutes = require('./routes/alertRoutes');
+const authRoutes = require('./routes/authRoutes');
 
 
 const socketHandler = require('./socket/socketHandler'); 
@@ -29,11 +30,12 @@ app.get('/', (req, res) => {
     res.json({ message: 'API Rede Fácil Financeira - Online 🚀' });
 });
 
-// Rotas
+
 app.use('/api', monitorRoutes); 
 app.use('/api/telemetry', telemetryRoutes); 
 app.use('/api/alerts', alertRoutes);
 app.use('/api/inventory', inventoryRoutes);
+app.use('/auth', authRoutes);
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, '0.0.0.0', () => {
