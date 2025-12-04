@@ -87,10 +87,20 @@ exports.registerMachine = async ({
     }
 };
 
+// --- CONSTANTE DE RETENÇÃO (5 REGISTROS) ---
+const MAX_TELEMETRY_RECORDS = 5;
 
-exports.processTelemetry = async ({
-    uuid, cpu_usage_percent, ram_usage_percent, disk_free_percent, temperature_celsius
-}) => {
+// --- FUNÇÃO CORRIGIDA (Versão Final e Completa) ---
+exports.processTelemetry = async (data) => {
+    // Defesa contra chamada acidental sem argumento
+    if (!data) {
+        return;
+    }
+    
+    const {
+        uuid, cpu_usage_percent, ram_usage_percent, disk_free_percent, temperature_celsius
+    } = data;
+    
     if (!uuid) {
         throw new Error('UUID da máquina é obrigatório para telemetria.');
     }
@@ -102,21 +112,59 @@ exports.processTelemetry = async ({
             throw new Error('Máquina não encontrada. Registre-a primeiro.');
         }
         
-        const cpu_usage = parseFloat(cpu_usage_percent).toFixed(2);
-        const ram_usage = parseFloat(ram_usage_percent).toFixed(2);
-        const disk_free = parseFloat(disk_free_percent).toFixed(2);
-        const temperature = temperature_celsius ? parseFloat(temperature_celsius).toFixed(2) : null;
-
+        // 1. CONVERTE PARA FLOAT BRUTO (para o NaN check)
+        const cpu_raw = parseFloat(cpu_usage_percent);
+        const ram_raw = parseFloat(ram_usage_percent);
+        const disk_raw = parseFloat(disk_free_percent);
+        const temp_raw = temperature_celsius ? parseFloat(temperature_celsius) : null;
+        
+        // 2. CORREÇÃO DE PRECISÃO E NaN: Limita a precisão e garante o tipo Number/null 
+        const cpu_usage = isNaN(cpu_raw) ? null : parseFloat(cpu_raw.toFixed(2));
+        const ram_usage = isNaN(ram_raw) ? null : parseFloat(ram_raw.toFixed(2));
+        const disk_free = isNaN(disk_raw) ? null : parseFloat(disk_raw.toFixed(4)); 
+        const temperature = (temp_raw === null || isNaN(temp_raw)) ? null : parseFloat(temp_raw.toFixed(2));
+        
+        
+        // 1. INSERÇÃO DE TELEMETRIA (Com valores de precisão limitada)
         await db.execute(
             `INSERT INTO telemetry_logs (machine_id, cpu_usage_percent, ram_usage_percent, disk_free_percent, temperature_celsius)
              VALUES (?, ?, ?, ?, ?)`,
             [machine_id, cpu_usage, ram_usage, disk_free, temperature]
         );
 
-        if (cpu_usage > 90) {
+        // 2. EXECUTAR A LIMPEZA (DATA RETENTION)
+        // 🚨 CORREÇÃO DO ERRO SQL (ERROR 1210): Injeta o valor do OFFSET diretamente
+        const offset = MAX_TELEMETRY_RECORDS - 1; // 4
+        const [lastKeepRows] = await db.execute(
+            `SELECT id 
+             FROM telemetry_logs 
+             WHERE machine_id = ? 
+             ORDER BY created_at DESC 
+             LIMIT 1 
+             OFFSET ${offset}`, // Valor injetado (solução para o erro 1210)
+            [machine_id] // Apenas um argumento
+        );
+        
+        if (lastKeepRows.length > 0) {
+            const keep_id = lastKeepRows[0].id;
+            
+            // 2b. Exclui logs antigos
+            const [result] = await db.execute(
+                `DELETE FROM telemetry_logs
+                 WHERE machine_id = ? AND id < ?`,
+                [machine_id, keep_id]
+            );
+
+            if (result && result.affectedRows > 0) {
+                console.log(`[DB Limpeza] UUID ${uuid}: ${result.affectedRows} logs antigos excluídos.`);
+            }
+        }
+        
+        // 3. LÓGICA DE ALERTA
+        if (cpu_usage && cpu_usage > 90) { 
             const [machineRow] = await db.execute('SELECT hostname FROM machines WHERE id = ?', [machine_id]);
             const hostname = machineRow[0].hostname;
-            const alert_message = `Uso de CPU crítico (${cpu_usage}%) na máquina ${hostname} (${uuid}).`;
+            const alert_message = `Uso de CPU crítico (${cpu_usage.toFixed(2)}%) na máquina ${hostname} (${uuid}).`; 
             
             const [existingAlerts] = await db.execute(
                 `SELECT id FROM alerts WHERE machine_id = ? AND alert_type = 'critical' AND is_resolved = FALSE AND created_at > DATE_SUB(NOW(), INTERVAL 1 HOUR)`,
@@ -128,13 +176,14 @@ exports.processTelemetry = async ({
                     `INSERT INTO alerts (machine_id, alert_type, message) VALUES (?, 'critical', ?)`,
                     [machine_id, alert_message]
                 );
- 
+    
                 if (globalIo) {
                     globalIo.emit('new_alert', { machine_id, uuid, alert_type: 'critical', message: alert_message, created_at: new Date() });
                 }
             }
         }
         
+        // 4. Update Status and Socket Emit
         await db.execute(
             `UPDATE machines SET status = 'online', last_seen = CURRENT_TIMESTAMP WHERE id = ?`,
             [machine_id]
@@ -143,16 +192,17 @@ exports.processTelemetry = async ({
         if (globalIo) {
             globalIo.emit('new_telemetry', { 
                 machine_uuid: uuid, 
-                cpu_usage_percent: cpu_usage, 
-                ram_usage_percent: ram_usage, 
-                disk_free_percent: disk_free,
-                temperature_celsius: temperature
+                cpu_usage_percent: cpu_usage ? cpu_usage.toFixed(2) : 'N/A', 
+                ram_usage_percent: ram_usage ? ram_usage.toFixed(2) : 'N/A', 
+                disk_free_percent: disk_free ? disk_free.toFixed(2) : 'N/A',
+                temperature_celsius: temperature ? temperature.toFixed(2) : 'N/A'
             });
         }
 
         return { message: 'Dados de telemetria recebidos e processados' };
     } catch (error) {
-        console.error('❌ Erro no Service (processTelemetry):', error.message);
+        // Loga o objeto de erro completo para o diagnóstico
+        console.error('❌ Erro no Service (processTelemetry):', error); 
         throw error;
     }
 };

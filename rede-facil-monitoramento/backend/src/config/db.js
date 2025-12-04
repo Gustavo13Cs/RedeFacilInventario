@@ -2,8 +2,10 @@ const mysql = require('mysql2/promise');
 
 
 const db = mysql.createPool({
-    host: process.env.DB_HOST || 'db',
+    // CORRIGIDO: Deve ser 'localhost' para rodar localmente com Nodemon
+    host: process.env.DB_HOST || 'localhost',
     user: process.env.DB_USER || 'admin',
+    // IMPORTANTE: COLOQUE A SENHA CORRETA DO SEU MYSQL LOCAL AQUI.
     password: process.env.DB_PASS || 'adminpassword', 
     database: process.env.DB_NAME || 'inventarioredefacil',
     waitForConnections: true,
