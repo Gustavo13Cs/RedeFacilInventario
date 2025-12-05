@@ -33,9 +33,8 @@ app.get('/', (req, res) => {
     res.json({ message: 'API Rede Fácil Financeira - Online 🚀' });
 });
 
-// 🚨 NOVO: Adicione o middleware para as rotas de manutenção
+
 app.use('/api', maintenanceRoutes); 
-// Rotas existentes
 app.use('/api', monitorRoutes); 
 app.use('/api/telemetry', telemetryRoutes); 
 app.use('/api/alerts', alertRoutes);

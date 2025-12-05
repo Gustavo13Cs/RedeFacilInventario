@@ -1,7 +1,5 @@
-// src/services/maintenanceLogService.js
-const db = require('../config/db'); // Supondo que você tem um módulo de conexão com o banco
+const db = require('../config/db'); 
 
-// 1. SERVICE para buscar todos os logs
 exports.getLogsByMachineId = async (machineId) => {
     const query = `
         SELECT 
@@ -23,7 +21,6 @@ exports.getLogsByMachineId = async (machineId) => {
     return rows;
 };
 
-// 2. SERVICE para criar um novo log
 exports.createLog = async (machineId, description, technicianId, logDate) => {
     const query = `
         INSERT INTO maintenance_logs 
@@ -31,10 +28,8 @@ exports.createLog = async (machineId, description, technicianId, logDate) => {
         VALUES 
             (?, ?, ?, ?);
     `;
-    // Nota: Se logDate for null/undefined, MySQL pode usar a data atual dependendo da configuração da coluna.
-    // Recomendo forçar a data atual caso não seja fornecida no payload.
     const dateToInsert = logDate || new Date(); 
     
     const [result] = await db.execute(query, [machineId, description, technicianId, dateToInsert]);
-    return result; // Retorna o resultado da inserção
+    return result; 
 };

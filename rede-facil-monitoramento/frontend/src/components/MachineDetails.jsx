@@ -1,19 +1,69 @@
 import React, { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom'; // <--- IMPORTANTE: Para o Modal
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, Cpu, HardDrive, Activity, Thermometer, Database, AlertTriangle, CheckCircle } from 'lucide-react';
+import { Button } from "@/components/ui/button"; // <--- IMPORTANTE: Botões
+import { ArrowLeft, Cpu, HardDrive, Activity, Thermometer, Database, AlertTriangle, CheckCircle, Wrench, Calendar, Plus, Save, X, User } from 'lucide-react'; // <--- NOVOS ÍCONES
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend} from 'recharts';
+import axios from 'axios'; // <--- IMPORTANTE: Para conectar no Back-end
 
 export default function MachineDetails({ machine, onBack, socket }) {
 
+  // --- ESTADOS DE TELEMETRIA (JÁ EXISTENTES) ---
   const [telemetryData, setTelemetryData] = useState([]);
-
   const [currentTemp, setCurrentTemp] = useState(0);
   const [currentDiskFree, setCurrentDiskFree] = useState(0);
   const [currentSmartStatus, setCurrentSmartStatus] = useState('N/A');
 
+  // --- NOVOS ESTADOS PARA MANUTENÇÃO (ADICIONADO) ---
+  const [logs, setLogs] = useState([]);
+  const [isLogModalOpen, setIsLogModalOpen] = useState(false);
+  const [newLog, setNewLog] = useState({ description: '', log_date: '' });
+
   const PIE_COLORS = ['#10b981', '#1e293b'];
 
+  // --- 1. BUSCAR LOGS AO CARREGAR A MÁQUINA ---
+  useEffect(() => {
+    // Só busca se tiver o machine_id
+    if (machine?.machine_id) {
+        fetchMaintenanceLogs();
+    }
+  }, [machine]);
+
+  const fetchMaintenanceLogs = async () => {
+    try {
+        const token = localStorage.getItem('token');
+        // Adicionei o header de autorização para o backend saber quem está buscando
+        const res = await axios.get(`${API_URL}/api/machines/${machine.machine_id}/logs`, {
+            headers: { Authorization: `Bearer ${token}` }
+        });
+        setLogs(res.data);
+    } catch (error) {
+        console.error("Erro ao buscar logs:", error);
+    }
+  };
+
+  // --- 2. FUNÇÃO PARA SALVAR NOVO LOG ---
+  const handleSaveLog = async (e) => {
+    e.preventDefault();
+    try {
+        const token = localStorage.getItem('token'); 
+        await axios.post(`${API_URL}/api/machines/${machine.machine_id}/logs`, {
+            description: newLog.description,
+            log_date: newLog.log_date || new Date()
+        }, {
+            headers: { Authorization: `Bearer ${token}` } 
+        });
+        
+        fetchMaintenanceLogs(); // Recarrega a lista
+        setIsLogModalOpen(false); // Fecha modal
+        setNewLog({ description: '', log_date: '' }); // Limpa form
+    } catch (error) {
+        alert("Erro ao registrar manutenção. Verifique se está logado.");
+    }
+  };
+
+  // --- LÓGICA DE TELEMETRIA (MANTIDA IGUAL AO SEU ARQUIVO) ---
   useEffect(() => {
     if (!socket) {
         console.error("⚠️ Socket não recebido em MachineDetails");
@@ -70,7 +120,7 @@ export default function MachineDetails({ machine, onBack, socket }) {
   ];
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-500">
+    <div className="space-y-6 animate-in fade-in duration-500 pb-10">
       {/* Cabeçalho */}
       <div className="flex items-center gap-4">
         <button onClick={onBack} className="p-2 hover:bg-slate-200 rounded-full transition-colors">
@@ -168,7 +218,6 @@ export default function MachineDetails({ machine, onBack, socket }) {
             )}
           </CardContent>
         </Card>
-
       </div>
 
       <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
@@ -215,7 +264,7 @@ export default function MachineDetails({ machine, onBack, socket }) {
             </div>
         </Card>
 
-        {/* TEMPERATURA */}
+        {/* Gráfico TEMPERATURA */}
         <Card className="p-4 md:col-span-2 xl:col-span-1">
             <CardHeader className="p-0 mb-4">
                 <CardTitle className="text-md font-semibold text-slate-700 flex items-center gap-2">
@@ -236,6 +285,7 @@ export default function MachineDetails({ machine, onBack, socket }) {
             </div>
         </Card>
 
+        {/* Gráfico DISCO */}
         <Card className="p-1 shadow-sm border-slate-200 flex flex-col">
             <CardHeader className="pb-0">
                 <CardTitle className="text-sm font-semibold text-slate-700 flex items-center justify-between">
@@ -277,6 +327,109 @@ export default function MachineDetails({ machine, onBack, socket }) {
             </div>
         </Card>
       </div>
+
+      {/* --- NOVA SEÇÃO: HISTÓRICO DE MANUTENÇÃO (ADICIONADA) --- */}
+      <Card className="border-slate-200 shadow-sm mt-6">
+        <CardHeader className="bg-white border-b border-slate-100 flex flex-row items-center justify-between">
+            <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-lg bg-orange-100 flex items-center justify-center">
+                    <Wrench className="h-5 w-5 text-orange-600" />
+                </div>
+                <div>
+                    <CardTitle className="text-lg font-bold text-slate-800">Histórico de Manutenções</CardTitle>
+                    <p className="text-sm text-slate-500">Logbook de serviços realizados nesta máquina.</p>
+                </div>
+            </div>
+            <Button onClick={() => setIsLogModalOpen(true)} className="bg-orange-600 hover:bg-orange-700 text-white gap-2 shadow-sm">
+                <Plus className="h-4 w-4" /> Registrar Manutenção
+            </Button>
+        </CardHeader>
+        <CardContent className="p-0">
+            {logs.length === 0 ? (
+                <div className="text-center py-10 text-slate-400">
+                    <Wrench className="h-10 w-10 mx-auto mb-2 opacity-20" />
+                    <p>Nenhum registro de manutenção encontrado.</p>
+                </div>
+            ) : (
+                <div className="divide-y divide-slate-100">
+                    {logs.map((log) => (
+                        <div key={log.id} className="p-4 flex flex-col md:flex-row gap-4 hover:bg-slate-50 transition-colors">
+                            {/* Coluna da Data */}
+                            <div className="flex items-start gap-3 min-w-[180px]">
+                                <div className="mt-1">
+                                    <Calendar className="h-4 w-4 text-slate-400" />
+                                </div>
+                                <div>
+                                    <p className="text-sm font-bold text-slate-700">
+                                        {new Date(log.log_date).toLocaleDateString()}
+                                    </p>
+                                    <p className="text-xs text-slate-500">
+                                        {new Date(log.log_date).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                                    </p>
+                                </div>
+                            </div>
+                            
+                            {/* Coluna da Descrição */}
+                            <div className="flex-1">
+                                <p className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">{log.description}</p>
+                            </div>
+
+                            {/* Coluna do Técnico */}
+                            <div className="flex items-center gap-2 min-w-[150px] justify-end">
+                                <Badge variant="outline" className="flex items-center gap-1 text-slate-600 bg-white border-slate-200">
+                                    <User className="h-3 w-3" />
+                                    {log.technician_name || 'Técnico Excluído'}
+                                </Badge>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            )}
+        </CardContent>
+      </Card>
+
+      {/* --- MODAL DE NOVA MANUTENÇÃO (PORTAL ADICIONADO) --- */}
+      {isLogModalOpen && createPortal(
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center">
+            <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setIsLogModalOpen(false)} />
+            <Card className="relative z-10 w-full max-w-lg animate-in zoom-in-95 bg-white shadow-2xl">
+                <CardHeader className="border-b pb-4 bg-white rounded-t-lg flex flex-row justify-between items-center">
+                    <CardTitle className="text-slate-800 flex items-center gap-2">
+                        <Wrench className="h-5 w-5 text-orange-600" /> Registrar Manutenção
+                    </CardTitle>
+                    <button onClick={() => setIsLogModalOpen(false)} className="text-slate-400 hover:text-slate-600"><X className="h-5 w-5" /></button>
+                </CardHeader>
+                <CardContent className="pt-6 bg-white rounded-b-lg">
+                    <form onSubmit={handleSaveLog} className="space-y-4">
+                        <div>
+                            <label className="block text-sm font-semibold text-slate-700 mb-1">Data do Serviço</label>
+                            <input 
+                                type="datetime-local" 
+                                className="w-full border border-slate-300 rounded-md p-2.5 outline-none focus:ring-2 focus:ring-orange-500"
+                                value={newLog.log_date}
+                                onChange={(e) => setNewLog({...newLog, log_date: e.target.value})}
+                            />
+                            <p className="text-xs text-slate-400 mt-1">Deixe em branco para usar a data/hora atual.</p>
+                        </div>
+                        <div>
+                            <label className="block text-sm font-semibold text-slate-700 mb-1">Descrição do Serviço</label>
+                            <textarea 
+                                required
+                                placeholder="Descreva o que foi feito na máquina (ex: Limpeza de cooler, troca de pasta térmica, formatação...)"
+                                className="w-full border border-slate-300 rounded-md p-3 outline-none focus:ring-2 focus:ring-orange-500 h-32 resize-none"
+                                value={newLog.description}
+                                onChange={(e) => setNewLog({...newLog, description: e.target.value})}
+                            />
+                        </div>
+                        <div className="flex justify-end gap-3 pt-4 border-t border-slate-100 mt-4">
+                            <Button type="button" variant="outline" onClick={() => setIsLogModalOpen(false)}>Cancelar</Button>
+                            <Button type="submit" className="bg-orange-600 hover:bg-orange-700 text-white gap-2 shadow-sm"><Save className="h-4 w-4" /> Salvar Registro</Button>
+                        </div>
+                    </form>
+                </CardContent>
+            </Card>
+        </div>, document.body
+      )}
 
       <div className="text-center pt-8 text-xs text-slate-300 font-mono">
         UUID: {machine.uuid}

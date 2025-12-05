@@ -246,7 +246,7 @@ exports.getMachineDetails = async (uuid) => {
             open_alerts: openAlerts
         };
 
-        delete response.machine_id; 
+        //delete response.machine_id; 
         return response;
 
     } catch (error) {

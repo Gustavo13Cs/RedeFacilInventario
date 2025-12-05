@@ -1,7 +1,5 @@
-// src/controllers/maintenanceLogController.js
 const maintenanceLogService = require('../services/maintenanceLogService');
 
-// 1. CONTROLLER para GET: Buscar Logs
 exports.getLogs = async (req, res) => {
     try {
         const { machineId } = req.params;
@@ -17,14 +15,11 @@ exports.getLogs = async (req, res) => {
     }
 };
 
-// 2. CONTROLLER para POST: Criar Novo Log
 exports.createLog = async (req, res) => {
     try {
         const { machineId } = req.params;
         const { description, log_date } = req.body;
         
-        // Supondo que o ID do técnico (usuário) está no objeto 'req.user' 
-        // após a verificação do token (middleware de autenticação).
         const technicianId = req.user.id; 
         
         if (!description) {
