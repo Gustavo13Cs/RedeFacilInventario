@@ -19,8 +19,13 @@ import (
 	"github.com/shirou/gopsutil/v3/mem"
 )
 
-const API_BASE_URL = "http://localhost:3001/api" 
+// --- CONFIGURAÇÃO ---
+const API_BASE_URL = "http://localhost:3001/api" // Usando a porta mapeada do Docker
 const TELEMETRY_INTERVAL = 5 * time.Second 
+
+// NOVAS CONSTANTES PARA RESILIÊNCIA DE REDE
+const MAX_RETRIES = 3              // Número máximo de tentativas de envio
+const RETRY_DELAY = 10 * time.Second // Atraso entre as tentativas
 
 var GlobalMachineIP string 
 
@@ -46,7 +51,7 @@ type TelemetryData struct {
 	CPUUsagePercent float64 `json:"cpu_usage_percent"`
 	RAMUsagePercent float64 `json:"ram_usage_percent"`
 	DiskFreePercent float64 `json:"disk_free_percent"`
-	DiskSmartStatus string  `json:"disk_smart_status"` 
+	DiskSmartStatus string `json:"disk_smart_status"` 
 	TemperatureCelsius float64 `json:"temperature_celsius"` 
 }
 
@@ -54,6 +59,8 @@ type RegistrationResponse struct {
 	Message string `json:"message"`
 	MachineIP string `json:"ip_address"`
 }
+
+// --- FUNÇÕES DE UTILIDADE E COLETA ---
 
 func getLocalIP() string {
 	ifaces, err := net.Interfaces()
@@ -101,7 +108,6 @@ func collectStaticInfo() MachineInfo {
 	if err == nil {
 		diskTotalGB = float64(dUsage.Total) / (1024 * 1024 * 1024)
 	} else if len(dPartitions) > 0 {
-		// Fallback
 		dUsage, _ := disk.Usage(dPartitions[0].Mountpoint)
 		diskTotalGB = float64(dUsage.Total) / (1024 * 1024 * 1024)
 	}
@@ -169,63 +175,142 @@ func getCPUTemperature() float64 {
 	return 0.0
 }
 
-func registerMachine(info MachineInfo) {
-	jsonValue, _ := json.Marshal(info)
-	url := fmt.Sprintf("%s/register", API_BASE_URL)
-	client := http.Client{Timeout: 5 * time.Second}
-	
-	resp, err := client.Post(url, "application/json", bytes.NewBuffer(jsonValue))
-	if err != nil {
-		log.Printf("❌ Falha no Registro: %v", err)
-		return
-	}
-	defer resp.Body.Close()
-    
-	body, _ := io.ReadAll(resp.Body)
-	
-	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
-		var regResponse RegistrationResponse
-		json.Unmarshal(body, &regResponse)
-		GlobalMachineIP = regResponse.MachineIP 
-		log.Printf("✅ Máquina registrada! IP: %s", GlobalMachineIP)
-	} else {
-		log.Printf("⚠️ Erro API Registro: %s", resp.Status)
-	}
-}
+
+// --- FUNÇÃO CENTRAL DE ENVIO DE DADOS COM RETRY ---
 
 func postData(endpoint string, data interface{}) {
-	jsonValue, _ := json.Marshal(data)
+	jsonValue, err := json.Marshal(data)
+	if err != nil {
+		log.Printf("Erro ao serializar JSON para %s: %v", endpoint, err)
+		return
+	}
+
 	url := fmt.Sprintf("%s%s", API_BASE_URL, endpoint)
 	client := http.Client{Timeout: 5 * time.Second}
 	
-	resp, err := client.Post(url, "application/json", bytes.NewBuffer(jsonValue))
-	if err != nil {
-		log.Printf("❌ Falha envio %s: %v", endpoint, err)
-		return
-	}
-	defer resp.Body.Close()
-	
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		log.Printf("⚠️ Erro API %s: %s", endpoint, resp.Status)
+	for i := 0; i < MAX_RETRIES; i++ {
+		log.Printf("Tentativa %d de %d para %s...", i+1, MAX_RETRIES, endpoint)
+
+		resp, err := client.Post(url, "application/json", bytes.NewBuffer(jsonValue))
+		
+		// 1. Erro de Rede ou Timeout
+		if err != nil {
+			log.Printf("❌ Erro de rede/conexão na Tentativa %d para %s: %v", i+1, endpoint, err)
+			
+			if i < MAX_RETRIES-1 {
+				time.Sleep(RETRY_DELAY) 
+				continue 
+			} else {
+				log.Printf("❌ FALHA CRÍTICA: Todas as %d tentativas falharam para %s.", MAX_RETRIES, endpoint)
+				return // Falha definitiva
+			}
+		}
+		
+		defer resp.Body.Close()
+
+		// 2. Resposta de Sucesso da API (Status 2xx)
+		if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+			log.Printf("✅ Dados enviados com sucesso para %s (Status: %s).", endpoint, resp.Status)
+			return // Sucesso, sai da função
+		}
+
+		// 3. Resposta de Erro da API (Status 5xx)
+		// Faz retry se for um erro de servidor (5xx)
+		if resp.StatusCode >= 500 {
+			log.Printf("⚠️ Erro de Servidor na Tentativa %d para %s. Status: %s", i+1, endpoint, resp.Status)
+			
+			if i < MAX_RETRIES-1 {
+				time.Sleep(RETRY_DELAY) 
+				continue
+			} else {
+				log.Printf("❌ FALHA FINAL: Erro de Servidor não recuperável após %d tentativas para %s.", MAX_RETRIES, endpoint)
+				return
+			}
+		}
+		
+		// 4. Erros 4xx (Como 400 Bad Request ou 404 Not Found)
+		// Erros do cliente (4xx) são fatais e não devem ser repetidos
+		log.Printf("⚠️ Erro da API não recuperável (Status %s) para %s.", resp.Status, endpoint)
+		return 
 	}
 }
+
+
+// --- FUNÇÃO DE REGISTRO COM RETRY E CAPTURA DE IP ---
+// Esta função é separada do postData apenas para tratar o corpo da resposta de registro.
+func registerMachine(info MachineInfo) {
+	url := fmt.Sprintf("%s/machines/register", API_BASE_URL)
+	client := http.Client{Timeout: 5 * time.Second}
+	
+	jsonValue, _ := json.Marshal(info)
+
+	for i := 0; i < MAX_RETRIES; i++ {
+		log.Printf("Tentativa %d de %d para Registro...", i+1, MAX_RETRIES)
+
+		resp, err := client.Post(url, "application/json", bytes.NewBuffer(jsonValue))
+		
+		if err != nil {
+			log.Printf("❌ Erro de rede/conexão: %v", err)
+			if i < MAX_RETRIES-1 {
+				time.Sleep(RETRY_DELAY)
+				continue
+			} else {
+				log.Printf("❌ FALHA CRÍTICA: Registro falhou após %d tentativas.", MAX_RETRIES)
+				return
+			}
+		}
+		
+		defer resp.Body.Close()
+		
+		if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+			body, _ := io.ReadAll(resp.Body)
+			var regResponse RegistrationResponse
+			json.Unmarshal(body, &regResponse)
+			
+			GlobalMachineIP = regResponse.MachineIP 
+			log.Printf("✅ Máquina registrada! IP: %s (Status: %s)", GlobalMachineIP, resp.Status)
+			return // Sucesso
+		}
+		
+		if resp.StatusCode >= 400 {
+			log.Printf("⚠️ Erro da API Registro (Não Recuperável): %s", resp.Status)
+			return // Erro 4xx/5xx é tratado como falha definitiva aqui.
+		}
+
+		// Se não for sucesso e não for 4xx/5xx direto, espera e tenta (caso de redirecionamentos ou 5xx temporários)
+		if i < MAX_RETRIES-1 {
+			time.Sleep(RETRY_DELAY)
+			continue
+		} else {
+			log.Printf("❌ FALHA CRÍTICA: Registro falhou após %d tentativas.", MAX_RETRIES)
+			return
+		}
+	}
+}
+
+
+// --- MAIN ---
 
 func main() {
 	log.Println("🔥 Agente Rede Fácil v2 - Iniciando...")
 
+	// 1. Registro Inicial (com retry)
 	info := collectStaticInfo()
 	registerMachine(info)
 
+	// 2. Loop de Telemetria Contínua
 	ticker := time.NewTicker(TELEMETRY_INTERVAL)
 	defer ticker.Stop()
 
 	for {
-		<-ticker.C
-		data := collectTelemetryData()
-		
-		log.Printf("📤 Stats -> HD Livre: %.1f%% | CPU: %.1f%% | RAM: %.1f%%", 
-			data.DiskFreePercent, data.CPUUsagePercent, data.RAMUsagePercent)
+		select {
+		case <-ticker.C:
+			data := collectTelemetryData()
 			
-		postData("/telemetry", data)
+			log.Printf("📤 Stats -> HD Livre: %.1f%% | CPU: %.1f%% | RAM: %.1f%%", 
+				data.DiskFreePercent, data.CPUUsagePercent, data.RAMUsagePercent)
+			// Envia dados para o endpoint /api/telemetry (com retry)
+			postData("/telemetry", data)
+		}
 	}
 }

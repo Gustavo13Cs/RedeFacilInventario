@@ -3,6 +3,8 @@ const cors = require('cors');
 const http = require('http');
 
 require('./config/db'); 
+// 🚨 NOVO: Importe as rotas de manutenção
+const maintenanceRoutes = require('./routes/maintenanceRoutes'); 
 const monitorRoutes = require('./routes/monitorRoutes');
 const telemetryRoutes = require('./routes/telemetryRoutes');
 const inventoryRoutes = require('./routes/inventoryRoutes');
@@ -31,7 +33,9 @@ app.get('/', (req, res) => {
     res.json({ message: 'API Rede Fácil Financeira - Online 🚀' });
 });
 
-
+// 🚨 NOVO: Adicione o middleware para as rotas de manutenção
+app.use('/api', maintenanceRoutes); 
+// Rotas existentes
 app.use('/api', monitorRoutes); 
 app.use('/api/telemetry', telemetryRoutes); 
 app.use('/api/alerts', alertRoutes);
