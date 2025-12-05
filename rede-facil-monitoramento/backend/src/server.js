@@ -8,6 +8,7 @@ const telemetryRoutes = require('./routes/telemetryRoutes');
 const inventoryRoutes = require('./routes/inventoryRoutes');
 const alertRoutes = require('./routes/alertRoutes');
 const authRoutes = require('./routes/authRoutes');
+const simCardRoutes = require('./routes/simCardRoutes');
 
 
 const socketHandler = require('./socket/socketHandler'); 
@@ -35,6 +36,7 @@ app.use('/api', monitorRoutes);
 app.use('/api/telemetry', telemetryRoutes); 
 app.use('/api/alerts', alertRoutes);
 app.use('/api/inventory', inventoryRoutes);
+app.use('/api/chips', simCardRoutes);
 app.use('/auth', authRoutes);
 
 const PORT = process.env.PORT || 3001;

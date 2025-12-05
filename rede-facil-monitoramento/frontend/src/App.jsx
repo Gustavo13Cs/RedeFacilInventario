@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { LayoutDashboard, Server, AlertCircle, Activity, HardDrive, AlertTriangle, Package ,LogOut, Users,Loader2} from 'lucide-react';
+import { LayoutDashboard, Server, AlertCircle, Activity, HardDrive, AlertTriangle, Package ,LogOut, Users,Loader2,Smartphone} from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -10,6 +10,7 @@ import Login from './components/Login';
 import MachineDetails from './components/MachineDetails';
 import Inventory from './components/Inventory'; 
 import UserManagement from './components/UserManagement';
+import SimCardManagement from './components/SimCardManagement';
 
 const API_URL = "http://localhost:3001";
 const socket = io('http://localhost:3001', {
@@ -59,9 +60,6 @@ function App() {
       fetchMachines(); 
     }
     
-
-
-
     socket.on("connect", () => console.log("🟢 Conectado ao WebSocket"));
     
     socket.on("new_telemetry", (data) => {
@@ -144,6 +142,14 @@ function App() {
             Inventário
           </button>
 
+          <button 
+            onClick={() => { setActiveTab('chips'); setSelectedMachine(null); }}
+            className={`w-full flex items-center px-3 py-2.5 text-sm font-medium rounded-md transition-colors ${activeTab === 'chips' ? 'bg-slate-800 text-white' : 'hover:bg-slate-800/50 hover:text-white'}`}
+          >
+            <Smartphone className="mr-3 h-5 w-5 text-orange-500" />
+            Gestão de Chips
+          </button>
+
           {userRole === 'admin' && (
             <button 
               onClick={() => { setActiveTab('users'); setSelectedMachine(null); }}
@@ -213,7 +219,9 @@ function App() {
         <div className="flex-1 overflow-auto p-8 space-y-6">
           
           {activeTab === 'inventory' ? (
-              <Inventory userRole={userRole} />
+                <Inventory userRole={userRole} /> 
+              ): activeTab === 'chips' ? ( 
+                  <SimCardManagement userRole={userRole} />
             ) : activeTab === 'users' ? ( 
               <UserManagement />
             ) : selectedMachine ? (
