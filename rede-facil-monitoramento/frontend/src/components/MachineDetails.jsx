@@ -137,22 +137,33 @@ export default function MachineDetails({ machine, onBack, socket }) {
           </CardContent>
         </Card>
 
-        <Card className={`border-l-4 shadow-sm ${currentSmartStatus !== 'OK' ? 'border-l-red-600 bg-red-50' : 'border-l-emerald-500'}`}>
+        <Card className={`border-l-4 shadow-sm ${currentSmartStatus !== 'OK' || currentDiskFree < 10 ? 'border-l-red-600 bg-red-50' : 'border-l-emerald-500'}`}>
           <CardHeader className="p-4 pb-2">
             <CardTitle className="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-2">
-                <Database className="h-3 w-3" /> Saúde HD
+                <Database className="h-3 w-3" /> Status do Disco
             </CardTitle>
           </CardHeader>
           <CardContent className="p-4 pt-0 flex items-center gap-2">
-            {currentSmartStatus === 'OK' ? (
+            {currentSmartStatus !== 'OK' ? (
                 <>
-                    <CheckCircle className="h-6 w-6 text-emerald-500" />
-                    <div className="text-lg font-bold text-emerald-700">Saudável</div>
+                    <AlertTriangle className="h-6 w-6 text-red-600 animate-pulse" />
+                    <div>
+                        <div className="text-lg font-bold text-red-600">Falha Hardware</div>
+                        <p className="text-xs text-red-500">Erro S.M.A.R.T</p>
+                    </div>
+                </>
+            ) : currentDiskFree < 10 ? (
+                <>
+                    <AlertTriangle className="h-6 w-6 text-orange-600 animate-pulse" />
+                    <div>
+                        <div className="text-lg font-bold text-orange-700">Espaço Crítico</div>
+                        <p className="text-xs text-orange-600">HD quase cheio</p>
+                    </div>
                 </>
             ) : (
                 <>
-                    <AlertTriangle className="h-6 w-6 text-red-600 animate-pulse" />
-                    <div className="text-lg font-bold text-red-600">Alerta</div>
+                    <CheckCircle className="h-6 w-6 text-emerald-500" />
+                    <div className="text-lg font-bold text-emerald-700">Saudável</div>
                 </>
             )}
           </CardContent>
