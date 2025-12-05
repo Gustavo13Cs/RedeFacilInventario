@@ -20,10 +20,15 @@ exports.createLog = async (req, res) => {
         const { machineId } = req.params;
         const { description, log_date } = req.body;
         
-        const technicianId = req.user.id; 
+        const technicianId = (req.user && (req.user.id || req.user.userId || req.user.sub)) || null;
+        console.log("📝 Tentando criar log:", { machineId, description, technicianId }); 
         
         if (!description) {
             return res.status(400).json({ message: "A descrição do serviço é obrigatória." });
+        }
+
+        if (!technicianId) {
+             console.warn("⚠️ Aviso: ID do técnico não identificado no token.");
         }
 
         await maintenanceLogService.createLog(machineId, description, technicianId, log_date);
@@ -35,7 +40,8 @@ exports.createLog = async (req, res) => {
     } catch (error) {
         console.error("❌ Erro ao criar log de manutenção:", error);
         res.status(500).json({ 
-            message: "Erro interno ao registrar a manutenção." 
+            message: "Erro interno ao registrar a manutenção.",
+            error: error.message 
         });
     }
 };

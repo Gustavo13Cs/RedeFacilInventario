@@ -1,69 +1,68 @@
 import React, { useEffect, useState } from 'react';
-import { createPortal } from 'react-dom'; // <--- IMPORTANTE: Para o Modal
+import { createPortal } from 'react-dom'; 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button"; // <--- IMPORTANTE: Botões
+import { Button } from "@/components/ui/button"; 
 import { ArrowLeft, Cpu, HardDrive, Activity, Thermometer, Database, AlertTriangle, CheckCircle, Wrench, Calendar, Plus, Save, X, User } from 'lucide-react'; // <--- NOVOS ÍCONES
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend} from 'recharts';
-import axios from 'axios'; // <--- IMPORTANTE: Para conectar no Back-end
+import axios from 'axios'; 
+import { API_URL } from '../config';
+
 
 export default function MachineDetails({ machine, onBack, socket }) {
 
-  // --- ESTADOS DE TELEMETRIA (JÁ EXISTENTES) ---
+    console.log("🔍 DADOS DA MÁQUINA:", machine);
+
   const [telemetryData, setTelemetryData] = useState([]);
   const [currentTemp, setCurrentTemp] = useState(0);
   const [currentDiskFree, setCurrentDiskFree] = useState(0);
   const [currentSmartStatus, setCurrentSmartStatus] = useState('N/A');
 
-  // --- NOVOS ESTADOS PARA MANUTENÇÃO (ADICIONADO) ---
   const [logs, setLogs] = useState([]);
   const [isLogModalOpen, setIsLogModalOpen] = useState(false);
   const [newLog, setNewLog] = useState({ description: '', log_date: '' });
 
   const PIE_COLORS = ['#10b981', '#1e293b'];
 
-  // --- 1. BUSCAR LOGS AO CARREGAR A MÁQUINA ---
   useEffect(() => {
-    // Só busca se tiver o machine_id
-    if (machine?.machine_id) {
+    if (machine?.id) {
         fetchMaintenanceLogs();
     }
   }, [machine]);
 
   const fetchMaintenanceLogs = async () => {
     try {
-        const token = localStorage.getItem('token');
-        // Adicionei o header de autorização para o backend saber quem está buscando
-        const res = await axios.get(`${API_URL}/api/machines/${machine.machine_id}/logs`, {
+        const token = localStorage.getItem('token'); 
+        const res = await axios.get(`${API_URL}/api/machines/${machine.id}/logs`, {
             headers: { Authorization: `Bearer ${token}` }
         });
+        
         setLogs(res.data);
     } catch (error) {
         console.error("Erro ao buscar logs:", error);
     }
   };
 
-  // --- 2. FUNÇÃO PARA SALVAR NOVO LOG ---
   const handleSaveLog = async (e) => {
     e.preventDefault();
     try {
         const token = localStorage.getItem('token'); 
-        await axios.post(`${API_URL}/api/machines/${machine.machine_id}/logs`, {
+        await axios.post(`${API_URL}/api/machines/${machine.id}/logs`, {
             description: newLog.description,
             log_date: newLog.log_date || new Date()
         }, {
             headers: { Authorization: `Bearer ${token}` } 
         });
         
-        fetchMaintenanceLogs(); // Recarrega a lista
-        setIsLogModalOpen(false); // Fecha modal
-        setNewLog({ description: '', log_date: '' }); // Limpa form
+        fetchMaintenanceLogs(); 
+        setIsLogModalOpen(false); 
+        setNewLog({ description: '', log_date: '' }); 
     } catch (error) {
+        console.error(error); 
         alert("Erro ao registrar manutenção. Verifique se está logado.");
     }
   };
 
-  // --- LÓGICA DE TELEMETRIA (MANTIDA IGUAL AO SEU ARQUIVO) ---
   useEffect(() => {
     if (!socket) {
         console.error("⚠️ Socket não recebido em MachineDetails");

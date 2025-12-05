@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Lock, Mail, Loader2 } from 'lucide-react';
 import axios from 'axios';
+import { API_URL } from '../config';
 
 export default function Login({ onLoginSuccess }) {
   const [email, setEmail] = useState('');
@@ -16,7 +17,7 @@ export default function Login({ onLoginSuccess }) {
     setLoading(true);
 
     try {
-      const res = await axios.post('http://localhost:3001/auth/login', { 
+      const res = await axios.post(`${API_URL}/auth/login`, { 
         email, 
         password 
       });

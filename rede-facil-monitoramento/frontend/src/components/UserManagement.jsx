@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import axios from 'axios';
+import { API_URL as BASE_URL } from '../config';
 
 export default function UserManagement() {
   const [users, setUsers] = useState([]);
@@ -21,7 +22,7 @@ export default function UserManagement() {
     role: 'admin'
   });
 
-  const API_URL = "http://localhost:3001/auth";
+  const API_URL = `${BASE_URL}/auth`;
 
   useEffect(() => {
     fetchUsers();

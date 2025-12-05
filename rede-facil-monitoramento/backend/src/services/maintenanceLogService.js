@@ -1,4 +1,4 @@
-const db = require('../config/db'); 
+const { db } = require('../config/db');
 
 exports.getLogsByMachineId = async (machineId) => {
     const query = `

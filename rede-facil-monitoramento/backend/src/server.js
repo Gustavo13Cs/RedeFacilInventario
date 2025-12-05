@@ -3,7 +3,7 @@ const cors = require('cors');
 const http = require('http');
 
 require('./config/db'); 
-// 🚨 NOVO: Importe as rotas de manutenção
+
 const maintenanceRoutes = require('./routes/maintenanceRoutes'); 
 const monitorRoutes = require('./routes/monitorRoutes');
 const telemetryRoutes = require('./routes/telemetryRoutes');
@@ -34,12 +34,12 @@ app.get('/', (req, res) => {
 });
 
 
-app.use('/api', maintenanceRoutes); 
 app.use('/api', monitorRoutes); 
 app.use('/api/telemetry', telemetryRoutes); 
 app.use('/api/alerts', alertRoutes);
 app.use('/api/inventory', inventoryRoutes);
 app.use('/api/chips', simCardRoutes);
+app.use('/api', maintenanceRoutes);
 app.use('/auth', authRoutes);
 
 const PORT = process.env.PORT || 3001;

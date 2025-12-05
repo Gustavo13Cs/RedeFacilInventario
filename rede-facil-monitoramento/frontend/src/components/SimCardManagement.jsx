@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import axios from 'axios';
+import { API_URL as BASE_URL } from '../config';
 
 export default function SimCardManagement({ userRole }) {
   const [chips, setChips] = useState([]);
@@ -26,7 +27,7 @@ export default function SimCardManagement({ userRole }) {
     notes: ''
   });
 
-  const API_URL = "http://localhost:3001/api/chips";
+  const API_URL = `${BASE_URL}/api/chips`;
 
   useEffect(() => { fetchChips(); }, []);
 

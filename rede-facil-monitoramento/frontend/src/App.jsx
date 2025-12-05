@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import io from 'socket.io-client';
 import axios from 'axios';
+import { API_URL } from "./config"; 
 
 import Login from './components/Login';
 import MachineDetails from './components/MachineDetails';
@@ -12,11 +13,9 @@ import Inventory from './components/Inventory';
 import UserManagement from './components/UserManagement';
 import SimCardManagement from './components/SimCardManagement';
 
-const API_URL = "http://localhost:3001";
-const socket = io('http://localhost:3001', {
+const socket = io(API_URL, {
   transports: ['websocket', 'polling'] 
 });
-
 function App() {
 
   const [machines, setMachines] = useState([]);

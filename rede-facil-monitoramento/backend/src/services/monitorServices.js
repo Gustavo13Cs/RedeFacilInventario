@@ -177,7 +177,7 @@ exports.processTelemetry = async (data) => {
                 cpu_usage_percent: cpu_usage ? cpu_usage.toFixed(2) : 'N/A', 
                 ram_usage_percent: ram_usage ? ram_usage.toFixed(2) : 'N/A', 
                 disk_free_percent: disk_free ? disk_free.toFixed(2) : 'N/A',
-                disk_smart_status: disk_status, // Enviando status novo para o front
+                disk_smart_status: disk_status,
                 temperature_celsius: temperature ? temperature.toFixed(2) : 'N/A'
             });
         }
@@ -192,7 +192,10 @@ exports.processTelemetry = async (data) => {
 exports.listMachines = async () => {
     try { 
         const [machines] = await db.execute(
-            `SELECT m.uuid, m.hostname, m.ip_address, m.os_name, m.status, m.last_seen, h.cpu_model, h.ram_total_gb, h.disk_total_gb FROM machines m LEFT JOIN hardware_specs h ON m.id = h.machine_id ORDER BY m.status DESC, m.hostname`
+            `SELECT m.id, m.uuid, m.hostname, m.ip_address, m.os_name, m.status, m.last_seen, h.cpu_model, h.ram_total_gb, h.disk_total_gb 
+             FROM machines m 
+             LEFT JOIN hardware_specs h ON m.id = h.machine_id 
+             ORDER BY m.status DESC, m.hostname`
         );
         return machines;
     } catch (error) {
@@ -245,8 +248,6 @@ exports.getMachineDetails = async (uuid) => {
             last_telemetry: lastTelemetry[0] || null,
             open_alerts: openAlerts
         };
-
-        //delete response.machine_id; 
         return response;
 
     } catch (error) {

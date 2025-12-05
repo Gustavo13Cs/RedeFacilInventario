@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import axios from 'axios';
 import { createPortal } from 'react-dom';
+import { API_URL as BASE_URL } from '../config';
 
 import { generateExcel, generatePDF } from '@/utils/exportUtils';
 
@@ -24,7 +25,7 @@ export default function Inventory({ userRole }) {
     type: 'Monitor', model: '', serial: '', status: 'disponivel', assigned_to: ''
   });
 
-  const API_URL = "http://localhost:3001/api/inventory";
+  const API_URL = `${BASE_URL}/api/inventory`;
 
   useEffect(() => { fetchInventory(); }, []);
   
