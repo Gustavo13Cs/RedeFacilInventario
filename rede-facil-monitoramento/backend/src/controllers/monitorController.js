@@ -21,7 +21,6 @@ exports.registerMachine = async (req, res) => {
     }
 };
 
-
 exports.processTelemetry = async (req, res) => { 
     try {
         const data = req.body;
