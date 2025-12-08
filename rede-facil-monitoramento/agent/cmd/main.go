@@ -11,8 +11,9 @@ import (
 	"os"
 	"os/user"
 	"runtime"
-	"strings" 
+	"strings"
 	"time"
+	"path/filepath"
 
 	"github.com/shirou/gopsutil/v3/cpu"
 	"github.com/shirou/gopsutil/v3/disk"
@@ -20,12 +21,12 @@ import (
 	"github.com/shirou/gopsutil/v3/mem"
 )
 
-const API_BASE_URL = "http://localhost:3001/api" 
+const BACKUP_FOLDER_PATH = "C:\\Users\\Windows 10\\Documents\\backup_agente"
+const API_BASE_URL = "http://localhost:3001/api"
 const TELEMETRY_INTERVAL = 5 * time.Second
 
-
-const MAX_RETRIES = 3                
-const RETRY_DELAY = 10 * time.Second 
+const MAX_RETRIES = 3
+const RETRY_DELAY = 10 * time.Second
 
 var GlobalMachineIP string
 
@@ -53,14 +54,13 @@ type TelemetryData struct {
 	DiskFreePercent    float64 `json:"disk_free_percent"`
 	DiskSmartStatus    string  `json:"disk_smart_status"`
 	TemperatureCelsius float64 `json:"temperature_celsius"`
+	LastBackupTimestamp string  `json:"last_backup_timestamp"`
 }
 
 type RegistrationResponse struct {
 	Message   string `json:"message"`
 	MachineIP string `json:"ip_address"`
 }
-
-
 
 func getLocalIP() string {
 	ifaces, err := net.Interfaces()
@@ -139,13 +139,56 @@ func collectStaticInfo() MachineInfo {
 	}
 }
 
+func ensureBackupFolderExists(folderPath string) {
+	err := os.MkdirAll(folderPath, 0755)
+	if err != nil {
+		if os.IsExist(err) {
+			return
+		}
+		log.Printf("Erro ao criar pasta de backup '%s': %v", folderPath, err)
+	} else {
+		log.Printf("Pasta de backup '%s' verificada/criada.", folderPath)
+	}
+}
+
+func getLastBackupTimestamp(dir string) string {
+	var latestTime time.Time
+
+	err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			if os.IsNotExist(err) || os.IsPermission(err) {
+				return err
+			}
+			return nil
+		}
+
+		if !info.IsDir() {
+			modTime := info.ModTime()
+			if modTime.After(latestTime) {
+				latestTime = modTime
+			}
+		}
+		return nil
+	})
+
+	if err != nil {
+		log.Printf("Erro ao verificar pasta de backup '%s': %v.", dir, err)
+		return ""
+	}
+
+	if !latestTime.IsZero() {
+		return latestTime.Format("2006-01-02 15:04:05")
+	}
+
+	return ""
+}
+
 func collectTelemetryData() TelemetryData {
 	cpuPercents, _ := cpu.Percent(0, false)
 	cpuUsage := 0.0
 	if len(cpuPercents) > 0 {
 		cpuUsage = cpuPercents[0]
 	}
-
 
 	mInfo, _ := mem.VirtualMemory()
 	ramUsage := mInfo.UsedPercent
@@ -159,11 +202,10 @@ func collectTelemetryData() TelemetryData {
 	dUsage, err := disk.Usage(rootPath)
 	if err == nil {
 		diskUsageFree = 100.0 - dUsage.UsedPercent
-	} else {
-		log.Printf("⚠️ Erro disco: %v", err)
 	}
 
 	temperature := getCPUTemperature()
+	lastBackup := getLastBackupTimestamp(BACKUP_FOLDER_PATH)
 
 	return TelemetryData{
 		UUID:               getMachineUUID(),
@@ -172,6 +214,7 @@ func collectTelemetryData() TelemetryData {
 		DiskFreePercent:    diskUsageFree,
 		DiskSmartStatus:    "OK",
 		TemperatureCelsius: temperature,
+		LastBackupTimestamp: lastBackup,
 	}
 }
 
@@ -182,11 +225,8 @@ func getCPUTemperature() float64 {
 	}
 
 	var cpuTemps []float64
-
 	cpuKeywords := []string{"core", "package", "die", "cpu"}
-
 	genericKeywords := []string{"thermal zone", "acpitz"}
-
 
 	for _, sensor := range sensors {
 		key := strings.ToLower(sensor.SensorKey)
@@ -206,7 +246,6 @@ func getCPUTemperature() float64 {
 		return total / float64(len(cpuTemps))
 	}
 
-	
 	for _, sensor := range sensors {
 		key := strings.ToLower(sensor.SensorKey)
 		for _, keyword := range genericKeywords {
@@ -225,7 +264,6 @@ func getCPUTemperature() float64 {
 	return 0.0
 }
 
-
 func postData(endpoint string, data interface{}) {
 	jsonValue, err := json.Marshal(data)
 	if err != nil {
@@ -237,19 +275,13 @@ func postData(endpoint string, data interface{}) {
 	client := http.Client{Timeout: 5 * time.Second}
 
 	for i := 0; i < MAX_RETRIES; i++ {
-
 		resp, err := client.Post(url, "application/json", bytes.NewBuffer(jsonValue))
-
 		if err != nil {
-			log.Printf("❌ Erro de rede/conexão na Tentativa %d para %s: %v", i+1, endpoint, err)
-
+			log.Printf("Erro de rede na tentativa %d para %s: %v", i+1, endpoint, err)
 			if i < MAX_RETRIES-1 {
 				time.Sleep(RETRY_DELAY)
-				continue
-			} else {
-				log.Printf("❌ FALHA CRÍTICA: Todas as %d tentativas falharam para %s.", MAX_RETRIES, endpoint)
-				return
 			}
+			continue
 		}
 
 		defer resp.Body.Close()
@@ -259,74 +291,57 @@ func postData(endpoint string, data interface{}) {
 		}
 
 		if resp.StatusCode >= 500 {
-			log.Printf("⚠️ Erro de Servidor na Tentativa %d para %s. Status: %s", i+1, endpoint, resp.Status)
-
+			log.Printf("Erro do servidor (tentativa %d): %s", i+1, resp.Status)
 			if i < MAX_RETRIES-1 {
 				time.Sleep(RETRY_DELAY)
 				continue
-			} else {
-				log.Printf("❌ FALHA FINAL: Erro de Servidor não recuperável após %d tentativas para %s.", MAX_RETRIES, endpoint)
-				return
 			}
+			return
 		}
 
-		log.Printf("⚠️ Erro da API não recuperável (Status %s) para %s.", resp.Status, endpoint)
+		log.Printf("Erro da API (não recuperável): %s", resp.Status)
 		return
 	}
 }
 
 func registerMachine(info MachineInfo) {
-	url := fmt.Sprintf("%s/machines/register", API_BASE_URL)
-	client := http.Client{Timeout: 5 * time.Second}
+    // 🚨 Certifique-se de que não haja /machines aqui!
+    url := fmt.Sprintf("%s/register", API_BASE_URL) 
+    client := http.Client{Timeout: 5 * time.Second}
 
-	jsonValue, _ := json.Marshal(info)
-
+    jsonValue, _ := json.Marshal(info)
+	
 	for i := 0; i < MAX_RETRIES; i++ {
-		log.Printf("Tentativa %d de %d para Registro...", i+1, MAX_RETRIES)
-
 		resp, err := client.Post(url, "application/json", bytes.NewBuffer(jsonValue))
 
 		if err != nil {
-			log.Printf("❌ Erro de rede/conexão: %v", err)
+			log.Printf("Erro ao registrar máquina: %v", err)
 			if i < MAX_RETRIES-1 {
 				time.Sleep(RETRY_DELAY)
-				continue
-			} else {
-				log.Printf("❌ FALHA CRÍTICA: Registro falhou após %d tentativas.", MAX_RETRIES)
-				return
 			}
+			continue
 		}
 
 		defer resp.Body.Close()
 
 		if resp.StatusCode >= 200 && resp.StatusCode < 300 {
 			body, _ := io.ReadAll(resp.Body)
-			var regResponse RegistrationResponse
-			json.Unmarshal(body, &regResponse)
-
-			GlobalMachineIP = regResponse.MachineIP
-			log.Printf("✅ Máquina registrada! IP: %s (Status: %s)", GlobalMachineIP, resp.Status)
+			var regResp RegistrationResponse
+			json.Unmarshal(body, &regResp)
+			GlobalMachineIP = regResp.MachineIP
+			log.Printf("Máquina registrada! IP: %s", GlobalMachineIP)
 			return
 		}
 
-		if resp.StatusCode >= 400 {
-			log.Printf("⚠️ Erro da API Registro (Não Recuperável): %s", resp.Status)
-			return
-		}
-
-		if i < MAX_RETRIES-1 {
-			time.Sleep(RETRY_DELAY)
-			continue
-		} else {
-			log.Printf("❌ FALHA CRÍTICA: Registro falhou após %d tentativas.", MAX_RETRIES)
-			return
-		}
+		log.Printf("Erro no registro (Status %s)", resp.Status)
+		return
 	}
 }
 
-
 func main() {
-	log.Println("🔥 Agente Rede Fácil v2 - Iniciando...")
+	log.Println("Agente Rede Fácil v2 iniciando...")
+
+	ensureBackupFolderExists(BACKUP_FOLDER_PATH)
 
 	info := collectStaticInfo()
 	registerMachine(info)
@@ -338,10 +353,11 @@ func main() {
 		select {
 		case <-ticker.C:
 			data := collectTelemetryData()
-
-			log.Printf("📤 Stats -> Temp CPU: %.1f°C | CPU: %.1f%% | RAM: %.1f%%",
-				data.TemperatureCelsius, data.CPUUsagePercent, data.RAMUsagePercent)
-			
+			log.Printf("Stats -> Temp: %.1f°C | CPU: %.1f%% | RAM: %.1f%% | Backup: %s",
+				data.TemperatureCelsius,
+				data.CPUUsagePercent,
+				data.RAMUsagePercent,
+				data.LastBackupTimestamp)
 			postData("/telemetry", data)
 		}
 	}

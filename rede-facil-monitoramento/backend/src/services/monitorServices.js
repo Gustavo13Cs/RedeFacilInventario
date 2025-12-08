@@ -1,21 +1,101 @@
 const { db, getMachineId } = require('../config/db');
+const moment = require('moment'); // 🚨 Adicionado para manipulação de datas
+
+// ✅ CORRIGIDO: Importa o módulo inteiro. 
+// Isso garante que 'socketHandler' seja um objeto válido contendo 'getIo'.
+const socketHandler = require('../socket/socketHandler'); 
 
 let globalIo; 
 
 exports.setSocketIo = (ioInstance) => {
-    globalIo = ioInstance;
+    // Mantido para compatibilidade. A lógica de alerta agora usa socketHandler.getIo()
+    globalIo = ioInstance; 
 };
 
 const isValidSoftware = (s) => {
     return s && typeof s.name === 'string' && s.name.trim().length > 0;
 };
 
+// ==========================================================
+// CONSTANTES E FUNÇÕES AUXILIARES DE ALERTA (NOVAS)
+// ==========================================================
+const MAX_TELEMETRY_RECORDS = 5;
+const MAX_BACKUP_LAG_HOURS = 48;
+const BACKUP_ALERT_TYPE = 'backup_failure'; // Tipo de alerta para falha de backup
+
+const createAlert = async (machine_id, type, message) => {
+    const io = socketHandler.getIo() || globalIo;
+    
+    // Busca alertas ativos do mesmo tipo, criados na última hora, para evitar spam
+    const [existingAlerts] = await db.execute(
+        `SELECT id FROM alerts WHERE machine_id = ? AND alert_type = ? AND is_resolved = FALSE AND created_at > DATE_SUB(NOW(), INTERVAL 1 HOUR)`,
+        [machine_id, type]
+    );
+
+    if (existingAlerts.length === 0) { 
+        const [result] = await db.execute(
+            `INSERT INTO alerts (machine_id, alert_type, message, is_resolved) VALUES (?, ?, ?, FALSE)`,
+            [machine_id, type, message]
+        );
+
+        if (io) {
+            io.emit('new_alert', { 
+                id: result.insertId,
+                machine_id, 
+                alert_type: type, 
+                message: message, 
+                created_at: new Date() 
+            });
+        }
+    }
+};
+
+const resolveAlert = async (machine_id, type) => {
+    await db.execute(
+        `UPDATE alerts SET is_resolved = TRUE, resolved_at = CURRENT_TIMESTAMP 
+         WHERE machine_id = ? AND alert_type = ? AND is_resolved = FALSE`,
+        [machine_id, type]
+    );
+};
+
+async function checkBackupHealth(machineId, lastBackupTimestamp) {
+    if (!lastBackupTimestamp) return; 
+
+    try {
+        const now = moment();
+        const lastBackup = moment(lastBackupTimestamp);
+        
+        if (!lastBackup.isValid()) return;
+
+        const lagHours = now.diff(lastBackup, 'hours'); 
+
+        // Condição: Atraso maior que 48 horas (2 dias)
+        if (lagHours > MAX_BACKUP_LAG_HOURS) {
+            
+            const message = `Falha Crítica de Backup: Nenhum arquivo novo encontrado na pasta de backup há ${lagHours} horas. Limite: ${MAX_BACKUP_LAG_HOURS}h.`;
+            
+            await createAlert(machineId, BACKUP_ALERT_TYPE, message);
+        
+        } else {
+            // Backup OK: Resolve o alerta se ele estiver ativo
+            await resolveAlert(machineId, BACKUP_ALERT_TYPE);
+        }
+
+    } catch (error) {
+        console.error(`Erro ao processar o status do backup para máquina ${machineId}:`, error);
+    }
+}
+
+
+// ==========================================================
+// FUNÇÃO registerMachine
+// ==========================================================
+
 exports.registerMachine = async ({
     uuid, hostname, ip_address, os_name, 
     cpu_model, ram_total_gb, disk_total_gb, mac_address,
     installed_software 
 }) => {
-
     if (!uuid || !hostname || !ip_address || !os_name) {
         throw new Error('Dados essenciais de registro (uuid, hostname, ip_address, os_name) estão faltando.');
     }
@@ -84,14 +164,17 @@ exports.registerMachine = async ({
     }
 };
 
-const MAX_TELEMETRY_RECORDS = 5;
-
+// ==========================================================
+// FUNÇÃO processTelemetry (Integrada com Lógica de Backup)
+// ==========================================================
 
 exports.processTelemetry = async (data) => {
     if (!data) return;
     
     const {
-        uuid, cpu_usage_percent, ram_usage_percent, disk_free_percent, temperature_celsius, disk_smart_status
+        uuid, cpu_usage_percent, ram_usage_percent, disk_free_percent, temperature_celsius, disk_smart_status,
+        // 🚨 CAMPO NOVO
+        last_backup_timestamp 
     } = data;
     
     if (!uuid) throw new Error('UUID da máquina é obrigatório para telemetria.');
@@ -100,6 +183,7 @@ exports.processTelemetry = async (data) => {
         const machine_id = await getMachineId(uuid);
         if (!machine_id) throw new Error('Máquina não encontrada. Registre-a primeiro.');
         
+        // ... (Seu código de sanitização de dados)
         const cpu_raw = parseFloat(cpu_usage_percent);
         const ram_raw = parseFloat(ram_usage_percent);
         const disk_raw = parseFloat(disk_free_percent);
@@ -112,12 +196,19 @@ exports.processTelemetry = async (data) => {
         
         const disk_status = disk_smart_status || 'OK';
         
+        // 1. INSERÇÃO NA TABELA DE TELEMETRIA (Incluindo o novo campo)
         await db.execute(
-            `INSERT INTO telemetry_logs (machine_id, cpu_usage_percent, ram_usage_percent, disk_free_percent, disk_smart_status, temperature_celsius)
-             VALUES (?, ?, ?, ?, ?, ?)`,
-            [machine_id, cpu_usage, ram_usage, disk_free, disk_status, temperature]
+            `INSERT INTO telemetry_logs (machine_id, cpu_usage_percent, ram_usage_percent, disk_free_percent, disk_smart_status, temperature_celsius, last_backup_timestamp)
+             VALUES (?, ?, ?, ?, ?, ?, ?)`,
+            [machine_id, cpu_usage, ram_usage, disk_free, disk_status, temperature, last_backup_timestamp]
         );
 
+        // 2. CHAMA A LÓGICA DE ALERTA DE BACKUP
+        if (last_backup_timestamp) {
+            await checkBackupHealth(machine_id, last_backup_timestamp);
+        }
+        
+        // 3. SEU CÓDIGO DE LIMPEZA DE REGISTROS ANTIGOS
         const offset = MAX_TELEMETRY_RECORDS - 1; 
         const [lastKeepRows] = await db.execute(
             `SELECT id FROM telemetry_logs WHERE machine_id = ? ORDER BY created_at DESC LIMIT 1 OFFSET ${offset}`,
@@ -126,46 +217,39 @@ exports.processTelemetry = async (data) => {
         
         if (lastKeepRows.length > 0) {
             const keep_id = lastKeepRows[0].id;
-            const [result] = await db.execute(
+            await db.execute(
                 `DELETE FROM telemetry_logs WHERE machine_id = ? AND id < ?`,
                 [machine_id, keep_id]
             );
-            if (result && result.affectedRows > 0) {
-            }
         }
         
         const [machineRow] = await db.execute('SELECT hostname FROM machines WHERE id = ?', [machine_id]);
         const hostname = machineRow[0].hostname;
 
-        const createAlert = async (type, message) => {
-            const [existingAlerts] = await db.execute(
-                `SELECT id FROM alerts WHERE machine_id = ? AND alert_type = ? AND is_resolved = FALSE AND created_at > DATE_SUB(NOW(), INTERVAL 1 HOUR)`,
-                [machine_id, type]
-            );
+        // 4. CRIAÇÃO E RESOLUÇÃO DE ALERTAS
 
-            if (existingAlerts.length === 0) { 
-                await db.execute(
-                    `INSERT INTO alerts (machine_id, alert_type, message) VALUES (?, ?, ?)`,
-                    [machine_id, type, message]
-                );
-    
-                if (globalIo) {
-                    globalIo.emit('new_alert', { machine_id, uuid, alert_type: type, message: message, created_at: new Date() });
-                }
-            }
-        };
-
+        // Resolução de Alertas existentes (Se o problema melhorou)
+        if (cpu_usage !== null && cpu_usage <= 85) {
+            await resolveAlert(machine_id, 'critical'); 
+        }
+        if (disk_free !== null && disk_free >= 15) { 
+            await resolveAlert(machine_id, 'warning'); 
+        }
+        
+        // Criação de Alertas
         if (cpu_usage && cpu_usage > 90) { 
-            await createAlert('critical', `Uso de CPU crítico (${cpu_usage.toFixed(2)}%) na máquina ${hostname} (${uuid}).`);
+            await createAlert(machine_id, 'critical', `Uso de CPU crítico (${cpu_usage.toFixed(2)}%) na máquina ${hostname} (${uuid}).`);
         }
 
         if (disk_free !== null && disk_free < 10) {
-            await createAlert('warning', `Espaço em disco baixo (${disk_free.toFixed(2)}% livre) na máquina ${hostname}.`);
+            await createAlert(machine_id, 'warning', `Espaço em disco baixo (${disk_free.toFixed(2)}% livre) na máquina ${hostname}.`);
         }
 
         if (disk_status && disk_status.toUpperCase() !== 'OK') {
-            await createAlert('hardware', `FALHA S.M.A.R.T DETECTADA no disco da máquina ${hostname}. Backup urgente!`);
+            await createAlert(machine_id, 'hardware', `FALHA S.M.A.R.T DETECTADA no disco da máquina ${hostname}. Backup urgente!`);
         }
+        
+        // 5. ATUALIZAÇÃO DE STATUS E EMISSÃO DE TELEMETRIA
         await db.execute(
             `UPDATE machines SET status = 'online', last_seen = CURRENT_TIMESTAMP WHERE id = ?`,
             [machine_id]
@@ -188,6 +272,10 @@ exports.processTelemetry = async (data) => {
         throw error;
     }
 };
+
+// ==========================================================
+// OUTRAS FUNÇÕES (Inalteradas)
+// ==========================================================
 
 exports.listMachines = async () => {
     try { 
@@ -213,8 +301,8 @@ exports.getMachineDetails = async (uuid) => {
 
         const [details] = await db.execute(
             `SELECT 
-                m.uuid, m.hostname, m.ip_address, m.os_name, m.status, m.last_seen, m.created_at, m.id as machine_id,
-                h.cpu_model, h.ram_total_gb, h.disk_total_gb, h.mac_address
+                 m.uuid, m.hostname, m.ip_address, m.os_name, m.status, m.last_seen, m.created_at, m.id as machine_id,
+                 h.cpu_model, h.ram_total_gb, h.disk_total_gb, h.mac_address
              FROM machines m
              LEFT JOIN hardware_specs h ON m.id = h.machine_id
              WHERE m.uuid = ?`,
@@ -229,7 +317,7 @@ exports.getMachineDetails = async (uuid) => {
         );
 
         const [lastTelemetry] = await db.execute(
-            `SELECT cpu_usage_percent, ram_usage_percent, disk_free_percent, disk_smart_status, temperature_celsius, created_at 
+            `SELECT cpu_usage_percent, ram_usage_percent, disk_free_percent, disk_smart_status, temperature_celsius, created_at, last_backup_timestamp
              FROM telemetry_logs 
              WHERE machine_id = ? 
              ORDER BY created_at DESC 
@@ -267,7 +355,7 @@ exports.getTelemetryHistory = async (uuid, limit = 100) => {
 
         const [history] = await db.execute(
             `SELECT 
-                cpu_usage_percent, ram_usage_percent, disk_free_percent, disk_smart_status, temperature_celsius, created_at
+                 cpu_usage_percent, ram_usage_percent, disk_free_percent, disk_smart_status, temperature_celsius, created_at, last_backup_timestamp
              FROM telemetry_logs
              WHERE machine_id = ?
              ORDER BY created_at DESC
