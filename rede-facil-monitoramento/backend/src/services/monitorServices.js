@@ -1,9 +1,7 @@
+// src/services/monitorServices.js
 const { db, getMachineId } = require('../config/db');
 const moment = require('moment'); // 🚨 Adicionado para manipulação de datas
-
-// ✅ CORRIGIDO: Importa o módulo inteiro. 
-// Isso garante que 'socketHandler' seja um objeto válido contendo 'getIo'.
-const socketHandler = require('../socket/socketHandler'); 
+const socketHandler = require('../socket/socketHandler'); // Importa o módulo inteiro
 
 let globalIo; 
 
@@ -17,13 +15,14 @@ const isValidSoftware = (s) => {
 };
 
 // ==========================================================
-// CONSTANTES E FUNÇÕES AUXILIARES DE ALERTA (NOVAS)
+// CONSTANTES E FUNÇÕES AUXILIARES DE ALERTA
 // ==========================================================
 const MAX_TELEMETRY_RECORDS = 5;
 const MAX_BACKUP_LAG_HOURS = 48;
 const BACKUP_ALERT_TYPE = 'backup_failure'; // Tipo de alerta para falha de backup
 
 const createAlert = async (machine_id, type, message) => {
+    // ✅ CORREÇÃO: Usando socketHandler.getIo()
     const io = socketHandler.getIo() || globalIo;
     
     // Busca alertas ativos do mesmo tipo, criados na última hora, para evitar spam
@@ -88,7 +87,7 @@ async function checkBackupHealth(machineId, lastBackupTimestamp) {
 
 
 // ==========================================================
-// FUNÇÃO registerMachine
+// FUNÇÃO registerMachine (Inalterada)
 // ==========================================================
 
 exports.registerMachine = async ({
@@ -97,7 +96,7 @@ exports.registerMachine = async ({
     installed_software 
 }) => {
     if (!uuid || !hostname || !ip_address || !os_name) {
-        throw new Error('Dados essenciais de registro (uuid, hostname, ip_address, os_name) estão faltando.');
+        throw new Error('Dados essenciais faltando.');
     }
 
     let connection;
@@ -114,58 +113,37 @@ exports.registerMachine = async ({
 
         const [rows] = await connection.execute('SELECT id FROM machines WHERE uuid = ?', [uuid]);
         const machine_id = rows[0].id;
-        const [specsRows] = await connection.execute('SELECT id FROM hardware_specs WHERE machine_id = ?', [machine_id]);
         
-        const specsData = [
-            cpu_model || null, 
-            ram_total_gb || null, 
-            disk_total_gb || null, 
-            mac_address || null
-        ];
+        const [specsRows] = await connection.execute('SELECT id FROM hardware_specs WHERE machine_id = ?', [machine_id]);
+        const specsData = [cpu_model || null, ram_total_gb || null, disk_total_gb || null, mac_address || null];
 
         if (specsRows.length === 0) {
-            await connection.execute(
-                `INSERT INTO hardware_specs (machine_id, cpu_model, ram_total_gb, disk_total_gb, mac_address)
-                 VALUES (?, ?, ?, ?, ?)`,
-                [machine_id, ...specsData]
-            );
+            await connection.execute(`INSERT INTO hardware_specs (machine_id, cpu_model, ram_total_gb, disk_total_gb, mac_address) VALUES (?, ?, ?, ?, ?)`, [machine_id, ...specsData]);
         } else {
-            await connection.execute(
-                `UPDATE hardware_specs SET cpu_model=?, ram_total_gb=?, disk_total_gb=?, mac_address=? WHERE machine_id = ?`,
-                [...specsData, machine_id]
-            );
+            await connection.execute(`UPDATE hardware_specs SET cpu_model=?, ram_total_gb=?, disk_total_gb=?, mac_address=? WHERE machine_id = ?`, [...specsData, machine_id]);
         }
         
         await connection.execute('DELETE FROM installed_software WHERE machine_id = ?', [machine_id]);
-        
         const validSoftware = (installed_software || []).filter(isValidSoftware);
-
         if (validSoftware.length > 0) {
-            const softwareValues = validSoftware.map(s => [
-                machine_id, 
-                s.name, 
-                s.version || null, 
-                s.install_date || null
-            ]);
+            const softwareValues = validSoftware.map(s => [machine_id, s.name, s.version || null, s.install_date || null]);
             await connection.query('INSERT INTO installed_software (machine_id, software_name, version, install_date) VALUES ?', [softwareValues]);
         }
 
-       await connection.commit(); 
-        return { message: 'Máquina registrada/atualizada com sucesso', machine_id, ip_address };
+        await connection.commit(); 
+        return { message: 'Máquina registrada com sucesso', machine_id };
 
     } catch (error) {
-        if (connection) {
-            console.error('❌ Transação de Registro/Atualização Desfeita:', error.message);
-            await connection.rollback(); 
-        }
+        if (connection) await connection.rollback(); 
         throw error; 
     } finally {
         if (connection) connection.release();
     }
 };
 
+
 // ==========================================================
-// FUNÇÃO processTelemetry (Integrada com Lógica de Backup)
+// FUNÇÃO processTelemetry (Corrigida e Unificada)
 // ==========================================================
 
 exports.processTelemetry = async (data) => {
@@ -173,7 +151,6 @@ exports.processTelemetry = async (data) => {
     
     const {
         uuid, cpu_usage_percent, ram_usage_percent, disk_free_percent, temperature_celsius, disk_smart_status,
-        // 🚨 CAMPO NOVO
         last_backup_timestamp 
     } = data;
     
@@ -181,9 +158,10 @@ exports.processTelemetry = async (data) => {
     
     try {
         const machine_id = await getMachineId(uuid);
-        if (!machine_id) throw new Error('Máquina não encontrada. Registre-a primeiro.');
+        if (!machine_id) throw new Error('Máquina não encontrada.');
         
-        // ... (Seu código de sanitização de dados)
+        // --- 1. Sanitização e Conversão de Dados (Unificado) ---
+        
         const cpu_raw = parseFloat(cpu_usage_percent);
         const ram_raw = parseFloat(ram_usage_percent);
         const disk_raw = parseFloat(disk_free_percent);
@@ -191,24 +169,28 @@ exports.processTelemetry = async (data) => {
         
         const cpu_usage = isNaN(cpu_raw) ? null : parseFloat(cpu_raw.toFixed(2));
         const ram_usage = isNaN(ram_raw) ? null : parseFloat(ram_raw.toFixed(2));
+        // Mantive a formatação da versão mais nova
         const disk_free = isNaN(disk_raw) ? null : parseFloat(disk_raw.toFixed(4)); 
         const temperature = (temp_raw === null || isNaN(temp_raw)) ? null : parseFloat(temp_raw.toFixed(2));
         
         const disk_status = disk_smart_status || 'OK';
+
+        // --- 2. Inserção na Tabela de Telemetria (Incluindo Backup) ---
         
-        // 1. INSERÇÃO NA TABELA DE TELEMETRIA (Incluindo o novo campo)
         await db.execute(
             `INSERT INTO telemetry_logs (machine_id, cpu_usage_percent, ram_usage_percent, disk_free_percent, disk_smart_status, temperature_celsius, last_backup_timestamp)
              VALUES (?, ?, ?, ?, ?, ?, ?)`,
             [machine_id, cpu_usage, ram_usage, disk_free, disk_status, temperature, last_backup_timestamp]
         );
 
-        // 2. CHAMA A LÓGICA DE ALERTA DE BACKUP
+        // --- 3. Lógica de Alerta de Backup ---
+        
         if (last_backup_timestamp) {
             await checkBackupHealth(machine_id, last_backup_timestamp);
         }
         
-        // 3. SEU CÓDIGO DE LIMPEZA DE REGISTROS ANTIGOS
+        // --- 4. Limpeza de Registros Antigos ---
+
         const offset = MAX_TELEMETRY_RECORDS - 1; 
         const [lastKeepRows] = await db.execute(
             `SELECT id FROM telemetry_logs WHERE machine_id = ? ORDER BY created_at DESC LIMIT 1 OFFSET ${offset}`,
@@ -226,7 +208,7 @@ exports.processTelemetry = async (data) => {
         const [machineRow] = await db.execute('SELECT hostname FROM machines WHERE id = ?', [machine_id]);
         const hostname = machineRow[0].hostname;
 
-        // 4. CRIAÇÃO E RESOLUÇÃO DE ALERTAS
+        // --- 5. CRIAÇÃO E RESOLUÇÃO DE ALERTAS (Unificado) ---
 
         // Resolução de Alertas existentes (Se o problema melhorou)
         if (cpu_usage !== null && cpu_usage <= 85) {
@@ -249,32 +231,44 @@ exports.processTelemetry = async (data) => {
             await createAlert(machine_id, 'hardware', `FALHA S.M.A.R.T DETECTADA no disco da máquina ${hostname}. Backup urgente!`);
         }
         
-        // 5. ATUALIZAÇÃO DE STATUS E EMISSÃO DE TELEMETRIA
-        await db.execute(
-            `UPDATE machines SET status = 'online', last_seen = CURRENT_TIMESTAMP WHERE id = ?`,
-            [machine_id]
-        );
+        // --- 6. ATUALIZAÇÃO DE STATUS E EMISSÃO DE TELEMETRIA ---
+        
+        // Determina o status final para atualização da máquina
+        let newStatus = 'online';
+        if (cpu_usage > 90 || ram_usage > 95 || disk_free < 5) {
+             newStatus = 'critical'; // Lógica baseada nos alertas mais graves
+        } else if (temperature > 85 || cpu_usage > 85 || disk_free < 10) {
+             newStatus = 'warning';
+        }
 
+        await db.execute(
+            `UPDATE machines SET status = ?, last_seen = CURRENT_TIMESTAMP WHERE id = ?`,
+            [newStatus, machine_id]
+        );
+        
         if (globalIo) {
             globalIo.emit('new_telemetry', { 
                 machine_uuid: uuid, 
-                cpu_usage_percent: cpu_usage ? cpu_usage.toFixed(2) : 'N/A', 
-                ram_usage_percent: ram_usage ? ram_usage.toFixed(2) : 'N/A', 
-                disk_free_percent: disk_free ? disk_free.toFixed(2) : 'N/A',
+                cpu_usage_percent: cpu_usage, 
+                ram_usage_percent: ram_usage, 
+                disk_free_percent: disk_free,
                 disk_smart_status: disk_status,
-                temperature_celsius: temperature ? temperature.toFixed(2) : 'N/A'
+                temperature_celsius: temperature,
+                last_backup_timestamp: last_backup_timestamp,
+                status: newStatus 
             });
         }
 
-        return { message: 'Dados de telemetria recebidos e processados' };
+        return { message: 'Telemetria processada' };
+
     } catch (error) {
-        console.error('❌ Erro no Service (processTelemetry):', error); 
+        console.error('❌ Erro no Service (processTelemetry):', error.message);
         throw error;
     }
 };
 
 // ==========================================================
-// OUTRAS FUNÇÕES (Inalteradas)
+// OUTRAS FUNÇÕES (Correção do SQL)
 // ==========================================================
 
 exports.listMachines = async () => {
@@ -294,11 +288,11 @@ exports.listMachines = async () => {
 
 exports.getMachineDetails = async (uuid) => {
     if (!uuid) return null; 
-    
     try {
         const machine_id = await getMachineId(uuid);
         if (!machine_id) return null;
-
+        
+        // ✅ SQL Unificado e Limpo
         const [details] = await db.execute(
             `SELECT 
                  m.uuid, m.hostname, m.ip_address, m.os_name, m.status, m.last_seen, m.created_at, m.id as machine_id,
@@ -316,6 +310,7 @@ exports.getMachineDetails = async (uuid) => {
             [machine_id]
         );
 
+        // ✅ SQL Telemetria (Incluindo backup e status)
         const [lastTelemetry] = await db.execute(
             `SELECT cpu_usage_percent, ram_usage_percent, disk_free_percent, disk_smart_status, temperature_celsius, created_at, last_backup_timestamp
              FROM telemetry_logs 
@@ -337,8 +332,7 @@ exports.getMachineDetails = async (uuid) => {
             open_alerts: openAlerts
         };
         return response;
-
-    } catch (error) {
+    } catch (error) { 
         console.error('❌ Erro no Service (getMachineDetails):', error.message);
         throw error; 
     }
@@ -346,13 +340,12 @@ exports.getMachineDetails = async (uuid) => {
 
 exports.getTelemetryHistory = async (uuid, limit = 100) => {
     if (!uuid) return []; 
-
     try {
         const machine_id = await getMachineId(uuid);
         if (!machine_id) return [];
-
         const numericLimit = Math.max(1, parseInt(limit, 10));
 
+        // ✅ SQL Histórico de Telemetria (Incluindo backup e status)
         const [history] = await db.execute(
             `SELECT 
                  cpu_usage_percent, ram_usage_percent, disk_free_percent, disk_smart_status, temperature_celsius, created_at, last_backup_timestamp
@@ -362,10 +355,9 @@ exports.getTelemetryHistory = async (uuid, limit = 100) => {
              LIMIT ?`,
             [machine_id, numericLimit]
         );
-
         return history;
-    } catch (error) {
+    } catch (error) { 
         console.error('❌ Erro no Service (getTelemetryHistory):', error.message);
-        throw error;
+        throw error; 
     }
 };

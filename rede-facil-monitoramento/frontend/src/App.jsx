@@ -61,10 +61,15 @@ function App() {
     
     socket.on("connect", () => console.log("🟢 Conectado ao WebSocket"));
     
-    socket.on("new_telemetry", (data) => {
+   socket.on("new_telemetry", (data) => {
       setLastTelemetry(data);
       setMachines(prevMachines => 
-         prevMachines.map(m => m.uuid === data.machine_uuid ? { ...m, status: 'online' } : m)
+         prevMachines.map(m => 
+            m.uuid === data.machine_uuid ? { 
+                ...m, 
+                status: data.status || 'online' 
+            } : m
+         )
       );
     });
 
@@ -78,6 +83,27 @@ function App() {
       socket.off("new_alert");
     };
   }, []);
+
+  const getStatusBadgeVariant = (status) => {
+      if (status === 'critical') return 'destructive'; 
+      if (status === 'warning') return 'secondary'; 
+      if (status === 'online') return 'default';    
+      return 'outline'; 
+  };
+
+  const getStatusBadgeClass = (status) => {
+      if (status === 'critical') return 'bg-red-100 text-red-700 border-red-200 animate-pulse';
+      if (status === 'warning') return 'bg-orange-100 text-orange-700 border-orange-200';
+      if (status === 'online') return 'bg-emerald-100 text-emerald-700 border-emerald-200';
+      return 'bg-slate-100 text-slate-500';
+  };
+
+  const translateStatus = (status) => {
+      if (status === 'critical') return 'CRÍTICO';
+      if (status === 'warning') return 'ALERTA';
+      if (status === 'online') return 'ONLINE';
+      return 'OFFLINE';
+  };
 
   const handleLoginSuccess = (user) => {
     setIsAuthenticated(true);
@@ -280,10 +306,21 @@ function App() {
                         >
                           <TableCell>
                             <Badge 
-                              variant={machine.status === 'online' ? 'default' : 'secondary'} 
-                              className={`${machine.status === 'online' ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200 border-emerald-200' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'} font-medium border shadow-none`}
+                              variant={
+                                machine.status === 'critical' ? 'destructive' : 
+                                machine.status === 'warning' ? 'secondary' : 
+                                machine.status === 'online' ? 'default' : 'outline'
+                              } 
+                              className={`
+                                ${machine.status === 'critical' ? 'bg-red-100 text-red-700 hover:bg-red-200 border-red-200 animate-pulse' : ''}
+                                ${machine.status === 'warning' ? 'bg-orange-100 text-orange-700 hover:bg-orange-200 border-orange-200' : ''}
+                                ${machine.status === 'online' ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200 border-emerald-200' : ''}
+                                font-bold border shadow-none
+                              `}
                             >
-                              {machine.status}
+                              {machine.status === 'critical' ? 'CRÍTICO' : 
+                              machine.status === 'warning' ? 'ALERTA' : 
+                              machine.status === 'online' ? 'ONLINE' : 'OFFLINE'}
                             </Badge>
                           </TableCell>
                           <TableCell className="font-semibold text-slate-700">{machine.hostname}</TableCell>
