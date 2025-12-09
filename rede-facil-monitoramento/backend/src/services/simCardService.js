@@ -5,18 +5,18 @@ exports.listSimCards = async () => {
     return rows;
 };
 
-exports.createSimCard = async ({ phone_number, carrier, status, device_id, notes }) => {
+exports.createSimCard = async ({ phone_number, carrier, status, device_id, notes, user_name }) => {
     const [result] = await db.execute(
-        `INSERT INTO sim_cards (phone_number, carrier, status, device_id, notes) VALUES (?, ?, ?, ?, ?)`,
-        [phone_number, carrier, status || 'livre', device_id || '', notes || '']
+        `INSERT INTO sim_cards (phone_number, carrier, status, device_id, notes, user_name) VALUES (?, ?, ?, ?, ?, ?)`,
+        [phone_number, carrier, status || 'livre', device_id || '', notes || '', user_name || '']
     );
     return { id: result.insertId, message: 'Chip cadastrado com sucesso' };
 };
 
-exports.updateSimCard = async (id, { phone_number, carrier, status, device_id, notes }) => {
+exports.updateSimCard = async (id, { phone_number, carrier, status, device_id, notes, user_name }) => {
     await db.execute(
-        `UPDATE sim_cards SET phone_number=?, carrier=?, status=?, device_id=?, notes=? WHERE id=?`,
-        [phone_number, carrier, status, device_id, notes, id]
+        `UPDATE sim_cards SET phone_number=?, carrier=?, status=?, device_id=?, notes=?, user_name=? WHERE id=?`,
+        [phone_number, carrier, status, device_id, notes, user_name, id]
     );
     return { message: 'Chip atualizado com sucesso' };
 };
