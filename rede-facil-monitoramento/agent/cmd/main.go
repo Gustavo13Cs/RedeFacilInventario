@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"os/user"
+	"os/exec" // Importação necessária para executar comandos do sistema
 	"runtime"
 	"strings"
 	"time"
@@ -39,27 +40,52 @@ type MachineInfo struct {
 	RAMTotalGB        float64    `json:"ram_total_gb"`
 	DiskTotalGB       float64    `json:"disk_total_gb"`
 	MACAddress        string     `json:"mac_address"`
+	// 🚨 CAMPOS DE INVENTÁRIO DE HARDWARE
+	MachineModel      string     `json:"machine_model"`
+	SerialNumber      string     `json:"serial_number"`
 	InstalledSoftware []Software `json:"installed_software"`
 }
 
 type Software struct {
-	Name    string `json:"name"`
-	Version string `json:"version"`
+	Name              string `json:"name"`
+	Version           string `json:"version"`
 }
 
 type TelemetryData struct {
-	UUID               string  `json:"uuid"`
-	CPUUsagePercent    float64 `json:"cpu_usage_percent"`
-	RAMUsagePercent    float64 `json:"ram_usage_percent"`
-	DiskFreePercent    float64 `json:"disk_free_percent"`
-	DiskSmartStatus    string  `json:"disk_smart_status"`
+	UUID              string  `json:"uuid"`
+	CPUUsagePercent   float64 `json:"cpu_usage_percent"`
+	RAMUsagePercent   float64 `json:"ram_usage_percent"`
+	DiskFreePercent   float64 `json:"disk_free_percent"`
+	DiskSmartStatus   string  `json:"disk_smart_status"`
 	TemperatureCelsius float64 `json:"temperature_celsius"`
 	LastBackupTimestamp string  `json:"last_backup_timestamp"`
 }
 
 type RegistrationResponse struct {
-	Message   string `json:"message"`
-	MachineIP string `json:"ip_address"`
+	Message           string `json:"message"`
+	MachineIP         string `json:"ip_address"`
+}
+
+// 🚨 FUNÇÃO AUXILIAR PARA COLETAR DADOS DE HARDWARE VIA WMIC (Windows)
+func execWmic(query string) string {
+	if runtime.GOOS != "windows" {
+		return "N/A"
+	}
+	cmd := exec.Command("wmic", strings.Split(query, " ")...)
+	var out bytes.Buffer
+	cmd.Stdout = &out
+	err := cmd.Run()
+	if err != nil {
+		return "N/A"
+	}
+	// Limpa e formata a saída, removendo cabeçalhos e espaços em branco
+	result := strings.TrimSpace(out.String())
+	lines := strings.Split(result, "\n")
+	if len(lines) > 1 {
+		// Retorna apenas a segunda linha (o valor)
+		return strings.TrimSpace(lines[1])
+	}
+	return "N/A"
 }
 
 func getLocalIP() string {
@@ -111,6 +137,15 @@ func collectStaticInfo() MachineInfo {
 	if len(cInfos) > 0 {
 		cpuModel = cInfos[0].ModelName
 	}
+	
+	// 🚨 COLETANDO MARCA, MODELO E SERIAL USANDO WMIC (RESOLVENDO ERROS DE COMPILAÇÃO)
+	machineModel := execWmic("csproduct get name")
+	serialNumber := execWmic("bios get serialnumber")
+	
+	// Se o WMIC falhar (comum em VMs), usa o HostID como fallback para o Serial
+	if serialNumber == "N/A" {
+		serialNumber = hInfo.HostID
+	}
 
 	var diskTotalGB float64
 	rootPath := "/"
@@ -135,7 +170,10 @@ func collectStaticInfo() MachineInfo {
 		RAMTotalGB:        float64(mInfo.Total) / (1024 * 1024 * 1024),
 		DiskTotalGB:       diskTotalGB,
 		MACAddress:        "00:00:00:00:00:00",
-		InstalledSoftware: []Software{{Name: "Agente Go", Version: "2.0"}},
+		// 🚨 DADOS DE INVENTÁRIO ENVIADOS
+		MachineModel:      machineModel,
+		SerialNumber:      serialNumber,
+		InstalledSoftware: []Software{{Name: "Agente Go", Version: "2.1"}},
 	}
 }
 
@@ -208,11 +246,11 @@ func collectTelemetryData() TelemetryData {
 	lastBackup := getLastBackupTimestamp(BACKUP_FOLDER_PATH)
 
 	return TelemetryData{
-		UUID:               getMachineUUID(),
-		CPUUsagePercent:    cpuUsage,
-		RAMUsagePercent:    ramUsage,
-		DiskFreePercent:    diskUsageFree,
-		DiskSmartStatus:    "OK",
+		UUID:              getMachineUUID(),
+		CPUUsagePercent:   cpuUsage,
+		RAMUsagePercent:   ramUsage,
+		DiskFreePercent:   diskUsageFree,
+		DiskSmartStatus:   "OK",
 		TemperatureCelsius: temperature,
 		LastBackupTimestamp: lastBackup,
 	}
@@ -305,11 +343,11 @@ func postData(endpoint string, data interface{}) {
 }
 
 func registerMachine(info MachineInfo) {
-    // 🚨 Certifique-se de que não haja /machines aqui!
-    url := fmt.Sprintf("%s/register", API_BASE_URL) 
-    client := http.Client{Timeout: 5 * time.Second}
+	// Rota corrigida para /api/register
+	url := fmt.Sprintf("%s/register", API_BASE_URL) 
+	client := http.Client{Timeout: 5 * time.Second}
 
-    jsonValue, _ := json.Marshal(info)
+	jsonValue, _ := json.Marshal(info)
 	
 	for i := 0; i < MAX_RETRIES; i++ {
 		resp, err := client.Post(url, "application/json", bytes.NewBuffer(jsonValue))
