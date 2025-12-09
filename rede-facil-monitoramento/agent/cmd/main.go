@@ -10,9 +10,11 @@ import (
 	"net/http"
 	"os"
 	"os/user"
+	"os/exec" 
 	"runtime"
-	"strings" 
+	"strings"
 	"time"
+	"path/filepath"
 
 	"github.com/shirou/gopsutil/v3/cpu"
 	"github.com/shirou/gopsutil/v3/disk"
@@ -20,12 +22,12 @@ import (
 	"github.com/shirou/gopsutil/v3/mem"
 )
 
-const API_BASE_URL = "http://localhost:3001/api" 
+const BACKUP_FOLDER_PATH = "C:\\Users\\Windows 10\\Documents\\backup_agente"
+const API_BASE_URL = "http://localhost:3001/api"
 const TELEMETRY_INTERVAL = 5 * time.Second
 
-
-const MAX_RETRIES = 3                
-const RETRY_DELAY = 10 * time.Second 
+const MAX_RETRIES = 3
+const RETRY_DELAY = 10 * time.Second
 
 var GlobalMachineIP string
 
@@ -35,31 +37,96 @@ type MachineInfo struct {
 	IPAddress         string     `json:"ip_address"`
 	OSName            string     `json:"os_name"`
 	CPUModel          string     `json:"cpu_model"`
+    
+    CPUSpeedMhz       float64    `json:"cpu_speed_mhz"`
+    CPUCoresPhysical  int        `json:"cpu_cores_physical"`
+    CPUCoresLogical   int        `json:"cpu_cores_logical"`
+    
 	RAMTotalGB        float64    `json:"ram_total_gb"`
 	DiskTotalGB       float64    `json:"disk_total_gb"`
 	MACAddress        string     `json:"mac_address"`
+    
+	MachineModel      string     `json:"machine_model"`
+	SerialNumber      string     `json:"serial_number"`
+    MachineType       string     `json:"machine_type"`
+    
+    // 🚨 NOVOS CAMPOS: PLACA-MÃE
+    MotherboardManufacturer string `json:"mb_manufacturer"`
+    MotherboardModel        string `json:"mb_model"`
+    MotherboardVersion      string `json:"mb_version"`
+    
 	InstalledSoftware []Software `json:"installed_software"`
 }
 
 type Software struct {
-	Name    string `json:"name"`
-	Version string `json:"version"`
+	Name              string `json:"name"`
+	Version           string `json:"version"`
 }
 
 type TelemetryData struct {
-	UUID               string  `json:"uuid"`
-	CPUUsagePercent    float64 `json:"cpu_usage_percent"`
-	RAMUsagePercent    float64 `json:"ram_usage_percent"`
-	DiskFreePercent    float64 `json:"disk_free_percent"`
-	DiskSmartStatus    string  `json:"disk_smart_status"`
+	UUID              string  `json:"uuid"`
+	CPUUsagePercent   float64 `json:"cpu_usage_percent"`
+	RAMUsagePercent   float64 `json:"ram_usage_percent"`
+	DiskFreePercent   float64 `json:"disk_free_percent"`
+	DiskSmartStatus   string  `json:"disk_smart_status"`
 	TemperatureCelsius float64 `json:"temperature_celsius"`
+	LastBackupTimestamp string  `json:"last_backup_timestamp"`
 }
 
 type RegistrationResponse struct {
-	Message   string `json:"message"`
-	MachineIP string `json:"ip_address"`
+	Message           string `json:"message"`
+	MachineIP         string `json:"ip_address"`
 }
 
+// FUNÇÃO AUXILIAR PARA COLETAR DADOS DE HARDWARE VIA WMIC (Windows)
+func execWmic(query string) string {
+	if runtime.GOOS != "windows" {
+		return "N/A"
+	}
+	cmd := exec.Command("wmic", strings.Split(query, " ")...)
+	var out bytes.Buffer
+	cmd.Stdout = &out
+	err := cmd.Run()
+	if err != nil {
+		return "N/A"
+	}
+	result := strings.TrimSpace(out.String())
+	lines := strings.Split(result, "\n")
+	if len(lines) > 1 {
+		return strings.TrimSpace(lines[1])
+	}
+	return "N/A"
+}
+
+// FUNÇÃO PARA MAPEAMENTO ESPECÍFICO DO TIPO DE CHASSIS (Notebook/Desktop/Servidor)
+func getMachineType() string {
+    if runtime.GOOS != "windows" {
+        return "Indefinido"
+    }
+
+    // Executa WMIC para obter o código numérico do tipo de chassi
+    chassisTypeOutput := execWmic("csenclosure get chassistypes")
+    chassisType := strings.TrimSpace(chassisTypeOutput)
+
+    // Mapeamento baseado nos códigos da Microsoft (Win32_SystemEnclosure)
+    switch chassisType {
+    case "8", "9", "10", "14":
+        return "Notebook/Laptop"
+    case "1", "2", "3", "4", "5", "6", "7", "13", "15", "16":
+        return "Desktop/Workstation"
+    case "17", "21", "22", "23":
+        return "Servidor"
+    default:
+        // Fallback para VM/Ambientes Virtuais
+        productName := execWmic("csproduct get name")
+        if strings.Contains(strings.ToLower(productName), "vmware") || 
+           strings.Contains(strings.ToLower(productName), "virtualbox") ||
+           strings.Contains(strings.ToLower(productName), "server") {
+            return "VM/Servidor"
+        }
+        return "Hardware Genérico" 
+    }
+}
 
 
 func getLocalIP() string {
@@ -108,9 +175,34 @@ func collectStaticInfo() MachineInfo {
 	dPartitions, _ := disk.Partitions(false)
 
 	cpuModel := "N/A"
+	var cpuSpeed float64
+	var cpuCoresPhysical int
+	var cpuCoresLogical int
+	
+    // COLETANDO DADOS DETALHADOS DA CPU
 	if len(cInfos) > 0 {
-		cpuModel = cInfos[0].ModelName
+		cpuModel = cInfos[0].ModelName 
+		cpuSpeed = cInfos[0].Mhz 
 	}
+
+	cpuCoresPhysical, _ = cpu.Counts(false)
+	cpuCoresLogical, _ = cpu.Counts(true)
+    // FIM DA COLETA DE CPU
+
+	machineModel := execWmic("csproduct get name")
+	serialNumber := execWmic("bios get serialnumber")
+	
+	if serialNumber == "N/A" {
+		serialNumber = hInfo.HostID
+	}
+    
+    // COLETANDO O TIPO DA MÁQUINA
+    machineType := getMachineType() 
+    
+    // 🚨 COLETANDO INFORMAÇÕES DA PLACA-MÃE
+    mbManufacturer := execWmic("baseboard get manufacturer")
+    mbModel := execWmic("baseboard get product")
+    mbVersion := execWmic("baseboard get version")
 
 	var diskTotalGB float64
 	rootPath := "/"
@@ -132,11 +224,66 @@ func collectStaticInfo() MachineInfo {
 		IPAddress:         getLocalIP(),
 		OSName:            fmt.Sprintf("%s %s", hInfo.OS, hInfo.Platform),
 		CPUModel:          cpuModel,
+		CPUSpeedMhz:       cpuSpeed,
+		CPUCoresPhysical:  cpuCoresPhysical,
+		CPUCoresLogical:   cpuCoresLogical,
 		RAMTotalGB:        float64(mInfo.Total) / (1024 * 1024 * 1024),
 		DiskTotalGB:       diskTotalGB,
 		MACAddress:        "00:00:00:00:00:00",
-		InstalledSoftware: []Software{{Name: "Agente Go", Version: "2.0"}},
+		MachineModel:      machineModel,
+		SerialNumber:      serialNumber,
+        MachineType:       machineType,
+        // 🚨 NOVOS DADOS ENVIADOS
+        MotherboardManufacturer: mbManufacturer,
+        MotherboardModel: mbModel,
+        MotherboardVersion: mbVersion,
+        
+		InstalledSoftware: []Software{{Name: "Agente Go", Version: "2.3"}},
 	}
+}
+
+func ensureBackupFolderExists(folderPath string) {
+	err := os.MkdirAll(folderPath, 0755)
+	if err != nil {
+		if os.IsExist(err) {
+			return
+		}
+		log.Printf("Erro ao criar pasta de backup '%s': %v", folderPath, err)
+	} else {
+		log.Printf("Pasta de backup '%s' verificada/criada.", folderPath)
+	}
+}
+
+func getLastBackupTimestamp(dir string) string {
+	var latestTime time.Time
+
+	err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			if os.IsNotExist(err) || os.IsPermission(err) {
+				return err
+			}
+			return nil
+		}
+
+		if !info.IsDir() {
+			modTime := info.ModTime()
+			if modTime.After(latestTime) {
+				latestTime = modTime
+			}
+		}
+		return nil
+	})
+
+	if err != nil {
+		log.Printf("Erro ao verificar pasta de backup '%s': %v.", dir, err)
+		return ""
+	}
+
+	if !latestTime.IsZero() {
+		return latestTime.Format("2006-01-02 15:04:05")
+	}
+
+	return ""
 }
 
 func collectTelemetryData() TelemetryData {
@@ -145,7 +292,6 @@ func collectTelemetryData() TelemetryData {
 	if len(cpuPercents) > 0 {
 		cpuUsage = cpuPercents[0]
 	}
-
 
 	mInfo, _ := mem.VirtualMemory()
 	ramUsage := mInfo.UsedPercent
@@ -159,19 +305,19 @@ func collectTelemetryData() TelemetryData {
 	dUsage, err := disk.Usage(rootPath)
 	if err == nil {
 		diskUsageFree = 100.0 - dUsage.UsedPercent
-	} else {
-		log.Printf("⚠️ Erro disco: %v", err)
 	}
 
 	temperature := getCPUTemperature()
+	lastBackup := getLastBackupTimestamp(BACKUP_FOLDER_PATH)
 
 	return TelemetryData{
-		UUID:               getMachineUUID(),
-		CPUUsagePercent:    cpuUsage,
-		RAMUsagePercent:    ramUsage,
-		DiskFreePercent:    diskUsageFree,
-		DiskSmartStatus:    "OK",
+		UUID:              getMachineUUID(),
+		CPUUsagePercent:   cpuUsage,
+		RAMUsagePercent:   ramUsage,
+		DiskFreePercent:   diskUsageFree,
+		DiskSmartStatus:   "OK",
 		TemperatureCelsius: temperature,
+		LastBackupTimestamp: lastBackup,
 	}
 }
 
@@ -182,11 +328,8 @@ func getCPUTemperature() float64 {
 	}
 
 	var cpuTemps []float64
-
 	cpuKeywords := []string{"core", "package", "die", "cpu"}
-
 	genericKeywords := []string{"thermal zone", "acpitz"}
-
 
 	for _, sensor := range sensors {
 		key := strings.ToLower(sensor.SensorKey)
@@ -206,7 +349,6 @@ func getCPUTemperature() float64 {
 		return total / float64(len(cpuTemps))
 	}
 
-	
 	for _, sensor := range sensors {
 		key := strings.ToLower(sensor.SensorKey)
 		for _, keyword := range genericKeywords {
@@ -225,7 +367,6 @@ func getCPUTemperature() float64 {
 	return 0.0
 }
 
-
 func postData(endpoint string, data interface{}) {
 	jsonValue, err := json.Marshal(data)
 	if err != nil {
@@ -237,19 +378,13 @@ func postData(endpoint string, data interface{}) {
 	client := http.Client{Timeout: 5 * time.Second}
 
 	for i := 0; i < MAX_RETRIES; i++ {
-
 		resp, err := client.Post(url, "application/json", bytes.NewBuffer(jsonValue))
-
 		if err != nil {
-			log.Printf("❌ Erro de rede/conexão na Tentativa %d para %s: %v", i+1, endpoint, err)
-
+			log.Printf("Erro de rede na tentativa %d para %s: %v", i+1, endpoint, err)
 			if i < MAX_RETRIES-1 {
 				time.Sleep(RETRY_DELAY)
-				continue
-			} else {
-				log.Printf("❌ FALHA CRÍTICA: Todas as %d tentativas falharam para %s.", MAX_RETRIES, endpoint)
-				return
 			}
+			continue
 		}
 
 		defer resp.Body.Close()
@@ -259,74 +394,56 @@ func postData(endpoint string, data interface{}) {
 		}
 
 		if resp.StatusCode >= 500 {
-			log.Printf("⚠️ Erro de Servidor na Tentativa %d para %s. Status: %s", i+1, endpoint, resp.Status)
-
+			log.Printf("Erro do servidor (tentativa %d): %s", i+1, resp.Status)
 			if i < MAX_RETRIES-1 {
 				time.Sleep(RETRY_DELAY)
 				continue
-			} else {
-				log.Printf("❌ FALHA FINAL: Erro de Servidor não recuperável após %d tentativas para %s.", MAX_RETRIES, endpoint)
-				return
 			}
+			return
 		}
 
-		log.Printf("⚠️ Erro da API não recuperável (Status %s) para %s.", resp.Status, endpoint)
+		log.Printf("Erro da API (não recuperável): %s", resp.Status)
 		return
 	}
 }
 
 func registerMachine(info MachineInfo) {
-	url := fmt.Sprintf("%s/machines/register", API_BASE_URL)
+	url := fmt.Sprintf("%s/register", API_BASE_URL) 
 	client := http.Client{Timeout: 5 * time.Second}
 
 	jsonValue, _ := json.Marshal(info)
-
+	
 	for i := 0; i < MAX_RETRIES; i++ {
-		log.Printf("Tentativa %d de %d para Registro...", i+1, MAX_RETRIES)
-
 		resp, err := client.Post(url, "application/json", bytes.NewBuffer(jsonValue))
 
 		if err != nil {
-			log.Printf("❌ Erro de rede/conexão: %v", err)
+			log.Printf("Erro ao registrar máquina: %v", err)
 			if i < MAX_RETRIES-1 {
 				time.Sleep(RETRY_DELAY)
-				continue
-			} else {
-				log.Printf("❌ FALHA CRÍTICA: Registro falhou após %d tentativas.", MAX_RETRIES)
-				return
 			}
+			continue
 		}
 
 		defer resp.Body.Close()
 
 		if resp.StatusCode >= 200 && resp.StatusCode < 300 {
 			body, _ := io.ReadAll(resp.Body)
-			var regResponse RegistrationResponse
-			json.Unmarshal(body, &regResponse)
-
-			GlobalMachineIP = regResponse.MachineIP
-			log.Printf("✅ Máquina registrada! IP: %s (Status: %s)", GlobalMachineIP, resp.Status)
+			var regResp RegistrationResponse
+			json.Unmarshal(body, &regResp)
+			GlobalMachineIP = regResp.MachineIP
+			log.Printf("Máquina registrada! IP: %s", GlobalMachineIP)
 			return
 		}
 
-		if resp.StatusCode >= 400 {
-			log.Printf("⚠️ Erro da API Registro (Não Recuperável): %s", resp.Status)
-			return
-		}
-
-		if i < MAX_RETRIES-1 {
-			time.Sleep(RETRY_DELAY)
-			continue
-		} else {
-			log.Printf("❌ FALHA CRÍTICA: Registro falhou após %d tentativas.", MAX_RETRIES)
-			return
-		}
+		log.Printf("Erro no registro (Status %s)", resp.Status)
+		return
 	}
 }
 
-
 func main() {
-	log.Println("🔥 Agente Rede Fácil v2 - Iniciando...")
+	log.Println("Agente Rede Fácil v2 iniciando...")
+
+	ensureBackupFolderExists(BACKUP_FOLDER_PATH)
 
 	info := collectStaticInfo()
 	registerMachine(info)
@@ -338,10 +455,11 @@ func main() {
 		select {
 		case <-ticker.C:
 			data := collectTelemetryData()
-
-			log.Printf("📤 Stats -> Temp CPU: %.1f°C | CPU: %.1f%% | RAM: %.1f%%",
-				data.TemperatureCelsius, data.CPUUsagePercent, data.RAMUsagePercent)
-			
+			log.Printf("Stats -> Temp: %.1f°C | CPU: %.1f%% | RAM: %.1f%% | Backup: %s",
+				data.TemperatureCelsius,
+				data.CPUUsagePercent,
+				data.RAMUsagePercent,
+				data.LastBackupTimestamp)
 			postData("/telemetry", data)
 		}
 	}
