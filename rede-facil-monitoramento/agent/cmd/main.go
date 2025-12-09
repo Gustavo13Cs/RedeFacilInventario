@@ -10,7 +10,7 @@ import (
 	"net/http"
 	"os"
 	"os/user"
-	"os/exec" // Importação necessária para executar comandos do sistema (WMIC)
+	"os/exec" 
 	"runtime"
 	"strings"
 	"time"
@@ -37,7 +37,7 @@ type MachineInfo struct {
 	IPAddress         string     `json:"ip_address"`
 	OSName            string     `json:"os_name"`
 	CPUModel          string     `json:"cpu_model"`
-    // 🚨 CAMPOS DE INVENTÁRIO DE CPU
+    
     CPUSpeedMhz       float64    `json:"cpu_speed_mhz"`
     CPUCoresPhysical  int        `json:"cpu_cores_physical"`
     CPUCoresLogical   int        `json:"cpu_cores_logical"`
@@ -45,11 +45,15 @@ type MachineInfo struct {
 	RAMTotalGB        float64    `json:"ram_total_gb"`
 	DiskTotalGB       float64    `json:"disk_total_gb"`
 	MACAddress        string     `json:"mac_address"`
-    // 🚨 CAMPOS DE INVENTÁRIO DE HARDWARE
+    
 	MachineModel      string     `json:"machine_model"`
 	SerialNumber      string     `json:"serial_number"`
-    // 🚨 NOVO CAMPO: TIPO DO EQUIPAMENTO
     MachineType       string     `json:"machine_type"`
+    
+    // 🚨 NOVOS CAMPOS: PLACA-MÃE
+    MotherboardManufacturer string `json:"mb_manufacturer"`
+    MotherboardModel        string `json:"mb_model"`
+    MotherboardVersion      string `json:"mb_version"`
     
 	InstalledSoftware []Software `json:"installed_software"`
 }
@@ -94,7 +98,7 @@ func execWmic(query string) string {
 	return "N/A"
 }
 
-// 🚨 NOVO: FUNÇÃO PARA MAPEAMENTO ESPECÍFICO DO TIPO DE CHASSIS
+// FUNÇÃO PARA MAPEAMENTO ESPECÍFICO DO TIPO DE CHASSIS (Notebook/Desktop/Servidor)
 func getMachineType() string {
     if runtime.GOOS != "windows" {
         return "Indefinido"
@@ -108,19 +112,19 @@ func getMachineType() string {
     switch chassisType {
     case "8", "9", "10", "14":
         return "Notebook/Laptop"
-    case "3", "4", "5", "6", "7", "13", "15", "16":
+    case "1", "2", "3", "4", "5", "6", "7", "13", "15", "16":
         return "Desktop/Workstation"
     case "17", "21", "22", "23":
         return "Servidor"
     default:
-        // Fallback para VM (se o WMIC retornar um valor genérico)
+        // Fallback para VM/Ambientes Virtuais
         productName := execWmic("csproduct get name")
         if strings.Contains(strings.ToLower(productName), "vmware") || 
            strings.Contains(strings.ToLower(productName), "virtualbox") ||
            strings.Contains(strings.ToLower(productName), "server") {
             return "VM/Servidor"
         }
-        return "Outro/Indefinido"
+        return "Hardware Genérico" 
     }
 }
 
@@ -192,8 +196,13 @@ func collectStaticInfo() MachineInfo {
 		serialNumber = hInfo.HostID
 	}
     
-    // 🚨 COLETANDO O TIPO DA MÁQUINA
+    // COLETANDO O TIPO DA MÁQUINA
     machineType := getMachineType() 
+    
+    // 🚨 COLETANDO INFORMAÇÕES DA PLACA-MÃE
+    mbManufacturer := execWmic("baseboard get manufacturer")
+    mbModel := execWmic("baseboard get product")
+    mbVersion := execWmic("baseboard get version")
 
 	var diskTotalGB float64
 	rootPath := "/"
@@ -223,7 +232,12 @@ func collectStaticInfo() MachineInfo {
 		MACAddress:        "00:00:00:00:00:00",
 		MachineModel:      machineModel,
 		SerialNumber:      serialNumber,
-        MachineType:       machineType, // 🚨 CAMPO ENVIADO
+        MachineType:       machineType,
+        // 🚨 NOVOS DADOS ENVIADOS
+        MotherboardManufacturer: mbManufacturer,
+        MotherboardModel: mbModel,
+        MotherboardVersion: mbVersion,
+        
 		InstalledSoftware: []Software{{Name: "Agente Go", Version: "2.3"}},
 	}
 }

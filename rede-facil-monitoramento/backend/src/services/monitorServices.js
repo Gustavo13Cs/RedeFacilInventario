@@ -24,16 +24,13 @@ const createAlert = async (machine_id, type, message) => {
     const io = socketHandler.getIo() || globalIo;
 
     const [existingAlerts] = await db.execute(
-        `SELECT id FROM alerts 
-         WHERE machine_id = ? AND alert_type = ? AND is_resolved = FALSE 
-         AND created_at > DATE_SUB(NOW(), INTERVAL 1 HOUR)`,
+        `SELECT id FROM alerts WHERE machine_id = ? AND alert_type = ? AND is_resolved = FALSE AND created_at > DATE_SUB(NOW(), INTERVAL 1 HOUR)`,
         [machine_id, type]
     );
 
     if (existingAlerts.length === 0) {
         const [result] = await db.execute(
-            `INSERT INTO alerts (machine_id, alert_type, message, is_resolved) 
-             VALUES (?, ?, ?, FALSE)`,
+            `INSERT INTO alerts (machine_id, alert_type, message, is_resolved) VALUES (?, ?, ?, FALSE)`,
             [machine_id, type, message]
         );
 
@@ -51,8 +48,7 @@ const createAlert = async (machine_id, type, message) => {
 
 const resolveAlert = async (machine_id, type) => {
     await db.execute(
-        `UPDATE alerts 
-         SET is_resolved = TRUE, resolved_at = CURRENT_TIMESTAMP 
+        `UPDATE alerts SET is_resolved = TRUE, resolved_at = CURRENT_TIMESTAMP 
          WHERE machine_id = ? AND alert_type = ? AND is_resolved = FALSE`,
         [machine_id, type]
     );
@@ -94,6 +90,9 @@ exports.registerMachine = async ({
     mac_address,
     machine_model, serial_number,
     machine_type,
+    mb_manufacturer,
+    mb_model,
+    mb_version,
     installed_software
 }) => {
     if (!uuid || !hostname || !ip_address || !os_name) {
@@ -128,25 +127,30 @@ exports.registerMachine = async ({
             mac_address || null,
             machine_model || null,
             serial_number || null,
-            machine_type || null
+            machine_type || null,
+            mb_manufacturer || null,
+            mb_model || null,
+            mb_version || null
         ];
 
         if (specsRows.length === 0) {
             await connection.execute(
                 `INSERT INTO hardware_specs (
-                    machine_id,
-                    cpu_model, cpu_speed_mhz, cpu_cores_physical, cpu_cores_logical,
-                    ram_total_gb, disk_total_gb, mac_address,
-                    machine_model, serial_number, machine_type
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                    machine_id, 
+                    cpu_model, cpu_speed_mhz, cpu_cores_physical, cpu_cores_logical, 
+                    ram_total_gb, disk_total_gb, mac_address, 
+                    machine_model, serial_number, machine_type,
+                    mb_manufacturer, mb_model, mb_version
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
                 [machine_id, ...specsData]
             );
         } else {
             await connection.execute(
                 `UPDATE hardware_specs SET 
                     cpu_model=?, cpu_speed_mhz=?, cpu_cores_physical=?, cpu_cores_logical=?,
-                    ram_total_gb=?, disk_total_gb=?, mac_address=?,
-                    machine_model=?, serial_number=?, machine_type=?
+                    ram_total_gb=?, disk_total_gb=?, mac_address=?, 
+                    machine_model=?, serial_number=?, machine_type=?,
+                    mb_manufacturer=?, mb_model=?, mb_version=?
                 WHERE machine_id = ?`,
                 [...specsData, machine_id]
             );
@@ -321,10 +325,9 @@ exports.processTelemetry = async (data) => {
 exports.listMachines = async () => {
     try {
         const [machines] = await db.execute(
-            `SELECT 
-                m.id, m.uuid, m.hostname, m.ip_address, m.os_name, 
-                m.status, m.last_seen, 
-                h.cpu_model, h.ram_total_gb, h.disk_total_gb, h.machine_type
+            `SELECT m.id, m.uuid, m.hostname, m.ip_address, m.os_name, m.status, m.last_seen, 
+                    h.cpu_model, h.cpu_speed_mhz, h.cpu_cores_physical, h.cpu_cores_logical, 
+                    h.ram_total_gb, h.disk_total_gb, h.machine_type 
              FROM machines m 
              LEFT JOIN hardware_specs h ON m.id = h.machine_id 
              ORDER BY m.status DESC, m.hostname`
@@ -345,10 +348,11 @@ exports.getMachineDetails = async (uuid) => {
 
         const [details] = await db.execute(
             `SELECT 
-                m.uuid, m.hostname, m.ip_address, m.os_name, m.status,
-                m.last_seen, m.created_at, m.id AS machine_id,
-                h.cpu_model, h.ram_total_gb, h.disk_total_gb, 
-                h.mac_address, h.machine_type
+                m.uuid, m.hostname, m.ip_address, m.os_name, m.status, m.last_seen, m.created_at, m.id as machine_id,
+                h.cpu_model, h.cpu_speed_mhz, h.cpu_cores_physical, h.cpu_cores_logical,
+                h.ram_total_gb, h.disk_total_gb, h.mac_address,
+                h.machine_model, h.serial_number, h.machine_type,
+                h.mb_manufacturer, h.mb_model, h.mb_version
              FROM machines m
              LEFT JOIN hardware_specs h ON m.id = h.machine_id
              WHERE m.uuid = ?`,
@@ -358,18 +362,12 @@ exports.getMachineDetails = async (uuid) => {
         if (details.length === 0) return null;
 
         const [software] = await db.execute(
-            `SELECT software_name, version, install_date 
-             FROM installed_software 
-             WHERE machine_id = ?
-             ORDER BY software_name`,
+            `SELECT software_name, version, install_date FROM installed_software WHERE machine_id = ? ORDER BY software_name`,
             [machine_id]
         );
 
         const [lastTelemetry] = await db.execute(
-            `SELECT 
-                cpu_usage_percent, ram_usage_percent, disk_free_percent, 
-                disk_smart_status, temperature_celsius, created_at, 
-                last_backup_timestamp
+            `SELECT cpu_usage_percent, ram_usage_percent, disk_free_percent, disk_smart_status, temperature_celsius, created_at, last_backup_timestamp
              FROM telemetry_logs 
              WHERE machine_id = ? 
              ORDER BY created_at DESC 
