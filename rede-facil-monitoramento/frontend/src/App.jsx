@@ -1,35 +1,40 @@
 import React, { useEffect, useState } from 'react';
-import { LayoutDashboard, Server, AlertCircle, Activity, HardDrive, AlertTriangle, Package ,LogOut, Users,Loader2,Smartphone} from 'lucide-react';
+import { LayoutDashboard, Server, Activity, Package, Users, LogOut, Smartphone, Loader2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import io from 'socket.io-client';
 import axios from 'axios';
-import { API_URL } from "./config"; 
+
 
 import Login from './components/Login';
 import MachineDetails from './components/MachineDetails';
 import Inventory from './components/Inventory'; 
 import UserManagement from './components/UserManagement';
-import SimCardManagement from './components/SimCardManagement';
+import SimCardManagement from './components/SimCardManagement'; 
 
-const socket = io(API_URL, {
+const API_URL = "http://localhost:3001";
+const socket = io('http://localhost:3001', {
   transports: ['websocket', 'polling'] 
 });
+
 function App() {
 
   const [machines, setMachines] = useState([]);
   const [stats, setStats] = useState({ total: 0, online: 0, critical: 0 });
   const [lastTelemetry, setLastTelemetry] = useState(null);
 
+  // Estados de Navegação
   const [selectedMachine, setSelectedMachine] = useState(null);
   const [activeTab, setActiveTab] = useState('dashboard');
 
+  // Estados de Autenticação e Usuário
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [currentUser, setCurrentUser] = useState('');
-  const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [userRole, setUserRole] = useState('');
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
 
+  // Função auxiliar (pode ficar aqui)
   const updateStats = (data) => {
     const total = data.length;
     const online = data.filter((m) => m.status === 'online').length;
@@ -37,7 +42,8 @@ function App() {
     setStats({ total, online, critical });
   };
 
-    const fetchMachines = async () => {
+  // Função de busca
+  const fetchMachines = async () => {
     try {
       const res = await axios.get(`${API_URL}/api/machines`);
       setMachines(res.data);
@@ -47,6 +53,7 @@ function App() {
     }
   };
 
+  // Efeito Principal (Carregar Login e Socket)
   useEffect(() => {
     const token = localStorage.getItem('token');
     const user = localStorage.getItem('user_name');
@@ -58,18 +65,13 @@ function App() {
       setUserRole(role || 'suporte');
       fetchMachines(); 
     }
-    
+
     socket.on("connect", () => console.log("🟢 Conectado ao WebSocket"));
     
-   socket.on("new_telemetry", (data) => {
+    socket.on("new_telemetry", (data) => {
       setLastTelemetry(data);
       setMachines(prevMachines => 
-         prevMachines.map(m => 
-            m.uuid === data.machine_uuid ? { 
-                ...m, 
-                status: data.status || 'online' 
-            } : m
-         )
+         prevMachines.map(m => m.uuid === data.machine_uuid ? { ...m, status: data.status || 'online' } : m)
       );
     });
 
@@ -84,26 +86,9 @@ function App() {
     };
   }, []);
 
-  const getStatusBadgeVariant = (status) => {
-      if (status === 'critical') return 'destructive'; 
-      if (status === 'warning') return 'secondary'; 
-      if (status === 'online') return 'default';    
-      return 'outline'; 
-  };
-
-  const getStatusBadgeClass = (status) => {
-      if (status === 'critical') return 'bg-red-100 text-red-700 border-red-200 animate-pulse';
-      if (status === 'warning') return 'bg-orange-100 text-orange-700 border-orange-200';
-      if (status === 'online') return 'bg-emerald-100 text-emerald-700 border-emerald-200';
-      return 'bg-slate-100 text-slate-500';
-  };
-
-  const translateStatus = (status) => {
-      if (status === 'critical') return 'CRÍTICO';
-      if (status === 'warning') return 'ALERTA';
-      if (status === 'online') return 'ONLINE';
-      return 'OFFLINE';
-  };
+  // -----------------------------------------------------------------------
+  // 2. FUNÇÕES DE INTERAÇÃO (HANDLERS)
+  // -----------------------------------------------------------------------
 
   const handleLoginSuccess = (user) => {
     setIsAuthenticated(true);
@@ -115,7 +100,6 @@ function App() {
 
   const handleLogout = () => {
     setIsLoggingOut(true);
-
     setTimeout(() => {
       localStorage.removeItem('token');
       localStorage.removeItem('user_name');
@@ -134,10 +118,28 @@ function App() {
     setSelectedMachine(machine);
   };
 
-   if (!isAuthenticated) {
+  // Helpers de Visualização
+  const getStatusBadgeVariant = (status) => {
+      if (status === 'critical') return 'destructive';
+      if (status === 'warning') return 'secondary';
+      if (status === 'online') return 'default';
+      return 'outline';
+  };
+
+  const getStatusBadgeClass = (status) => {
+      if (status === 'critical') return 'bg-red-100 text-red-700 border-red-200 animate-pulse';
+      if (status === 'warning') return 'bg-orange-100 text-orange-700 border-orange-200';
+      if (status === 'online') return 'bg-emerald-100 text-emerald-700 border-emerald-200';
+      return 'bg-slate-100 text-slate-500';
+  };
+
+  // -----------------------------------------------------------------------
+  // 3. RENDERIZAÇÃO CONDICIONAL (AGORA PODE TER O RETURN)
+  // -----------------------------------------------------------------------
+
+  if (!isAuthenticated) {
     return <Login onLoginSuccess={handleLoginSuccess} />;
   }
-
 
   return (
     <div className="flex h-screen w-full bg-slate-50">
@@ -167,6 +169,7 @@ function App() {
             Inventário
           </button>
 
+          {/* BOTÃO GESTÃO DE CHIPS */}
           <button 
             onClick={() => { setActiveTab('chips'); setSelectedMachine(null); }}
             className={`w-full flex items-center px-3 py-2.5 text-sm font-medium rounded-md transition-colors ${activeTab === 'chips' ? 'bg-slate-800 text-white' : 'hover:bg-slate-800/50 hover:text-white'}`}
@@ -186,7 +189,7 @@ function App() {
           )}
         </nav>
 
-        {/* FOOTER DA SIDEBAR MELHORADO */}
+        {/* FOOTER */}
         <div className="p-4 border-t border-slate-800/50 bg-[#0a0f1d]">
           <div className="flex items-center gap-3 mb-4 pl-1">
             <div className="bg-gradient-to-tr from-blue-600 to-blue-400 rounded-lg h-10 w-10 flex items-center justify-center text-white font-bold text-sm shadow-sm">
@@ -215,15 +218,7 @@ function App() {
                 : 'bg-slate-800/80 text-slate-300 border-slate-700/50 hover:bg-red-500/10 hover:text-red-400 hover:border-red-500/20'
             }`}
           >
-            {isLoggingOut ? (
-              <>
-                <Loader2 className="h-4 w-4 animate-spin" /> Saindo...
-              </>
-            ) : (
-              <>
-                <LogOut className="h-4 w-4" /> Sair do Sistema
-              </>
-            )}
+            {isLoggingOut ? <><Loader2 className="h-4 w-4 animate-spin" /> Saindo...</> : <><LogOut className="h-4 w-4" /> Sair do Sistema</>}
           </button>
         </div>
       </aside>
@@ -232,7 +227,11 @@ function App() {
       <main className="flex-1 flex flex-col overflow-hidden">
         <header className="h-16 bg-white border-b flex items-center justify-between px-8 shadow-sm shrink-0">
           <h2 className="text-xl font-semibold text-slate-800">
-            {selectedMachine ? 'Detalhes do Ativo' : 'Dashboard de Monitoramento'}
+            {selectedMachine ? 'Detalhes do Ativo' : 
+             activeTab === 'inventory' ? 'Gestão de Inventário' : 
+             activeTab === 'chips' ? 'Gestão de Telefonia' :
+             activeTab === 'users' ? 'Gestão de Usuários' :
+             'Dashboard de Monitoramento'}
           </h2>
           <div className="flex items-center gap-4">
              <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200 px-3 py-1">
@@ -243,10 +242,11 @@ function App() {
 
         <div className="flex-1 overflow-auto p-8 space-y-6">
           
+          {/* LÓGICA DE NAVEGAÇÃO ENTRE TELAS */}
           {activeTab === 'inventory' ? (
-                <Inventory userRole={userRole} /> 
-              ): activeTab === 'chips' ? ( 
-                  <SimCardManagement userRole={userRole} />
+              <Inventory userRole={userRole} />
+            ) : activeTab === 'chips' ? (
+              <SimCardManagement userRole={userRole} />
             ) : activeTab === 'users' ? ( 
               <UserManagement />
             ) : selectedMachine ? (
@@ -257,7 +257,7 @@ function App() {
               />
             ) : (
             <>
-              {/* CARDS DE ESTATÍSTICAS */}
+              {/* DASHBOARD PADRÃO */}
               <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
                 <Card>
                   <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -269,6 +269,7 @@ function App() {
                     <p className="text-xs text-slate-500">Registradas na base</p>
                   </CardContent>
                 </Card>
+                
                 <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                         <CardTitle className="text-sm font-medium text-slate-600">Online Agora</CardTitle>
@@ -280,7 +281,7 @@ function App() {
                     </CardContent>
                 </Card>
               </div>
-              {/* TABELA DE MÁQUINAS */}
+              
               <Card className="border-slate-200 shadow-sm">
                 <CardHeader className="bg-white border-b border-slate-100">
                   <CardTitle className="text-lg text-slate-800">Listagem de Ativos</CardTitle>
@@ -306,21 +307,12 @@ function App() {
                         >
                           <TableCell>
                             <Badge 
-                              variant={
-                                machine.status === 'critical' ? 'destructive' : 
-                                machine.status === 'warning' ? 'secondary' : 
-                                machine.status === 'online' ? 'default' : 'outline'
-                              } 
-                              className={`
-                                ${machine.status === 'critical' ? 'bg-red-100 text-red-700 hover:bg-red-200 border-red-200 animate-pulse' : ''}
-                                ${machine.status === 'warning' ? 'bg-orange-100 text-orange-700 hover:bg-orange-200 border-orange-200' : ''}
-                                ${machine.status === 'online' ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200 border-emerald-200' : ''}
-                                font-bold border shadow-none
-                              `}
+                              variant={getStatusBadgeVariant(machine.status)} 
+                              className={`${getStatusBadgeClass(machine.status)} font-bold border shadow-none`}
                             >
                               {machine.status === 'critical' ? 'CRÍTICO' : 
-                              machine.status === 'warning' ? 'ALERTA' : 
-                              machine.status === 'online' ? 'ONLINE' : 'OFFLINE'}
+                               machine.status === 'warning' ? 'ALERTA' : 
+                               machine.status === 'online' ? 'ONLINE' : 'OFFLINE'}
                             </Badge>
                           </TableCell>
                           <TableCell className="font-semibold text-slate-700">{machine.hostname}</TableCell>

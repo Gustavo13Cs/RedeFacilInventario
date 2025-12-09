@@ -1,37 +1,18 @@
-const simCardService = require('../services/simCardService');
+const service = require('../services/simCardService');
 
-exports.listSimCards = async (req, res) => {
-    try {
-        const list = await simCardService.listSimCards();
-        res.json(list);
-    } catch (error) {
-        res.status(500).json({ error: error.message });
-    }
-};
 
-exports.createSimCard = async (req, res) => {
-    try {
-        await simCardService.createSimCard(req.body);
-        res.status(201).json({ message: 'Chip criado!' });
-    } catch (error) {
-        res.status(400).json({ error: error.message });
-    }
-};
+exports.listSimCards = async (req, res) => res.json(await service.listSimCards());
+exports.createSimCard = async (req, res) => res.json(await service.createSimCard(req.body));
+exports.updateSimCard = async (req, res) => res.json(await service.updateSimCard(req.params.id, req.body));
+exports.deleteSimCard = async (req, res) => res.json(await service.deleteSimCard(req.params.id));
 
-exports.updateSimCard = async (req, res) => {
-    try {
-        await simCardService.updateSimCard(req.params.id, req.body);
-        res.json({ message: 'Atualizado!' });
-    } catch (error) {
-        res.status(500).json({ error: error.message });
-    }
-};
 
-exports.deleteSimCard = async (req, res) => {
-    try {
-        await simCardService.deleteSimCard(req.params.id);
-        res.json({ message: 'Deletado!' });
-    } catch (error) {
-        res.status(500).json({ error: error.message });
-    }
-};
+exports.listDevices = async (req, res) => res.json(await service.listDevices());
+exports.createDevice = async (req, res) => res.json(await service.createDevice(req.body));
+exports.deleteDevice = async (req, res) => res.json(await service.deleteDevice(req.params.id));
+
+
+exports.listEmployees = async (req, res) => res.json(await service.listEmployees());
+exports.createEmployee = async (req, res) => res.json(await service.createEmployee(req.body));
+exports.updateEmployee = async (req, res) => res.json(await service.updateEmployee(req.params.id, req.body));
+exports.deleteEmployee = async (req, res) => res.json(await service.deleteEmployee(req.params.id));
