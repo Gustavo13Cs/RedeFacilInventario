@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-// IMPORTAÇÃO 100% SEGURA (Apenas ícones básicos)
-import { Plus, Trash2, Edit2, Smartphone, Save, X, Search, Filter, AlertTriangle, User } from 'lucide-react';
+import { Plus, Trash2, Edit2, Smartphone, CheckCircle, Save, X, Search, Filter, AlertTriangle, User, Paperclip } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -17,10 +16,12 @@ export default function SimCardManagement({ userRole }) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
   const [formData, setFormData] = useState({}); 
-
   const [deleteData, setDeleteData] = useState(null); 
 
-  // --- FILTROS ---
+  const [isLogModalOpen, setIsLogModalOpen] = useState(false);
+  const [deviceLogs, setDeviceLogs] = useState([]);
+  const [viewingDeviceName, setViewingDeviceName] = useState('');
+
   const [searchTerm, setSearchTerm] = useState('');
   const [filterCarrier, setFilterCarrier] = useState('Todas');
   const [filterStatus, setFilterStatus] = useState('Todos');
@@ -43,6 +44,7 @@ export default function SimCardManagement({ userRole }) {
             axios.get(`${API_URL}/devices`),
             axios.get(`${API_URL}/employees`)
         ]);
+        // Proteção contra dados nulos
         setChips(Array.isArray(resChips.data) ? resChips.data : []);
         setDevices(Array.isArray(resDevices.data) ? resDevices.data : []);
         setEmployees(Array.isArray(resEmp.data) ? resEmp.data : []);
@@ -52,10 +54,11 @@ export default function SimCardManagement({ userRole }) {
     }
   };
 
+
   const handleOpenModal = (type, item = null) => {
     setEditingItem(item);
     if (type === 'general') {
-        setFormData(item || { phone_number: '', carrier: 'Vivo', status: 'livre', device_link_id: '', employee_link_id: '', notes: '' });
+        setFormData(item || { phone_number: '', carrier: 'Vivo', status: 'livre', whatsapp_type: 'Normal', device_link_id: '', employee_link_id: '', notes: '' });
     } else if (type === 'devices') {
         setFormData(item || { name: '', model: '', status: 'ativo' });
     } else if (type === 'people') {
@@ -104,10 +107,23 @@ export default function SimCardManagement({ userRole }) {
     } catch (error) { alert("Erro ao deletar (Pode estar em uso)."); }
   };
 
+  const handleViewLogs = async (device) => {
+      try {
+          const res = await axios.get(`${API_URL}/devices/${device.id}/logs`);
+          setDeviceLogs(res.data || []);
+          setViewingDeviceName(device.name);
+          setIsLogModalOpen(true);
+      } catch (error) {
+          console.error(error);
+          alert("Erro ao buscar histórico.");
+      }
+  };
+
   const getAvailableOptions = () => {
       const safeChips = chips || []; 
       const usedDeviceIds = safeChips.filter(c => c.id !== editingItem?.id).map(c => c.device_link_id).filter(Boolean);
       const usedEmployeeIds = safeChips.filter(c => c.id !== editingItem?.id).map(c => c.employee_link_id).filter(Boolean);
+      
       const availableDevices = (devices || []).filter(d => !usedDeviceIds.includes(d.id));
       const availableEmployees = (employees || []).filter(e => !usedEmployeeIds.includes(e.id));
       return { availableDevices, availableEmployees };
@@ -115,8 +131,6 @@ export default function SimCardManagement({ userRole }) {
 
   const { availableDevices, availableEmployees } = getAvailableOptions();
 
-  // --- FILTROS ---
-  
   const filteredChips = (chips || []).filter(c => {
     const search = searchTerm.toLowerCase();
     const matchesSearch = 
@@ -146,19 +160,24 @@ export default function SimCardManagement({ userRole }) {
 
   const getStatusBadge = (status) => {
     switch(status) {
-      // Chips
+
       case 'livre': return <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200">Livre</Badge>;
       case 'uso': return <Badge className="bg-blue-100 text-blue-700 border-blue-200">Em Uso</Badge>;
       case 'banido': return <Badge className="bg-red-100 text-red-700 border-red-200">Banido</Badge>;
-      // Aparelhos (Agora correto!)
-      case 'ativo': return <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200">Ativo</Badge>;
-      case 'manutencao': return <Badge className="bg-orange-50 text-orange-700 border-orange-200">Manutenção</Badge>;
-      case 'quebrado': return <Badge className="bg-red-50 text-red-700 border-red-200">Quebrado</Badge>;
+
+      case 'ativo': return <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 flex w-fit gap-1"><CheckCircle className="w-3 h-3"/> Ativo</Badge>;
+      case 'manutencao': return <Badge className="bg-orange-50 text-orange-700 border-orange-200 flex w-fit gap-1"><AlertTriangle className="w-3 h-3"/> Manut.</Badge>;
+      case 'quebrado': return <Badge className="bg-red-50 text-red-700 border-red-200 flex w-fit gap-1"><X className="w-3 h-3"/> Quebrado</Badge>;
       default: return <Badge variant="outline">{status}</Badge>;
     }
   };
 
-  // --- RENDERIZADORES ---
+  const getWhatsappBadge = (type) => {
+      if (type === 'Business') return <Badge className="bg-green-100 text-green-800 border-green-200">Business</Badge>;
+      if (type === 'Duplicado') return <Badge className="bg-purple-100 text-purple-800 border-purple-200">Duplicado</Badge>;
+      return <Badge variant="secondary" className="bg-slate-100 text-slate-600">Normal</Badge>;
+  };
+
 
   const renderGeneralTab = () => (
     <Card className="border-slate-200 shadow-sm mt-6">
@@ -180,13 +199,14 @@ export default function SimCardManagement({ userRole }) {
         <CardContent className="p-0">
             <Table>
                 <TableHeader>
-                    <TableRow className="bg-slate-50"><TableHead>Número</TableHead><TableHead>Operadora</TableHead><TableHead>Status</TableHead><TableHead>Aparelho</TableHead><TableHead>Responsável</TableHead><TableHead className="text-right">Ações</TableHead></TableRow>
+                    <TableRow className="bg-slate-50"><TableHead>Número</TableHead><TableHead>Operadora</TableHead><TableHead>WhatsApp</TableHead><TableHead>Status</TableHead><TableHead>Aparelho</TableHead><TableHead>Responsável</TableHead><TableHead className="text-right">Ações</TableHead></TableRow>
                 </TableHeader>
                 <TableBody>
                     {filteredChips.map(chip => (
                         <TableRow key={chip.id}>
                             <TableCell className="font-mono font-medium">{chip.phone_number}</TableCell>
                             <TableCell>{chip.carrier}</TableCell>
+                            <TableCell>{getWhatsappBadge(chip.whatsapp_type)}</TableCell>
                             <TableCell>{getStatusBadge(chip.status)}</TableCell>
                             <TableCell className="text-slate-600 flex items-center gap-2">
                                 {chip.device_name ? <><Smartphone className="h-3 w-3"/> {chip.device_name}</> : '-'}
@@ -204,7 +224,7 @@ export default function SimCardManagement({ userRole }) {
                             </TableCell>
                         </TableRow>
                     ))}
-                    {filteredChips.length === 0 && <TableRow><TableCell colSpan={6} className="text-center py-8 text-slate-400">Nenhum registro encontrado.</TableCell></TableRow>}
+                    {filteredChips.length === 0 && <TableRow><TableCell colSpan={7} className="text-center py-8 text-slate-400">Nenhum registro encontrado.</TableCell></TableRow>}
                 </TableBody>
             </Table>
         </CardContent>
@@ -239,7 +259,17 @@ export default function SimCardManagement({ userRole }) {
                             <TableCell>{dev.model}</TableCell>
                             <TableCell>{getStatusBadge(dev.status)}</TableCell>
                             <TableCell className="text-right">
-                                {userRole === 'admin' && <div className="flex justify-end gap-2"><Button variant="ghost" size="sm" onClick={() => handleOpenModal('devices', dev)}><Edit2 className="h-4 w-4 text-blue-600"/></Button><Button variant="ghost" size="sm" onClick={() => requestDelete(dev.id, 'devices')}><Trash2 className="h-4 w-4 text-red-600"/></Button></div>}
+                                <div className="flex justify-end gap-2">
+                                    <Button variant="outline" size="sm" onClick={() => handleViewLogs(dev)} className="h-8 text-slate-600 border-slate-300 gap-1 text-xs">
+                                        <Search className="h-3 w-3"/> Histórico
+                                    </Button>
+                                    {userRole === 'admin' && (
+                                        <>
+                                            <Button variant="ghost" size="sm" onClick={() => handleOpenModal('devices', dev)}><Edit2 className="h-4 w-4 text-blue-600"/></Button>
+                                            <Button variant="ghost" size="sm" onClick={() => requestDelete(dev.id, 'devices')}><Trash2 className="h-4 w-4 text-red-600"/></Button>
+                                        </>
+                                    )}
+                                </div>
                             </TableCell>
                         </TableRow>
                     ))}
@@ -255,7 +285,7 @@ export default function SimCardManagement({ userRole }) {
         <div className="p-4 border-b bg-slate-50/50">
             <div className="relative">
                 <Search className="absolute left-2 top-2 h-4 w-4 text-slate-400" />
-                <input className="w-full pl-8 p-1.5 text-sm border rounded outline-none bg-white" placeholder="Buscar pessoa..." value={searchEmployee} onChange={e => setSearchEmployee(e.target.value)} />
+                <input className="w-full pl-8 p-1.5 text-sm border rounded outline-none" placeholder="Buscar pessoa..." value={searchEmployee} onChange={e => setSearchEmployee(e.target.value)} />
             </div>
         </div>
         <CardContent className="p-0">
@@ -267,16 +297,10 @@ export default function SimCardManagement({ userRole }) {
                             <TableCell className="font-medium flex items-center gap-2"><User className="h-4 w-4 text-slate-400"/> {emp.name}</TableCell>
                             <TableCell><Badge variant="secondary">{emp.department}</Badge></TableCell>
                             <TableCell className="text-right">
-                                {userRole === 'admin' && (
-                                    <div className="flex justify-end gap-2">
-                                        <Button variant="ghost" size="sm" onClick={() => handleOpenModal('people', emp)}><Edit2 className="h-4 w-4 text-blue-600"/></Button>
-                                        <Button variant="ghost" size="sm" onClick={() => requestDelete(emp.id, 'people')}><Trash2 className="h-4 w-4 text-red-600"/></Button>
-                                    </div>
-                                )}
+                                {userRole === 'admin' && <div className="flex justify-end gap-2"><Button variant="ghost" size="sm" onClick={() => handleOpenModal('people', emp)}><Edit2 className="h-4 w-4 text-blue-600"/></Button><Button variant="ghost" size="sm" onClick={() => requestDelete(emp.id, 'people')}><Trash2 className="h-4 w-4 text-red-600"/></Button></div>}
                             </TableCell>
                         </TableRow>
                     ))}
-                    {filteredEmployees.length === 0 && <TableRow><TableCell colSpan={3} className="text-center py-8 text-slate-400">Nenhum colaborador encontrado.</TableCell></TableRow>}
                 </TableBody>
             </Table>
         </CardContent>
@@ -289,7 +313,7 @@ export default function SimCardManagement({ userRole }) {
       <div className="flex flex-col md:flex-row justify-between items-center gap-4">
         <div className="flex bg-slate-100 p-1 rounded-lg">
             <button onClick={() => setActiveTab('general')} className={`flex items-center px-4 py-2 text-sm font-medium rounded-md transition-all ${activeTab === 'general' ? 'bg-white shadow text-blue-700' : 'text-slate-500 hover:text-slate-700'}`}>
-                <Smartphone className="w-4 h-4 mr-2"/> Gestão de Vínculos
+                <Paperclip className="w-4 h-4 mr-2"/> Gestão de Vínculos
             </button>
             <button onClick={() => setActiveTab('devices')} className={`flex items-center px-4 py-2 text-sm font-medium rounded-md transition-all ${activeTab === 'devices' ? 'bg-white shadow text-blue-700' : 'text-slate-500 hover:text-slate-700'}`}>
                 <Smartphone className="w-4 h-4 mr-2"/> Celulares
@@ -322,7 +346,6 @@ export default function SimCardManagement({ userRole }) {
                     <button onClick={() => setIsModalOpen(false)}><X className="h-5 w-5 text-slate-400 hover:text-slate-600"/></button>
                 </div>
                 <form onSubmit={handleSave} className="space-y-4">
-                    
                     {activeTab === 'devices' && (
                         <>
                             <div><label className="text-sm font-bold">ID (Ex: Celular 101)</label><input className="w-full border p-2 rounded" value={formData.name || ''} onChange={e => setFormData({...formData, name: e.target.value})} required /></div>
@@ -337,47 +360,79 @@ export default function SimCardManagement({ userRole }) {
                             </div>
                         </>
                     )}
-
                     {activeTab === 'people' && (
                         <>
                             <div><label className="text-sm font-bold">Nome</label><input className="w-full border p-2 rounded" value={formData.name || ''} onChange={e => setFormData({...formData, name: e.target.value})} required /></div>
                             <div><label className="text-sm font-bold">Departamento</label><input className="w-full border p-2 rounded" value={formData.department || ''} onChange={e => setFormData({...formData, department: e.target.value})} /></div>
                         </>
                     )}
-
                     {activeTab === 'general' && (
                         <>
                             <div><label className="text-xs font-bold text-slate-500">NÚMERO</label><input className="w-full border p-2 rounded font-mono" value={formData.phone_number || ''} onChange={e => setFormData({...formData, phone_number: e.target.value})} required /></div>
                             <div className="grid grid-cols-2 gap-4">
                                 <div><label className="text-xs font-bold text-slate-500">OPERADORA</label><select className="w-full border p-2 rounded bg-white" value={formData.carrier || 'Vivo'} onChange={e => setFormData({...formData, carrier: e.target.value})}><option>Vivo</option><option>Tim</option><option>Claro</option></select></div>
-                                <div><label className="text-xs font-bold text-slate-500">STATUS</label><select className="w-full border p-2 rounded bg-white" value={formData.status || 'livre'} onChange={e => setFormData({...formData, status: e.target.value})}><option value="livre">Livre</option><option value="uso">Em Uso</option><option value="banido">Banido</option></select></div>
+                                <div><label className="text-xs font-bold text-slate-500">STATUS DO CHIP</label><select className="w-full border p-2 rounded bg-white" value={formData.status || 'livre'} onChange={e => setFormData({...formData, status: e.target.value})}><option value="livre">Livre</option><option value="uso">Em Uso</option><option value="banido">Banido</option></select></div>
                             </div>
-                            <div className="bg-slate-50 p-3 rounded border space-y-3">
-                                <div>
-                                    <label className="text-xs font-bold text-slate-500">APARELHO</label>
-                                    <select className="w-full border p-2 rounded bg-white" value={formData.device_link_id || ''} onChange={e => setFormData({...formData, device_link_id: e.target.value})}>
-                                        <option value="">-- Nenhum --</option>
-                                        {availableDevices.map(d => <option key={d.id} value={d.id}>{d.name} - {d.model}</option>)}
-                                        {editingItem?.device_link_id && !availableDevices.find(d => d.id === editingItem.device_link_id) && <option value={editingItem.device_link_id}>{editingItem.device_name} (Atual)</option>}
-                                    </select>
-                                </div>
-                                <div>
-                                    <label className="text-xs font-bold text-slate-500">RESPONSÁVEL</label>
-                                    <select className="w-full border p-2 rounded bg-white" value={formData.employee_link_id || ''} onChange={e => setFormData({...formData, employee_link_id: e.target.value})}>
-                                        <option value="">-- Ninguém --</option>
-                                        {availableEmployees.map(e => <option key={e.id} value={e.id}>{e.name} ({e.department})</option>)}
-                                        {editingItem?.employee_link_id && !availableEmployees.find(e => e.id === editingItem.employee_link_id) && <option value={editingItem.employee_link_id}>{editingItem.employee_name} (Atual)</option>}
-                                    </select>
-                                </div>
+                            
+                            <div>
+                                <label className="text-xs font-bold text-slate-500">TIPO WHATSAPP</label>
+                                <select className="w-full border p-2 rounded bg-white" value={formData.whatsapp_type || 'Normal'} onChange={e => setFormData({...formData, whatsapp_type: e.target.value})}>
+                                    <option value="Normal">Normal</option>
+                                    <option value="Business">Business</option>
+                                    <option value="Duplicado">Duplicado</option>
+                                </select>
+                            </div>
+
+                            <div className="bg-slate-50 p-3 rounded space-y-2 border">
+                                <select className="w-full border p-2 rounded bg-white" value={formData.device_link_id || ''} onChange={e => setFormData({...formData, device_link_id: e.target.value})}>
+                                    <option value="">-- Aparelho (Nenhum) --</option>
+                                    {availableDevices.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+                                    {editingItem?.device_link_id && <option value={editingItem.device_link_id}>{editingItem.device_name} (Atual)</option>}
+                                </select>
+                                <select className="w-full border p-2 rounded bg-white" value={formData.employee_link_id || ''} onChange={e => setFormData({...formData, employee_link_id: e.target.value})}>
+                                    <option value="">-- Pessoa (Ninguém) --</option>
+                                    {availableEmployees.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}
+                                    {editingItem?.employee_link_id && <option value={editingItem.employee_link_id}>{editingItem.employee_name} (Atual)</option>}
+                                </select>
                             </div>
                         </>
                     )}
-
-                    <div className="flex justify-end gap-2 pt-4">
-                        <Button type="button" variant="outline" onClick={() => setIsModalOpen(false)}>Cancelar</Button>
-                        <Button type="submit" className="bg-blue-600 text-white">Salvar</Button>
-                    </div>
+                    <div className="flex justify-end gap-2 mt-4"><Button variant="outline" onClick={() => setIsModalOpen(false)}>Cancelar</Button><Button type="submit">Salvar</Button></div>
                 </form>
+            </Card>
+        </div>, document.body
+      )}
+
+      {/* MODAL DE LOGS (HISTÓRICO) */}
+      {isLogModalOpen && createPortal(
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm">
+            <Card className="w-full max-w-lg bg-white shadow-2xl h-[500px] flex flex-col">
+                <CardHeader className="border-b bg-slate-50 rounded-t-lg flex flex-row justify-between items-center py-4">
+                    <div>
+                        <CardTitle className="text-lg text-slate-800 flex items-center gap-2"><Smartphone className="h-5 w-5 text-blue-600"/> Histórico do Aparelho</CardTitle>
+                        <p className="text-sm text-slate-500">{viewingDeviceName}</p>
+                    </div>
+                    <button onClick={() => setIsLogModalOpen(false)}><X className="h-5 w-5 text-slate-400"/></button>
+                </CardHeader>
+                <div className="flex-1 overflow-auto p-0">
+                    {deviceLogs.length === 0 ? (
+                        <div className="text-center py-10 text-slate-400"><p>Nenhum histórico registrado.</p></div>
+                    ) : (
+                        <div className="divide-y divide-slate-100">
+                            {deviceLogs.map(log => (
+                                <div key={log.id} className="p-4 hover:bg-slate-50 flex gap-4">
+                                    <div className="min-w-[40px] pt-1"><div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center"><CheckCircle className="h-4 w-4 text-blue-600"/></div></div>
+                                    <div>
+                                        <p className="text-sm font-bold text-slate-700">{log.action_type}</p>
+                                        <p className="text-sm text-slate-600">{log.description}</p>
+                                        <p className="text-xs text-slate-400 mt-1">{new Date(log.created_at).toLocaleString()}</p>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+                <div className="p-4 border-t bg-slate-50 text-center"><Button variant="outline" onClick={() => setIsLogModalOpen(false)} className="w-full">Fechar</Button></div>
             </Card>
         </div>, document.body
       )}
@@ -386,12 +441,9 @@ export default function SimCardManagement({ userRole }) {
         <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm">
           <Card className="w-full max-w-sm bg-white shadow-xl p-6 text-center">
               <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mb-4 mx-auto"><AlertTriangle className="h-6 w-6 text-red-600" /></div>
-              <h3 className="text-lg font-bold mb-2">Excluir Item?</h3>
-              <p className="text-sm text-slate-500 mb-6">Tem certeza? Essa ação não pode ser desfeita.</p>
-              <div className="flex gap-2 justify-center">
-                <Button variant="outline" onClick={() => setDeleteData(null)}>Cancelar</Button>
-                <Button onClick={confirmDelete} className="bg-red-600 hover:bg-red-700 text-white">Sim, Excluir</Button>
-              </div>
+              <h3 className="text-lg font-bold mb-2">Excluir?</h3>
+              <p className="text-sm text-slate-500 mb-6">Essa ação não pode ser desfeita.</p>
+              <div className="flex gap-2 justify-center"><Button variant="outline" onClick={() => setDeleteData(null)}>Cancelar</Button><Button onClick={confirmDelete} variant="destructive">Excluir</Button></div>
           </Card>
         </div>, document.body
       )}

@@ -8,6 +8,7 @@ router.put('/:id', controller.updateSimCard);
 router.delete('/:id', controller.deleteSimCard);
 
 router.get('/devices', controller.listDevices);
+router.get('/devices/:id/logs', controller.getDeviceLogs);
 router.post('/devices', controller.createDevice);
 router.delete('/devices/:id', controller.deleteDevice);
 

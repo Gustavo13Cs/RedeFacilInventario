@@ -6,11 +6,10 @@ exports.createSimCard = async (req, res) => res.json(await service.createSimCard
 exports.updateSimCard = async (req, res) => res.json(await service.updateSimCard(req.params.id, req.body));
 exports.deleteSimCard = async (req, res) => res.json(await service.deleteSimCard(req.params.id));
 
-
 exports.listDevices = async (req, res) => res.json(await service.listDevices());
+exports.getDeviceLogs = async (req, res) => res.json(await service.getDeviceLogs(req.params.id)); 
 exports.createDevice = async (req, res) => res.json(await service.createDevice(req.body));
 exports.deleteDevice = async (req, res) => res.json(await service.deleteDevice(req.params.id));
-
 
 exports.listEmployees = async (req, res) => res.json(await service.listEmployees());
 exports.createEmployee = async (req, res) => res.json(await service.createEmployee(req.body));
