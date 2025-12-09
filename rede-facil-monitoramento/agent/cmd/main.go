@@ -10,7 +10,7 @@ import (
 	"net/http"
 	"os"
 	"os/user"
-	"os/exec" // Importação necessária para executar comandos do sistema
+	"os/exec" // Importação necessária para comandos do sistema (WMIC)
 	"runtime"
 	"strings"
 	"time"
@@ -37,10 +37,14 @@ type MachineInfo struct {
 	IPAddress         string     `json:"ip_address"`
 	OSName            string     `json:"os_name"`
 	CPUModel          string     `json:"cpu_model"`
+    // 🚨 NOVOS CAMPOS ADICIONADOS PARA INVENTÁRIO DO PROCESSADOR
+    CPUSpeedMhz       float64    `json:"cpu_speed_mhz"`
+    CPUCoresPhysical  int        `json:"cpu_cores_physical"`
+    CPUCoresLogical   int        `json:"cpu_cores_logical"`
+    
 	RAMTotalGB        float64    `json:"ram_total_gb"`
 	DiskTotalGB       float64    `json:"disk_total_gb"`
 	MACAddress        string     `json:"mac_address"`
-	// 🚨 CAMPOS DE INVENTÁRIO DE HARDWARE
 	MachineModel      string     `json:"machine_model"`
 	SerialNumber      string     `json:"serial_number"`
 	InstalledSoftware []Software `json:"installed_software"`
@@ -66,7 +70,7 @@ type RegistrationResponse struct {
 	MachineIP         string `json:"ip_address"`
 }
 
-// 🚨 FUNÇÃO AUXILIAR PARA COLETAR DADOS DE HARDWARE VIA WMIC (Windows)
+// FUNÇÃO AUXILIAR PARA COLETAR DADOS DE HARDWARE VIA WMIC (Windows)
 func execWmic(query string) string {
 	if runtime.GOOS != "windows" {
 		return "N/A"
@@ -78,11 +82,9 @@ func execWmic(query string) string {
 	if err != nil {
 		return "N/A"
 	}
-	// Limpa e formata a saída, removendo cabeçalhos e espaços em branco
 	result := strings.TrimSpace(out.String())
 	lines := strings.Split(result, "\n")
 	if len(lines) > 1 {
-		// Retorna apenas a segunda linha (o valor)
 		return strings.TrimSpace(lines[1])
 	}
 	return "N/A"
@@ -133,16 +135,27 @@ func collectStaticInfo() MachineInfo {
 	cInfos, _ := cpu.Info()
 	dPartitions, _ := disk.Partitions(false)
 
+    // 🚨 LÓGICA DE COLETA DO PROCESSADOR ATUALIZADA
 	cpuModel := "N/A"
+    var cpuSpeed float64
+    var cpuCoresPhysical int
+    var cpuCoresLogical int
+    
 	if len(cInfos) > 0 {
-		cpuModel = cInfos[0].ModelName
+		cpuModel = cInfos[0].ModelName // Modelo
+        cpuSpeed = cInfos[0].Mhz // Velocidade em MHz
 	}
-	
-	// 🚨 COLETANDO MARCA, MODELO E SERIAL USANDO WMIC (RESOLVENDO ERROS DE COMPILAÇÃO)
+
+    // Contagem de núcleos
+	cpuCoresPhysical, _ = cpu.Counts(false) // Núcleos físicos
+	cpuCoresLogical, _ = cpu.Counts(true)  // Núcleos lógicos (Threads)
+    // FIM DA COLETA DO PROCESSADOR
+    
+	// Coleta de Modelo e Serial (WMIC)
 	machineModel := execWmic("csproduct get name")
 	serialNumber := execWmic("bios get serialnumber")
 	
-	// Se o WMIC falhar (comum em VMs), usa o HostID como fallback para o Serial
+	// Se o WMIC falhar, usa o HostID como fallback para o Serial
 	if serialNumber == "N/A" {
 		serialNumber = hInfo.HostID
 	}
@@ -167,10 +180,14 @@ func collectStaticInfo() MachineInfo {
 		IPAddress:         getLocalIP(),
 		OSName:            fmt.Sprintf("%s %s", hInfo.OS, hInfo.Platform),
 		CPUModel:          cpuModel,
+        // 🚨 NOVOS DADOS DO PROCESSADOR
+        CPUSpeedMhz:       cpuSpeed,
+        CPUCoresPhysical:  cpuCoresPhysical,
+        CPUCoresLogical:   cpuCoresLogical,
+        
 		RAMTotalGB:        float64(mInfo.Total) / (1024 * 1024 * 1024),
 		DiskTotalGB:       diskTotalGB,
 		MACAddress:        "00:00:00:00:00:00",
-		// 🚨 DADOS DE INVENTÁRIO ENVIADOS
 		MachineModel:      machineModel,
 		SerialNumber:      serialNumber,
 		InstalledSoftware: []Software{{Name: "Agente Go", Version: "2.1"}},
@@ -343,7 +360,6 @@ func postData(endpoint string, data interface{}) {
 }
 
 func registerMachine(info MachineInfo) {
-	// Rota corrigida para /api/register
 	url := fmt.Sprintf("%s/register", API_BASE_URL) 
 	client := http.Client{Timeout: 5 * time.Second}
 
