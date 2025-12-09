@@ -93,6 +93,7 @@ exports.registerMachine = async ({
     disk_total_gb,
     mac_address,
     machine_model, serial_number,
+    machine_type,
     installed_software
 }) => {
     if (!uuid || !hostname || !ip_address || !os_name) {
@@ -108,17 +109,14 @@ exports.registerMachine = async ({
             `INSERT INTO machines (uuid, hostname, ip_address, os_name, status) 
              VALUES (?, ?, ?, ?, 'online') 
              ON DUPLICATE KEY UPDATE 
-                 hostname=?, ip_address=?, os_name=?, last_seen=CURRENT_TIMESTAMP, status='online'`,
+             hostname=?, ip_address=?, os_name=?, last_seen=CURRENT_TIMESTAMP, status='online'`,
             [uuid, hostname, ip_address, os_name, hostname, ip_address, os_name]
         );
 
         const [rows] = await connection.execute('SELECT id FROM machines WHERE uuid = ?', [uuid]);
         const machine_id = rows[0].id;
 
-        const [specsRows] = await connection.execute(
-            'SELECT id FROM hardware_specs WHERE machine_id = ?', 
-            [machine_id]
-        );
+        const [specsRows] = await connection.execute('SELECT id FROM hardware_specs WHERE machine_id = ?', [machine_id]);
 
         const specsData = [
             cpu_model || null,
@@ -129,31 +127,32 @@ exports.registerMachine = async ({
             disk_total_gb || null,
             mac_address || null,
             machine_model || null,
-            serial_number || null
+            serial_number || null,
+            machine_type || null
         ];
 
         if (specsRows.length === 0) {
             await connection.execute(
                 `INSERT INTO hardware_specs (
-                    machine_id, cpu_model, cpu_speed_mhz, cpu_cores_physical, cpu_cores_logical, 
-                    ram_total_gb, disk_total_gb, mac_address, machine_model, serial_number
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                    machine_id,
+                    cpu_model, cpu_speed_mhz, cpu_cores_physical, cpu_cores_logical,
+                    ram_total_gb, disk_total_gb, mac_address,
+                    machine_model, serial_number, machine_type
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
                 [machine_id, ...specsData]
             );
         } else {
             await connection.execute(
                 `UPDATE hardware_specs SET 
                     cpu_model=?, cpu_speed_mhz=?, cpu_cores_physical=?, cpu_cores_logical=?,
-                    ram_total_gb=?, disk_total_gb=?, mac_address=?, machine_model=?, serial_number=?
-                 WHERE machine_id = ?`,
+                    ram_total_gb=?, disk_total_gb=?, mac_address=?,
+                    machine_model=?, serial_number=?, machine_type=?
+                WHERE machine_id = ?`,
                 [...specsData, machine_id]
             );
         }
 
-        await connection.execute(
-            'DELETE FROM installed_software WHERE machine_id = ?', 
-            [machine_id]
-        );
+        await connection.execute('DELETE FROM installed_software WHERE machine_id = ?', [machine_id]);
 
         const validSoftware = (installed_software || []).filter(isValidSoftware);
 
@@ -325,7 +324,7 @@ exports.listMachines = async () => {
             `SELECT 
                 m.id, m.uuid, m.hostname, m.ip_address, m.os_name, 
                 m.status, m.last_seen, 
-                h.cpu_model, h.ram_total_gb, h.disk_total_gb 
+                h.cpu_model, h.ram_total_gb, h.disk_total_gb, h.machine_type
              FROM machines m 
              LEFT JOIN hardware_specs h ON m.id = h.machine_id 
              ORDER BY m.status DESC, m.hostname`
@@ -349,7 +348,7 @@ exports.getMachineDetails = async (uuid) => {
                 m.uuid, m.hostname, m.ip_address, m.os_name, m.status,
                 m.last_seen, m.created_at, m.id AS machine_id,
                 h.cpu_model, h.ram_total_gb, h.disk_total_gb, 
-                h.mac_address
+                h.mac_address, h.machine_type
              FROM machines m
              LEFT JOIN hardware_specs h ON m.id = h.machine_id
              WHERE m.uuid = ?`,

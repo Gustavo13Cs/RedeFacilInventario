@@ -10,7 +10,7 @@ import (
 	"net/http"
 	"os"
 	"os/user"
-	"os/exec" // Importação necessária para comandos do sistema (WMIC)
+	"os/exec" // Importação necessária para executar comandos do sistema (WMIC)
 	"runtime"
 	"strings"
 	"time"
@@ -37,7 +37,7 @@ type MachineInfo struct {
 	IPAddress         string     `json:"ip_address"`
 	OSName            string     `json:"os_name"`
 	CPUModel          string     `json:"cpu_model"`
-    // 🚨 NOVOS CAMPOS ADICIONADOS PARA INVENTÁRIO DO PROCESSADOR
+    // 🚨 CAMPOS DE INVENTÁRIO DE CPU
     CPUSpeedMhz       float64    `json:"cpu_speed_mhz"`
     CPUCoresPhysical  int        `json:"cpu_cores_physical"`
     CPUCoresLogical   int        `json:"cpu_cores_logical"`
@@ -45,8 +45,12 @@ type MachineInfo struct {
 	RAMTotalGB        float64    `json:"ram_total_gb"`
 	DiskTotalGB       float64    `json:"disk_total_gb"`
 	MACAddress        string     `json:"mac_address"`
+    // 🚨 CAMPOS DE INVENTÁRIO DE HARDWARE
 	MachineModel      string     `json:"machine_model"`
 	SerialNumber      string     `json:"serial_number"`
+    // 🚨 NOVO CAMPO: TIPO DO EQUIPAMENTO
+    MachineType       string     `json:"machine_type"`
+    
 	InstalledSoftware []Software `json:"installed_software"`
 }
 
@@ -89,6 +93,37 @@ func execWmic(query string) string {
 	}
 	return "N/A"
 }
+
+// 🚨 NOVO: FUNÇÃO PARA MAPEAMENTO ESPECÍFICO DO TIPO DE CHASSIS
+func getMachineType() string {
+    if runtime.GOOS != "windows" {
+        return "Indefinido"
+    }
+
+    // Executa WMIC para obter o código numérico do tipo de chassi
+    chassisTypeOutput := execWmic("csenclosure get chassistypes")
+    chassisType := strings.TrimSpace(chassisTypeOutput)
+
+    // Mapeamento baseado nos códigos da Microsoft (Win32_SystemEnclosure)
+    switch chassisType {
+    case "8", "9", "10", "14":
+        return "Notebook/Laptop"
+    case "3", "4", "5", "6", "7", "13", "15", "16":
+        return "Desktop/Workstation"
+    case "17", "21", "22", "23":
+        return "Servidor"
+    default:
+        // Fallback para VM (se o WMIC retornar um valor genérico)
+        productName := execWmic("csproduct get name")
+        if strings.Contains(strings.ToLower(productName), "vmware") || 
+           strings.Contains(strings.ToLower(productName), "virtualbox") ||
+           strings.Contains(strings.ToLower(productName), "server") {
+            return "VM/Servidor"
+        }
+        return "Outro/Indefinido"
+    }
+}
+
 
 func getLocalIP() string {
 	ifaces, err := net.Interfaces()
@@ -135,30 +170,30 @@ func collectStaticInfo() MachineInfo {
 	cInfos, _ := cpu.Info()
 	dPartitions, _ := disk.Partitions(false)
 
-    // 🚨 LÓGICA DE COLETA DO PROCESSADOR ATUALIZADA
 	cpuModel := "N/A"
-    var cpuSpeed float64
-    var cpuCoresPhysical int
-    var cpuCoresLogical int
-    
+	var cpuSpeed float64
+	var cpuCoresPhysical int
+	var cpuCoresLogical int
+	
+    // COLETANDO DADOS DETALHADOS DA CPU
 	if len(cInfos) > 0 {
-		cpuModel = cInfos[0].ModelName // Modelo
-        cpuSpeed = cInfos[0].Mhz // Velocidade em MHz
+		cpuModel = cInfos[0].ModelName 
+		cpuSpeed = cInfos[0].Mhz 
 	}
 
-    // Contagem de núcleos
-	cpuCoresPhysical, _ = cpu.Counts(false) // Núcleos físicos
-	cpuCoresLogical, _ = cpu.Counts(true)  // Núcleos lógicos (Threads)
-    // FIM DA COLETA DO PROCESSADOR
-    
-	// Coleta de Modelo e Serial (WMIC)
+	cpuCoresPhysical, _ = cpu.Counts(false)
+	cpuCoresLogical, _ = cpu.Counts(true)
+    // FIM DA COLETA DE CPU
+
 	machineModel := execWmic("csproduct get name")
 	serialNumber := execWmic("bios get serialnumber")
 	
-	// Se o WMIC falhar, usa o HostID como fallback para o Serial
 	if serialNumber == "N/A" {
 		serialNumber = hInfo.HostID
 	}
+    
+    // 🚨 COLETANDO O TIPO DA MÁQUINA
+    machineType := getMachineType() 
 
 	var diskTotalGB float64
 	rootPath := "/"
@@ -180,17 +215,16 @@ func collectStaticInfo() MachineInfo {
 		IPAddress:         getLocalIP(),
 		OSName:            fmt.Sprintf("%s %s", hInfo.OS, hInfo.Platform),
 		CPUModel:          cpuModel,
-        // 🚨 NOVOS DADOS DO PROCESSADOR
-        CPUSpeedMhz:       cpuSpeed,
-        CPUCoresPhysical:  cpuCoresPhysical,
-        CPUCoresLogical:   cpuCoresLogical,
-        
+		CPUSpeedMhz:       cpuSpeed,
+		CPUCoresPhysical:  cpuCoresPhysical,
+		CPUCoresLogical:   cpuCoresLogical,
 		RAMTotalGB:        float64(mInfo.Total) / (1024 * 1024 * 1024),
 		DiskTotalGB:       diskTotalGB,
 		MACAddress:        "00:00:00:00:00:00",
 		MachineModel:      machineModel,
 		SerialNumber:      serialNumber,
-		InstalledSoftware: []Software{{Name: "Agente Go", Version: "2.1"}},
+        MachineType:       machineType, // 🚨 CAMPO ENVIADO
+		InstalledSoftware: []Software{{Name: "Agente Go", Version: "2.3"}},
 	}
 }
 
