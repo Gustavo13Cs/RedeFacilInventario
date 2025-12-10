@@ -214,13 +214,21 @@ exports.processTelemetry = async (data) => {
 
         const disk_status = disk_smart_status || 'OK';
 
+        const backup_time = (last_backup_timestamp && last_backup_timestamp.trim() !== "") 
+                            ? last_backup_timestamp 
+                            : null;
+
         await db.execute(
             `INSERT INTO telemetry_logs (
                 machine_id, cpu_usage_percent, ram_usage_percent, disk_free_percent,
                 disk_smart_status, temperature_celsius, last_backup_timestamp
              ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-            [machine_id, cpu_usage, ram_usage, disk_free, disk_status, temperature, last_backup_timestamp]
+            [machine_id, cpu_usage, ram_usage, disk_free, disk_status, temperature, backup_time] // <--- MUDOU AQUI
         );
+
+        if (backup_time) {
+            await checkBackupHealth(machine_id, backup_time);
+        }
 
         if (last_backup_timestamp) {
             await checkBackupHealth(machine_id, last_backup_timestamp);
@@ -319,9 +327,6 @@ exports.processTelemetry = async (data) => {
     }
 };
 
-// ==========================================================
-// OUTRAS FUNÇÕES
-// ==========================================================
 exports.listMachines = async () => {
     try {
         const [machines] = await db.execute(
