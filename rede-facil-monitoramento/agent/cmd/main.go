@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"net" // Biblioteca padrão Go (net.IP, etc.)
-	"net/http" // Necessário para o client.Post
+	"net" 
+	"net/http" 
 	"os"
 	"os/user"
 	"os/exec" 
@@ -65,6 +65,9 @@ type MachineInfo struct {
     
     GPUModel                string `json:"gpu_model"`
     GPUVRAMMB               int    `json:"gpu_vram_mb"`
+    
+    // 🚨 NOVO CAMPO: Última Inicialização
+    LastBootTime            string `json:"last_boot_time"` 
     
     NetworkInterfaces []NetworkInterface `json:"network_interfaces"` 
     
@@ -241,6 +244,7 @@ func getMachineUUID() string {
 	return fmt.Sprintf("%s-%s", h, username)
 }
 
+// 🚨 FUNÇÃO DE COLETA ESTÁTICA COM LAST_BOOT_TIME ADICIONADO
 func collectStaticInfo() MachineInfo {
 	hInfo, _ := host.Info()
 	mInfo, _ := mem.VirtualMemory()
@@ -280,7 +284,16 @@ func collectStaticInfo() MachineInfo {
     // COLETANDO INFORMAÇÕES DA GPU
     gpuModel, gpuVRAM := getGPUInfo() 
 
-    // 🚨 COLETANDO PLACAS DE REDE
+    // 🚨 COLETA DA ÚLTIMA INICIALIZAÇÃO
+    bootTime, err := host.BootTime()
+    var lastBootTime string
+    if err == nil {
+        lastBootTime = time.Unix(int64(bootTime), 0).Format("2006-01-02 15:04:05")
+    } else {
+        lastBootTime = "N/A"
+    }
+
+    // COLETANDO PLACAS DE REDE
     networkInterfaces := collectNetworkInterfaces()
 
 	var diskTotalGB float64
@@ -320,10 +333,13 @@ func collectStaticInfo() MachineInfo {
         GPUModel: gpuModel,
         GPUVRAMMB: gpuVRAM,
         
+        // 🚨 NOVO CAMPO ENVIADO
+        LastBootTime: lastBootTime,
+        
         // ENVIANDO O ARRAY DE PLACAS DE REDE
         NetworkInterfaces: networkInterfaces,
         
-		InstalledSoftware: []Software{{Name: "Agente Go", Version: "2.7"}},
+		InstalledSoftware: []Software{{Name: "Agente Go", Version: "2.8"}},
 	}
 }
 

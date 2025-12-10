@@ -95,6 +95,7 @@ exports.registerMachine = async ({
     mb_version,
     gpu_model,
     gpu_vram_mb,
+    last_boot_time,
     network_interfaces,
     installed_software
 }) => {
@@ -135,7 +136,8 @@ exports.registerMachine = async ({
             mb_model || null,
             mb_version || null,
             gpu_model || null,
-            gpu_vram_mb || null
+            gpu_vram_mb || null,
+            last_boot_time || null
         ];
 
         if (specsRows.length === 0) {
@@ -146,8 +148,8 @@ exports.registerMachine = async ({
                     ram_total_gb, disk_total_gb, mac_address,
                     machine_model, serial_number, machine_type,
                     mb_manufacturer, mb_model, mb_version,
-                    gpu_model, gpu_vram_mb
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                    gpu_model, gpu_vram_mb, last_boot_time
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
                 [machine_id, ...specsData]
             );
         } else {
@@ -157,7 +159,7 @@ exports.registerMachine = async ({
                     ram_total_gb=?, disk_total_gb=?, mac_address=?,
                     machine_model=?, serial_number=?, machine_type=?,
                     mb_manufacturer=?, mb_model=?, mb_version=?,
-                    gpu_model=?, gpu_vram_mb=?
+                    gpu_model=?, gpu_vram_mb=?, last_boot_time=?
                 WHERE machine_id = ?`,
                 [...specsData, machine_id]
             );
@@ -212,7 +214,6 @@ exports.registerMachine = async ({
 // ==========================================================
 // FUNÇÃO processTelemetry
 // ==========================================================
-
 exports.processTelemetry = async (data) => {
     if (!data) return;
 
@@ -365,7 +366,7 @@ exports.listMachines = async () => {
 };
 
 // ==========================================================
-// FUNÇÃO getMachineDetails (BUSCA PLACAS DE REDE)
+// FUNÇÃO getMachineDetails
 // ==========================================================
 exports.getMachineDetails = async (uuid) => {
     if (!uuid) return null;
@@ -381,7 +382,7 @@ exports.getMachineDetails = async (uuid) => {
                 h.ram_total_gb, h.disk_total_gb, h.mac_address,
                 h.machine_model, h.serial_number, h.machine_type,
                 h.mb_manufacturer, h.mb_model, h.mb_version,
-                h.gpu_model, h.gpu_vram_mb
+                h.gpu_model, h.gpu_vram_mb, h.last_boot_time
              FROM machines m
              LEFT JOIN hardware_specs h ON m.id = h.machine_id
              WHERE m.uuid = ?`,
@@ -398,12 +399,16 @@ exports.getMachineDetails = async (uuid) => {
         );
 
         const [software] = await db.execute(
-            `SELECT software_name, version, install_date FROM installed_software WHERE machine_id = ? ORDER BY software_name`,
+            `SELECT software_name, version, install_date 
+             FROM installed_software 
+             WHERE machine_id = ? 
+             ORDER BY software_name`,
             [machine_id]
         );
 
         const [lastTelemetry] = await db.execute(
-            `SELECT cpu_usage_percent, ram_usage_percent, disk_free_percent, disk_smart_status, temperature_celsius, created_at, last_backup_timestamp
+            `SELECT cpu_usage_percent, ram_usage_percent, disk_free_percent, 
+                    disk_smart_status, temperature_celsius, created_at, last_backup_timestamp
              FROM telemetry_logs 
              WHERE machine_id = ? 
              ORDER BY created_at DESC 
@@ -428,7 +433,7 @@ exports.getMachineDetails = async (uuid) => {
         };
 
     } catch (error) {
-        console.error('Erro em getMachineDetails:', error.message);
+        console.error('Erro no Service (getMachineDetails):', error.message);
         throw error;
     }
 };
