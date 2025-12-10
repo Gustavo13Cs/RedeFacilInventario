@@ -11,8 +11,6 @@ import { API_URL } from '../config';
 
 export default function MachineDetails({ machine, onBack, socket }) {
 
-    console.log("🔍 DADOS DA MÁQUINA:", machine);
-
   const [telemetryData, setTelemetryData] = useState([]);
   const [currentTemp, setCurrentTemp] = useState(0);
   const [currentDiskFree, setCurrentDiskFree] = useState(0);

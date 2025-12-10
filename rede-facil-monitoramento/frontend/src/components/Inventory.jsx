@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { createPortal } from 'react-dom'; // Para o Modal ficar por cima de tudo
-import { Plus, Edit2, Trash2, Box, CheckCircle, AlertOctagon, Monitor, Save, X, Filter, Search, FileSpreadsheet, FileText, AlertTriangle, Layers } from 'lucide-react'; // Adicionei 'Layers' para quantidade
+import { createPortal } from 'react-dom';
+import { Plus, Edit2, Trash2, Box, CheckCircle, AlertOctagon, Monitor, Save, X, Filter, Search, FileSpreadsheet, FileText, AlertTriangle, Layers } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import axios from 'axios';
-
 import { generateExcel, generatePDF } from '@/utils/exportUtils';
+import { API_URL } from '../config';
 
 export default function Inventory({ userRole }) {
   const [items, setItems] = useState([]);
@@ -22,25 +22,33 @@ export default function Inventory({ userRole }) {
   const [itemToDelete, setItemToDelete] = useState(null); 
 
   const [formData, setFormData] = useState({
-    type: 'Monitor',
-    model: '',
-    serial: '',
-    status: 'disponivel',
-    assigned_to: '',
-    quantity: 1
+    type: 'Monitor', model: '', serial: '', status: 'disponivel', assigned_to: '', quantity: 1
   });
 
-  const API_URL = "http://localhost:3001/api/inventory";
+  // --- AUTENTICAÇÃO E CONFIG ---
+  const getAuthHeaders = () => {
+    const token = localStorage.getItem('token');
+    return { headers: { Authorization: `Bearer ${token}` } };
+  };
 
+  const INVENTORY_API = `${API_URL}/api/inventory`;
+
+  // --- BUSCA DADOS ---
   useEffect(() => { fetchInventory(); }, []);
   
   const fetchInventory = async () => {
     try {
-      const res = await axios.get(API_URL);
+      const res = await axios.get(INVENTORY_API, getAuthHeaders()); 
       setItems(res.data);
-    } catch (error) { console.error("Erro ao buscar inventário:", error); }
+    } catch (error) { 
+        console.error("Erro ao buscar inventário:", error);
+        if (error.response?.status === 401) {
+            // Opcional: Redirecionar para login ou avisar
+        }
+    }
   };
 
+  // --- FILTROS E ESTATÍSTICAS (RECUPERADOS) ---
   const filteredItems = items.filter(item => {
     const matchesType = filterType === 'Todos' || item.type === filterType;
     const matchesStatus = filterStatus === 'Todos' || item.status === filterStatus;
@@ -49,6 +57,14 @@ export default function Inventory({ userRole }) {
     return matchesType && matchesStatus && matchesSearch;
   });
 
+  const stats = {
+    total: items.length,
+    disponivel: items.filter(i => i.status === 'disponivel').length,
+    em_uso: items.filter(i => i.status === 'em_uso').length,
+    falta: items.filter(i => i.status === 'falta').length,
+  };
+
+  // --- EXPORTAÇÃO (RECUPERADOS) ---
   const handleExportExcel = () => {
     const dataToExport = filteredItems.map(item => ({
       'ID': item.id,
@@ -85,35 +101,10 @@ export default function Inventory({ userRole }) {
     });
   };
 
-  const stats = {
-    total: items.length,
-    disponivel: items.filter(i => i.status === 'disponivel').length,
-    em_uso: items.filter(i => i.status === 'em_uso').length,
-    falta: items.filter(i => i.status === 'falta').length,
-  };
-
+  // --- AÇÕES DO FORMULÁRIO ---
   const handleInputChange = (e) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
-  };
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    try {
-      const payload = { 
-          ...formData, 
-          assigned_to: formData.assigned_to || '',
-          quantity: parseInt(formData.quantity) 
-      };
-
-      if (editingId) {
-        await axios.put(`${API_URL}/${editingId}`, payload);
-      } else {
-        await axios.post(API_URL, payload);
-      }
-      fetchInventory(); 
-      closeForm();
-    } catch (error) { alert("Erro ao salvar."); console.error(error); }
   };
 
   const startEdit = (item) => {
@@ -128,17 +119,40 @@ export default function Inventory({ userRole }) {
 
   const requestDelete = (id) => { setItemToDelete(id); };
 
-  const confirmDelete = async () => {
-    if (itemToDelete) {
-      try { await axios.delete(`${API_URL}/${itemToDelete}`); fetchInventory(); setItemToDelete(null); } 
-      catch (error) { console.error("Erro ao deletar:", error); alert("Erro ao excluir item."); }
-    }
-  };
-
   const closeForm = () => {
     setIsFormOpen(false);
     setEditingId(null);
     setFormData({ type: 'Monitor', model: '', serial: '', status: 'disponivel', assigned_to: '', quantity: 1 });
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    try {
+      const payload = { 
+          ...formData, 
+          assigned_to: formData.assigned_to || '',
+          quantity: parseInt(formData.quantity) 
+      };
+
+      if (editingId) {
+        await axios.put(`${INVENTORY_API}/${editingId}`, payload, getAuthHeaders());
+      } else {
+        await axios.post(INVENTORY_API, payload, getAuthHeaders());
+      }
+      fetchInventory(); 
+      closeForm();
+    } catch (error) { alert("Erro ao salvar."); console.error(error); }
+  };
+
+  const confirmDelete = async () => {
+    if (itemToDelete) {
+      try { 
+          await axios.delete(`${INVENTORY_API}/${itemToDelete}`, getAuthHeaders()); 
+          fetchInventory(); 
+          setItemToDelete(null); 
+      } 
+      catch (error) { console.error("Erro ao deletar:", error); alert("Erro ao excluir item."); }
+    }
   };
 
   const getStatusBadge = (status) => {

@@ -1,4 +1,3 @@
-// src/socket/socketHandler.js
 let io;
 
 exports.init = (httpServer) => {
@@ -12,7 +11,7 @@ exports.init = (httpServer) => {
     return io;
 };
 
-exports.getIo = () => {
+exports.getIO = () =>{
     if (!io) {
         throw new Error('Socket.io não foi inicializado! Chame .init(server) em server.js.');
     }

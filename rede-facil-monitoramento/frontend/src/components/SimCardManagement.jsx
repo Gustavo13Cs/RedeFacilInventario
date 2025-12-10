@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import axios from 'axios';
+import { API_URL } from '../config';
 
 export default function SimCardManagement({ userRole }) {
   const [activeTab, setActiveTab] = useState('general'); 
@@ -31,92 +32,71 @@ export default function SimCardManagement({ userRole }) {
 
   const [searchEmployee, setSearchEmployee] = useState('');
 
-  const API_URL = "http://localhost:3001/api/chips";
+  const getAuthHeaders = () => {
+    const token = localStorage.getItem('token');
+    return { headers: { Authorization: `Bearer ${token}` } };
+  };
 
-  useEffect(() => {
-    fetchData();
-  }, []);
+  const CHIPS_API = `${API_URL}/api/chips`;
+
+  useEffect(() => { fetchData(); }, []);
 
   const fetchData = async () => {
     try {
+        const config = getAuthHeaders(); 
         const [resChips, resDevices, resEmp] = await Promise.all([
-            axios.get(API_URL),
-            axios.get(`${API_URL}/devices`),
-            axios.get(`${API_URL}/employees`)
+            axios.get(CHIPS_API, config),               
+            axios.get(`${CHIPS_API}/devices`, config), 
+            axios.get(`${CHIPS_API}/employees`, config) 
         ]);
-        // Proteção contra dados nulos
         setChips(Array.isArray(resChips.data) ? resChips.data : []);
         setDevices(Array.isArray(resDevices.data) ? resDevices.data : []);
         setEmployees(Array.isArray(resEmp.data) ? resEmp.data : []);
     } catch (error) { 
         console.error("Erro ao carregar dados", error);
-        setChips([]); setDevices([]); setEmployees([]);
+        if (error.response?.status === 401) window.location.reload();
     }
-  };
-
-
-  const handleOpenModal = (type, item = null) => {
-    setEditingItem(item);
-    if (type === 'general') {
-        setFormData(item || { phone_number: '', carrier: 'Vivo', status: 'livre', whatsapp_type: 'Normal', device_link_id: '', employee_link_id: '', notes: '' });
-    } else if (type === 'devices') {
-        setFormData(item || { name: '', model: '', status: 'ativo' });
-    } else if (type === 'people') {
-        setFormData(item || { name: '', department: '' });
-    }
-    setIsModalOpen(true);
   };
 
   const handleSave = async (e) => {
     e.preventDefault();
+    const config = getAuthHeaders(); 
+
     try {
         if (activeTab === 'general') {
-            const payload = {
-                ...formData,
-                device_link_id: formData.device_link_id || null,
-                employee_link_id: formData.employee_link_id || null
-            };
-            if (editingItem) await axios.put(`${API_URL}/${editingItem.id}`, payload);
-            else await axios.post(API_URL, payload);
+            const payload = { ...formData, device_link_id: formData.device_link_id || null, employee_link_id: formData.employee_link_id || null };
+            if (editingItem) await axios.put(`${CHIPS_API}/${editingItem.id}`, payload, config); 
+            else await axios.post(CHIPS_API, payload, config); 
         } else if (activeTab === 'devices') {
-            if (!editingItem) await axios.post(`${API_URL}/devices`, formData);
+            if (!editingItem) await axios.post(`${CHIPS_API}/devices`, formData, config); 
         } else if (activeTab === 'people') {
-            if (editingItem) await axios.put(`${API_URL}/employees/${editingItem.id}`, formData);
-            else await axios.post(`${API_URL}/employees`, formData);
+            if (editingItem) await axios.put(`${CHIPS_API}/employees/${editingItem.id}`, formData, config);
+            else await axios.post(`${CHIPS_API}/employees`, formData, config); 
         }
         fetchData();
         setIsModalOpen(false);
-    } catch (error) { 
-        alert("Erro ao salvar. Verifique os dados."); 
-        console.error(error);
-    }
-  };
-
-  const requestDelete = (id, type) => {
-      setDeleteData({ id, type });
+    } catch (error) { alert("Erro ao salvar."); console.error(error); }
   };
 
   const confirmDelete = async () => {
     if (!deleteData) return;
+    const config = getAuthHeaders(); 
     try {
-        if (deleteData.type === 'general') await axios.delete(`${API_URL}/${deleteData.id}`);
-        if (deleteData.type === 'devices') await axios.delete(`${API_URL}/devices/${deleteData.id}`);
-        if (deleteData.type === 'people') await axios.delete(`${API_URL}/employees/${deleteData.id}`);
+        if (deleteData.type === 'general') await axios.delete(`${CHIPS_API}/${deleteData.id}`, config);
+        if (deleteData.type === 'devices') await axios.delete(`${CHIPS_API}/devices/${deleteData.id}`, config);
+        if (deleteData.type === 'people') await axios.delete(`${CHIPS_API}/employees/${deleteData.id}`, config);
         fetchData();
         setDeleteData(null);
-    } catch (error) { alert("Erro ao deletar (Pode estar em uso)."); }
+    } catch (error) { alert("Erro ao deletar."); }
   };
 
   const handleViewLogs = async (device) => {
       try {
-          const res = await axios.get(`${API_URL}/devices/${device.id}/logs`);
+          const res = await axios.get(`${CHIPS_API}/devices/${device.id}/logs`, getAuthHeaders());
           setDeviceLogs(res.data || []);
           setViewingDeviceName(device.name);
           setIsLogModalOpen(true);
-      } catch (error) {
-          console.error(error);
-          alert("Erro ao buscar histórico.");
-      }
+      } catch (error) { console.error(error); alert("Erro ao buscar histórico."); }
   };
 
   const getAvailableOptions = () => {

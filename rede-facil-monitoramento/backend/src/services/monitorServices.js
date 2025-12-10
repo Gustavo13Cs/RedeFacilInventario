@@ -13,15 +13,12 @@ const isValidSoftware = (s) => {
     return s && typeof s.name === 'string' && s.name.trim().length > 0;
 };
 
-// ==========================================================
-// CONSTANTES E FUNÇÕES AUXILIARES DE ALERTA
-// ==========================================================
 const MAX_TELEMETRY_RECORDS = 5;
 const MAX_BACKUP_LAG_HOURS = 48;
 const BACKUP_ALERT_TYPE = 'backup_failure';
 
 const createAlert = async (machine_id, type, message) => {
-    const io = socketHandler.getIo() || globalIo;
+    const io = socketHandler.getIO() || globalIo;
 
     const [existingAlerts] = await db.execute(
         `SELECT id FROM alerts WHERE machine_id = ? AND alert_type = ? AND is_resolved = FALSE AND created_at > DATE_SUB(NOW(), INTERVAL 1 HOUR)`,

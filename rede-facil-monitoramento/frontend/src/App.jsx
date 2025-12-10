@@ -24,17 +24,14 @@ function App() {
   const [stats, setStats] = useState({ total: 0, online: 0, critical: 0 });
   const [lastTelemetry, setLastTelemetry] = useState(null);
 
-  // Estados de Navegação
   const [selectedMachine, setSelectedMachine] = useState(null);
   const [activeTab, setActiveTab] = useState('dashboard');
 
-  // Estados de Autenticação e Usuário
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [currentUser, setCurrentUser] = useState('');
   const [userRole, setUserRole] = useState('');
   const [isLoggingOut, setIsLoggingOut] = useState(false);
 
-  // Função auxiliar (pode ficar aqui)
   const updateStats = (data) => {
     const total = data.length;
     const online = data.filter((m) => m.status === 'online').length;
@@ -42,18 +39,27 @@ function App() {
     setStats({ total, online, critical });
   };
 
-  // Função de busca
   const fetchMachines = async () => {
     try {
-      const res = await axios.get(`${API_URL}/api/machines`);
+      const token = localStorage.getItem('token'); 
+
+      const res = await axios.get(`${API_URL}/api/machines`, {
+        headers: {
+            Authorization: `Bearer ${token}` 
+        }
+      });
+
       setMachines(res.data);
       updateStats(res.data);
     } catch (error) {
       console.error("Erro ao buscar máquinas:", error);
+      
+      if (error.response && error.response.status === 401) {
+        handleLogout();
+      }
     }
   };
 
-  // Efeito Principal (Carregar Login e Socket)
   useEffect(() => {
     const token = localStorage.getItem('token');
     const user = localStorage.getItem('user_name');

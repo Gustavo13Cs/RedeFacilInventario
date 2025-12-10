@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import axios from 'axios';
-import { API_URL as BASE_URL } from '../config';
+import { API_URL } from '../config';
 
 export default function UserManagement() {
   const [users, setUsers] = useState([]);
@@ -16,25 +16,18 @@ export default function UserManagement() {
   const [errorModal, setErrorModal] = useState(null);
   
   const [formData, setFormData] = useState({
-    name: '',
-    email: '',
-    password: '',
-    role: 'admin'
+    name: '', email: '', password: '', role: 'admin'
   });
 
-  const API_URL = `${BASE_URL}/auth`;
+  const AUTH_API = `${API_URL}/auth`;
 
-  useEffect(() => {
-    fetchUsers();
-  }, []);
+  useEffect(() => { fetchUsers(); }, []);
 
   const fetchUsers = async () => {
     try {
-      const res = await axios.get(API_URL);
+      const res = await axios.get(AUTH_API);
       setUsers(res.data);
-    } catch (error) {
-      console.error("Erro ao buscar usuários:", error);
-    }
+    } catch (error) { console.error("Erro ao buscar usuários:", error); }
   };
 
   const handleInputChange = (e) => {
@@ -45,38 +38,29 @@ export default function UserManagement() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      await axios.post(`${API_URL}/register`, formData);
+      await axios.post(`${AUTH_API}/register`, formData);
       fetchUsers();
       closeForm();
       setShowSuccessModal(true); 
-
     } catch (error) {
       const msg = error.response?.data?.message || "Erro desconhecido ao criar usuário.";
       setErrorModal(msg);
     }
   };
 
-  const requestDelete = (user) => {
-    setUserToDelete(user);
-  };
+  const requestDelete = (user) => { setUserToDelete(user); };
 
   const confirmDelete = async () => {
     if (userToDelete) {
       try {
-        await axios.delete(`${API_URL}/${userToDelete.id}`);
+        await axios.delete(`${AUTH_API}/${userToDelete.id}`);
         fetchUsers(); 
         setUserToDelete(null); 
-      } catch (error) {
-        console.error("Erro ao deletar:", error);
-        alert("Erro ao excluir usuário.");
-      }
+      } catch (error) { console.error("Erro ao deletar:", error); alert("Erro ao excluir usuário."); }
     }
   };
 
-  const closeForm = () => {
-    setIsFormOpen(false);
-    setFormData({ name: '', email: '', password: '', role: 'admin' });
-  };
+  const closeForm = () => { setIsFormOpen(false); setFormData({ name: '', email: '', password: '', role: 'admin' }); };
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
