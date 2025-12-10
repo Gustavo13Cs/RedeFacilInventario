@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"net"
-	"net/http"
+	"net" // Biblioteca padrão Go (net.IP, etc.)
+	"net/http" // Necessário para o client.Post
 	"os"
 	"os/user"
 	"os/exec" 
@@ -15,12 +15,13 @@ import (
 	"strings"
 	"time"
 	"path/filepath"
-    "strconv" // 🚨 NOVO IMPORT: Necessário para converter string (VRAM em bytes) para número
+    "strconv"
 
 	"github.com/shirou/gopsutil/v3/cpu"
 	"github.com/shirou/gopsutil/v3/disk"
 	"github.com/shirou/gopsutil/v3/host"
 	"github.com/shirou/gopsutil/v3/mem"
+    gonet "github.com/shirou/gopsutil/v3/net" // Alias para gopsutil/net
 )
 
 const BACKUP_FOLDER_PATH = "C:\\Users\\Windows 10\\Documents\\backup_agente"
@@ -31,6 +32,13 @@ const MAX_RETRIES = 3
 const RETRY_DELAY = 10 * time.Second
 
 var GlobalMachineIP string
+
+type NetworkInterface struct {
+    InterfaceName string `json:"interface_name"`
+    MACAddress    string `json:"mac_address"`
+    IsUp          bool   `json:"is_up"`
+    SpeedMbps     int    `json:"speed_mbps"`
+}
 
 type MachineInfo struct {
 	UUID              string     `json:"uuid"`
@@ -55,9 +63,10 @@ type MachineInfo struct {
     MotherboardModel        string `json:"mb_model"`
     MotherboardVersion      string `json:"mb_version"`
     
-    // 🚨 NOVOS CAMPOS: PLACA DE VÍDEO (GPU)
     GPUModel                string `json:"gpu_model"`
-    GPUVRAMMB               int    `json:"gpu_vram_mb"` // Memória em MB
+    GPUVRAMMB               int    `json:"gpu_vram_mb"`
+    
+    NetworkInterfaces []NetworkInterface `json:"network_interfaces"` 
     
 	InstalledSoftware []Software `json:"installed_software"`
 }
@@ -102,52 +111,15 @@ func execWmic(query string) string {
 	return "N/A"
 }
 
-// 🚨 NOVA FUNÇÃO AUXILIAR: COLETAR INFORMAÇÕES DA GPU
-func getGPUInfo() (model string, vramMB int) {
-    if runtime.GOOS != "windows" {
-        return "N/A", 0
-    }
-
-    // Coleta o nome/modelo da GPU
-    model = execWmic("path Win32_VideoController get Name")
-    
-    // Coleta a VRAM em bytes e converte para MB
-    vramBytesOutput := execWmic("path Win32_VideoController get AdapterRAM")
-    vramBytesString := strings.TrimSpace(vramBytesOutput)
-    
-    // Tenta converter a string de bytes para um número inteiro
-    vramBytes, err := strconv.ParseInt(vramBytesString, 10, 64)
-    if err != nil {
-        return model, 0 // Se falhar a conversão, VRAM é 0
-    }
-
-    // 1 MB = 1024 * 1024 bytes
-    vramMB = int(vramBytes / (1024 * 1024))
-    
-    // Se o modelo for vazio ou genérico, assume que não há GPU dedicada.
-    if model == "" || strings.Contains(strings.ToLower(model), "basic render driver") {
-        // Se a VRAM for > 0, geralmente é GPU integrada, mas o modelo não é relevante.
-        if vramMB > 0 {
-             return "Integrada / Onboard", vramMB
-        }
-        return "N/A", 0
-    }
-    
-    return model, vramMB
-}
-
-
 // FUNÇÃO PARA MAPEAMENTO ESPECÍFICO DO TIPO DE CHASSIS (Notebook/Desktop/Servidor)
 func getMachineType() string {
     if runtime.GOOS != "windows" {
         return "Indefinido"
     }
 
-    // Executa WMIC para obter o código numérico do tipo de chassi
     chassisTypeOutput := execWmic("csenclosure get chassistypes")
     chassisType := strings.TrimSpace(chassisTypeOutput)
 
-    // Mapeamento baseado nos códigos da Microsoft (Win32_SystemEnclosure)
     switch chassisType {
     case "8", "9", "10", "14":
         return "Notebook/Laptop"
@@ -156,7 +128,6 @@ func getMachineType() string {
     case "17", "21", "22", "23":
         return "Servidor"
     default:
-        // Fallback para VM/Ambientes Virtuais
         productName := execWmic("csproduct get name")
         if strings.Contains(strings.ToLower(productName), "vmware") || 
            strings.Contains(strings.ToLower(productName), "virtualbox") ||
@@ -167,6 +138,68 @@ func getMachineType() string {
     }
 }
 
+// FUNÇÃO AUXILIAR: COLETAR INFORMAÇÕES DA GPU
+func getGPUInfo() (model string, vramMB int) {
+    if runtime.GOOS != "windows" {
+        return "N/A", 0
+    }
+
+    model = execWmic("path Win32_VideoController get Name")
+    
+    vramBytesOutput := execWmic("path Win32_VideoController get AdapterRAM")
+    vramBytesString := strings.TrimSpace(vramBytesOutput)
+    
+    vramBytes, err := strconv.ParseInt(vramBytesString, 10, 64)
+    if err != nil {
+        return model, 0
+    }
+
+    vramMB = int(vramBytes / (1024 * 1024))
+    
+    if model == "" || strings.Contains(strings.ToLower(model), "basic render driver") {
+        if vramMB > 0 {
+             return "Integrada / Onboard", vramMB
+        }
+        return "N/A", 0
+    }
+    
+    return model, vramMB
+}
+
+// 🚨 FUNÇÃO DE COLETA PLACAS DE REDE CORRIGIDA (FINAL)
+func collectNetworkInterfaces() []NetworkInterface {
+    interfaces, err := gonet.Interfaces() // Usando gonet (gopsutil/net)
+    if err != nil {
+        return nil
+    }
+
+    var nics []NetworkInterface
+    for _, iface := range interfaces {
+        
+        // Converte a slice de strings 'Flags' em uma única string para verificação
+        flags := strings.Join(iface.Flags, ",") 
+
+        // 🛑 CORREÇÃO: Verifica se a string contém as flags 'loopback' e 'up'
+        isLoopback := strings.Contains(flags, "loopback")
+        isUp := strings.Contains(flags, "up")
+        
+        // Ignora interfaces loopback, down, ou sem MAC
+        if isLoopback || !isUp || iface.HardwareAddr == "" { 
+            continue
+        }
+
+        speed := 0 
+
+        nics = append(nics, NetworkInterface{
+            InterfaceName: iface.Name,
+            MACAddress:    iface.HardwareAddr, 
+            IsUp:          isUp,
+            SpeedMbps:     speed,
+        })
+    }
+    return nics
+}
+
 
 func getLocalIP() string {
 	ifaces, err := net.Interfaces()
@@ -174,6 +207,7 @@ func getLocalIP() string {
 		return "N/A"
 	}
 	for _, iface := range ifaces {
+        // Usando as Flags do pacote net padrão do Go
 		if iface.Flags&net.FlagUp == 0 || iface.Flags&net.FlagLoopback != 0 {
 			continue
 		}
@@ -243,8 +277,11 @@ func collectStaticInfo() MachineInfo {
     mbModel := execWmic("baseboard get product")
     mbVersion := execWmic("baseboard get version")
     
-    // 🚨 COLETANDO INFORMAÇÕES DA GPU
+    // COLETANDO INFORMAÇÕES DA GPU
     gpuModel, gpuVRAM := getGPUInfo() 
+
+    // 🚨 COLETANDO PLACAS DE REDE
+    networkInterfaces := collectNetworkInterfaces()
 
 	var diskTotalGB float64
 	rootPath := "/"
@@ -280,11 +317,13 @@ func collectStaticInfo() MachineInfo {
         MotherboardModel: mbModel,
         MotherboardVersion: mbVersion,
         
-        // 🚨 NOVOS DADOS GPU ENVIADOS
         GPUModel: gpuModel,
         GPUVRAMMB: gpuVRAM,
         
-		InstalledSoftware: []Software{{Name: "Agente Go", Version: "2.4"}},
+        // ENVIANDO O ARRAY DE PLACAS DE REDE
+        NetworkInterfaces: networkInterfaces,
+        
+		InstalledSoftware: []Software{{Name: "Agente Go", Version: "2.7"}},
 	}
 }
 
