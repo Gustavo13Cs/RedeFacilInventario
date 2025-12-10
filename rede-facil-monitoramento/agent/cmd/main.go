@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"net"
-	"net/http"
+	"net" 
+	"net/http" 
 	"os"
 	"os/exec"
 	"os/user"
@@ -15,11 +15,17 @@ import (
 	"runtime"
 	"strings"
 	"time"
+<<<<<<< HEAD
+=======
+	"path/filepath"
+    "strconv"
+>>>>>>> b793f4c98b9439697e51e4c9b53313921da35bb7
 
 	"github.com/shirou/gopsutil/v3/cpu"
 	"github.com/shirou/gopsutil/v3/disk"
 	"github.com/shirou/gopsutil/v3/host"
 	"github.com/shirou/gopsutil/v3/mem"
+    gonet "github.com/shirou/gopsutil/v3/net"
 )
 
 const BACKUP_FOLDER_PATH = "C:\\Users\\Windows 10\\Documents\\backup_agente"
@@ -31,7 +37,15 @@ const RETRY_DELAY = 10 * time.Second
 
 var GlobalMachineIP string
 
+type NetworkInterface struct {
+    InterfaceName string `json:"interface_name"`
+    MACAddress    string `json:"mac_address"`
+    IsUp          bool   `json:"is_up"`
+    SpeedMbps     int    `json:"speed_mbps"`
+}
+
 type MachineInfo struct {
+<<<<<<< HEAD
 	UUID      string `json:"uuid"`
 	Hostname  string `json:"hostname"`
 	IPAddress string `json:"ip_address"`
@@ -54,6 +68,41 @@ type MachineInfo struct {
 	MotherboardModel        string `json:"mb_model"`
 	MotherboardVersion      string `json:"mb_version"`
 
+=======
+	UUID              string     `json:"uuid"`
+	Hostname          string     `json:"hostname"`
+	IPAddress         string     `json:"ip_address"`
+	OSName            string     `json:"os_name"`
+	CPUModel          string     `json:"cpu_model"`
+    
+    CPUSpeedMhz       float64    `json:"cpu_speed_mhz"`
+    CPUCoresPhysical  int        `json:"cpu_cores_physical"`
+    CPUCoresLogical   int        `json:"cpu_cores_logical"`
+    
+	RAMTotalGB        float64    `json:"ram_total_gb"`
+	DiskTotalGB       float64    `json:"disk_total_gb"`
+	MACAddress        string     `json:"mac_address"`
+    
+	MachineModel      string     `json:"machine_model"`
+	SerialNumber      string     `json:"serial_number"`
+    MachineType       string     `json:"machine_type"`
+    
+    MotherboardManufacturer string `json:"mb_manufacturer"`
+    MotherboardModel        string `json:"mb_model"`
+    MotherboardVersion      string `json:"mb_version"`
+    
+    GPUModel                string `json:"gpu_model"`
+    GPUVRAMMB               int    `json:"gpu_vram_mb"`
+    
+    LastBootTime            string `json:"last_boot_time"` 
+    
+    // 🚨 NOVOS CAMPOS PARA SLOTS DE MEMÓRIA
+    MemSlotsTotal           int    `json:"mem_slots_total"`
+    MemSlotsUsed            int    `json:"mem_slots_used"`
+    
+    NetworkInterfaces []NetworkInterface `json:"network_interfaces"` 
+    
+>>>>>>> b793f4c98b9439697e51e4c9b53313921da35bb7
 	InstalledSoftware []Software `json:"installed_software"`
 }
 
@@ -97,11 +146,56 @@ func execWmic(query string) string {
 	return "N/A"
 }
 
+<<<<<<< HEAD
+=======
+// FUNÇÃO AUXILIAR: COLETAR SLOTS DE MEMÓRIA
+func getMemorySlotsInfo() (total int, used int) {
+    if runtime.GOOS != "windows" {
+        return 0, 0 
+    }
+
+    // 1. Total de Slots (MemoryDevices)
+    totalOutput := execWmic("memphysical get MemoryDevices")
+    totalString := strings.TrimSpace(totalOutput)
+    
+    totalValue, err := strconv.Atoi(totalString)
+    if err == nil && totalValue > 0 {
+        total = totalValue
+    }
+
+    // 2. Slots Usados (Conta quantos módulos de memória estão instalados)
+    cmd := exec.Command("wmic", "memorychip", "get", "banklabel")
+    var out bytes.Buffer
+    cmd.Stdout = &out
+    
+    if err := cmd.Run(); err != nil {
+        return total, 0
+    }
+    
+    // Contagem de linhas que contêm um BankLabel (slots usados)
+    lines := strings.Split(out.String(), "\n")
+    used = 0
+    for i, line := range lines {
+        line = strings.TrimSpace(line)
+        if i == 0 || line == "" || line == "BankLabel" {
+            continue 
+        }
+        // Se a linha tem conteúdo e não é o cabeçalho, é um slot usado
+        used++
+    }
+    
+    return total, used
+}
+
+
+// FUNÇÃO PARA MAPEAMENTO ESPECÍFICO DO TIPO DE CHASSIS (Notebook/Desktop/Servidor)
+>>>>>>> b793f4c98b9439697e51e4c9b53313921da35bb7
 func getMachineType() string {
 	if runtime.GOOS != "windows" {
 		return "Indefinido"
 	}
 
+<<<<<<< HEAD
 	chassisTypeOutput := execWmic("csenclosure get chassistypes")
 	chassisType := strings.TrimSpace(chassisTypeOutput)
 
@@ -124,6 +218,89 @@ func getMachineType() string {
 	}
 }
 
+=======
+    chassisTypeOutput := execWmic("csenclosure get chassistypes")
+    chassisType := strings.TrimSpace(chassisTypeOutput)
+
+    switch chassisType {
+    case "8", "9", "10", "14":
+        return "Notebook/Laptop"
+    case "1", "2", "3", "4", "5", "6", "7", "13", "15", "16":
+        return "Desktop/Workstation"
+    case "17", "21", "22", "23":
+        return "Servidor"
+    default:
+        productName := execWmic("csproduct get name")
+        if strings.Contains(strings.ToLower(productName), "vmware") || 
+           strings.Contains(strings.ToLower(productName), "virtualbox") ||
+           strings.Contains(strings.ToLower(productName), "server") {
+            return "VM/Servidor"
+        }
+        return "Hardware Genérico" 
+    }
+}
+
+// FUNÇÃO AUXILIAR: COLETAR INFORMAÇÕES DA GPU
+func getGPUInfo() (model string, vramMB int) {
+    if runtime.GOOS != "windows" {
+        return "N/A", 0
+    }
+
+    model = execWmic("path Win32_VideoController get Name")
+    
+    vramBytesOutput := execWmic("path Win32_VideoController get AdapterRAM")
+    vramBytesString := strings.TrimSpace(vramBytesOutput)
+    
+    vramBytes, err := strconv.ParseInt(vramBytesString, 10, 64)
+    if err != nil {
+        return model, 0
+    }
+
+    vramMB = int(vramBytes / (1024 * 1024))
+    
+    if model == "" || strings.Contains(strings.ToLower(model), "basic render driver") {
+        if vramMB > 0 {
+             return "Integrada / Onboard", vramMB
+        }
+        return "N/A", 0
+    }
+    
+    return model, vramMB
+}
+
+// FUNÇÃO DE COLETA PLACAS DE REDE
+func collectNetworkInterfaces() []NetworkInterface {
+    interfaces, err := gonet.Interfaces() 
+    if err != nil {
+        return nil
+    }
+
+    var nics []NetworkInterface
+    for _, iface := range interfaces {
+        
+        flags := strings.Join(iface.Flags, ",") 
+
+        isLoopback := strings.Contains(flags, "loopback")
+        isUp := strings.Contains(flags, "up")
+        
+        if isLoopback || !isUp || iface.HardwareAddr == "" { 
+            continue
+        }
+
+        speed := 0 
+
+        nics = append(nics, NetworkInterface{
+            InterfaceName: iface.Name,
+            MACAddress:    iface.HardwareAddr, 
+            IsUp:          isUp,
+            SpeedMbps:     speed,
+        })
+    }
+    return nics
+}
+
+
+>>>>>>> b793f4c98b9439697e51e4c9b53313921da35bb7
 func getLocalIP() string {
 	ifaces, err := net.Interfaces()
 	if err != nil {
@@ -163,6 +340,7 @@ func getMachineUUID() string {
 	return fmt.Sprintf("%s-%s", h, username)
 }
 
+// 🚨 FUNÇÃO DE COLETA ESTÁTICA COM SLOTS DE MEMÓRIA ADICIONADOS
 func collectStaticInfo() MachineInfo {
 	hInfo, _ := host.Info()
 	mInfo, _ := mem.VirtualMemory()
@@ -190,12 +368,41 @@ func collectStaticInfo() MachineInfo {
 	if serialNumber == "N/A" {
 		serialNumber = hInfo.HostID
 	}
+<<<<<<< HEAD
 
 	machineType := getMachineType()
 
 	mbManufacturer := execWmic("baseboard get manufacturer")
 	mbModel := execWmic("baseboard get product")
 	mbVersion := execWmic("baseboard get version")
+=======
+    
+    // COLETANDO O TIPO DA MÁQUINA
+    machineType := getMachineType() 
+    
+    // COLETANDO INFORMAÇÕES DA PLACA-MÃE
+    mbManufacturer := execWmic("baseboard get manufacturer")
+    mbModel := execWmic("baseboard get product")
+    mbVersion := execWmic("baseboard get version")
+    
+    // COLETANDO INFORMAÇÕES DA GPU
+    gpuModel, gpuVRAM := getGPUInfo() 
+
+    // COLETA DA ÚLTIMA INICIALIZAÇÃO
+    bootTime, err := host.BootTime()
+    var lastBootTime string
+    if err == nil {
+        lastBootTime = time.Unix(int64(bootTime), 0).Format("2006-01-02 15:04:05")
+    } else {
+        lastBootTime = "N/A"
+    }
+
+    // 🚨 COLETANDO SLOTS DE MEMÓRIA
+    memSlotsTotal, memSlotsUsed := getMemorySlotsInfo()
+    
+    // COLETANDO PLACAS DE REDE
+    networkInterfaces := collectNetworkInterfaces()
+>>>>>>> b793f4c98b9439697e51e4c9b53313921da35bb7
 
 	var diskTotalGB float64
 	rootPath := "/"
@@ -212,6 +419,7 @@ func collectStaticInfo() MachineInfo {
 	}
 
 	return MachineInfo{
+<<<<<<< HEAD
 		UUID:                    getMachineUUID(),
 		Hostname:                hInfo.Hostname,
 		IPAddress:               getLocalIP(),
@@ -231,6 +439,40 @@ func collectStaticInfo() MachineInfo {
 		MotherboardVersion:      mbVersion,
 
 		InstalledSoftware: []Software{{Name: "Agente Go", Version: "2.3"}},
+=======
+		UUID:              getMachineUUID(),
+		Hostname:          hInfo.Hostname,
+		IPAddress:         getLocalIP(),
+		OSName:            fmt.Sprintf("%s %s", hInfo.OS, hInfo.Platform),
+		CPUModel:          cpuModel,
+		CPUSpeedMhz:       cpuSpeed,
+		CPUCoresPhysical:  cpuCoresPhysical,
+		CPUCoresLogical:   cpuCoresLogical,
+		RAMTotalGB:        float64(mInfo.Total) / (1024 * 1024 * 1024),
+		DiskTotalGB:       diskTotalGB,
+		MACAddress:        "00:00:00:00:00:00",
+		MachineModel:      machineModel,
+		SerialNumber:      serialNumber,
+        MachineType:       machineType,
+        
+        MotherboardManufacturer: mbManufacturer,
+        MotherboardModel: mbModel,
+        MotherboardVersion: mbVersion,
+        
+        GPUModel: gpuModel,
+        GPUVRAMMB: gpuVRAM,
+        
+        LastBootTime: lastBootTime,
+        
+        // 🚨 NOVOS CAMPOS ENVIADOS
+        MemSlotsTotal: memSlotsTotal,
+        MemSlotsUsed: memSlotsUsed,
+        
+        // ENVIANDO O ARRAY DE PLACAS DE REDE
+        NetworkInterfaces: networkInterfaces,
+        
+		InstalledSoftware: []Software{{Name: "Agente Go", Version: "2.9"}},
+>>>>>>> b793f4c98b9439697e51e4c9b53313921da35bb7
 	}
 }
 
