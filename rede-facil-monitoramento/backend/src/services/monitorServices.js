@@ -77,7 +77,7 @@ async function checkBackupHealth(machineId, lastBackupTimestamp) {
 }
 
 // ==========================================================
-// FUNÇÃO registerMachine (COM PLACAS DE REDE)
+// FUNÇÃO registerMachine (COM SLOTS DE MEMÓRIA)
 // ==========================================================
 exports.registerMachine = async ({
     uuid, hostname, ip_address, os_name,
@@ -86,6 +86,8 @@ exports.registerMachine = async ({
     cpu_cores_physical,
     cpu_cores_logical,
     ram_total_gb,
+    mem_slots_total,
+    mem_slots_used,
     disk_total_gb,
     mac_address,
     machine_model, serial_number,
@@ -127,6 +129,8 @@ exports.registerMachine = async ({
             cpu_cores_physical || null,
             cpu_cores_logical || null,
             ram_total_gb || null,
+            mem_slots_total || null,
+            mem_slots_used || null,
             disk_total_gb || null,
             mac_address || null,
             machine_model || null,
@@ -145,18 +149,18 @@ exports.registerMachine = async ({
                 `INSERT INTO hardware_specs (
                     machine_id,
                     cpu_model, cpu_speed_mhz, cpu_cores_physical, cpu_cores_logical,
-                    ram_total_gb, disk_total_gb, mac_address,
+                    ram_total_gb, mem_slots_total, mem_slots_used, disk_total_gb, mac_address,
                     machine_model, serial_number, machine_type,
                     mb_manufacturer, mb_model, mb_version,
                     gpu_model, gpu_vram_mb, last_boot_time
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
                 [machine_id, ...specsData]
             );
         } else {
             await connection.execute(
                 `UPDATE hardware_specs SET 
                     cpu_model=?, cpu_speed_mhz=?, cpu_cores_physical=?, cpu_cores_logical=?,
-                    ram_total_gb=?, disk_total_gb=?, mac_address=?,
+                    ram_total_gb=?, mem_slots_total=?, mem_slots_used=?, disk_total_gb=?, mac_address=?,
                     machine_model=?, serial_number=?, machine_type=?,
                     mb_manufacturer=?, mb_model=?, mb_version=?,
                     gpu_model=?, gpu_vram_mb=?, last_boot_time=?
@@ -173,7 +177,7 @@ exports.registerMachine = async ({
                 nic.interface_name || 'N/A',
                 nic.mac_address || null,
                 nic.is_up || false,
-                nic.speed_mbps || null
+                nic.speed_mbps || null,
             ]);
 
             await connection.query(
@@ -353,7 +357,8 @@ exports.listMachines = async () => {
         const [machines] = await db.execute(
             `SELECT m.id, m.uuid, m.hostname, m.ip_address, m.os_name, m.status, m.last_seen, 
                     h.cpu_model, h.cpu_speed_mhz, h.cpu_cores_physical, h.cpu_cores_logical, 
-                    h.ram_total_gb, h.disk_total_gb, h.machine_type 
+                    h.ram_total_gb, h.disk_total_gb, h.machine_type, h.gpu_model, 
+                    h.mem_slots_total, h.mem_slots_used
              FROM machines m 
              LEFT JOIN hardware_specs h ON m.id = h.machine_id 
              ORDER BY m.status DESC, m.hostname`
@@ -365,9 +370,6 @@ exports.listMachines = async () => {
     }
 };
 
-// ==========================================================
-// FUNÇÃO getMachineDetails
-// ==========================================================
 exports.getMachineDetails = async (uuid) => {
     if (!uuid) return null;
 
@@ -382,7 +384,8 @@ exports.getMachineDetails = async (uuid) => {
                 h.ram_total_gb, h.disk_total_gb, h.mac_address,
                 h.machine_model, h.serial_number, h.machine_type,
                 h.mb_manufacturer, h.mb_model, h.mb_version,
-                h.gpu_model, h.gpu_vram_mb, h.last_boot_time
+                h.gpu_model, h.gpu_vram_mb, h.last_boot_time,
+                h.mem_slots_total, h.mem_slots_used
              FROM machines m
              LEFT JOIN hardware_specs h ON m.id = h.machine_id
              WHERE m.uuid = ?`,
@@ -399,10 +402,7 @@ exports.getMachineDetails = async (uuid) => {
         );
 
         const [software] = await db.execute(
-            `SELECT software_name, version, install_date 
-             FROM installed_software 
-             WHERE machine_id = ? 
-             ORDER BY software_name`,
+            `SELECT software_name, version, install_date FROM installed_software WHERE machine_id = ? ORDER BY software_name`,
             [machine_id]
         );
 

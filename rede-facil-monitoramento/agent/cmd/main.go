@@ -21,7 +21,7 @@ import (
 	"github.com/shirou/gopsutil/v3/disk"
 	"github.com/shirou/gopsutil/v3/host"
 	"github.com/shirou/gopsutil/v3/mem"
-    gonet "github.com/shirou/gopsutil/v3/net" // Alias para gopsutil/net
+    gonet "github.com/shirou/gopsutil/v3/net"
 )
 
 const BACKUP_FOLDER_PATH = "C:\\Users\\Windows 10\\Documents\\backup_agente"
@@ -66,8 +66,11 @@ type MachineInfo struct {
     GPUModel                string `json:"gpu_model"`
     GPUVRAMMB               int    `json:"gpu_vram_mb"`
     
-    // 🚨 NOVO CAMPO: Última Inicialização
     LastBootTime            string `json:"last_boot_time"` 
+    
+    // 🚨 NOVOS CAMPOS PARA SLOTS DE MEMÓRIA
+    MemSlotsTotal           int    `json:"mem_slots_total"`
+    MemSlotsUsed            int    `json:"mem_slots_used"`
     
     NetworkInterfaces []NetworkInterface `json:"network_interfaces"` 
     
@@ -113,6 +116,46 @@ func execWmic(query string) string {
 	}
 	return "N/A"
 }
+
+// FUNÇÃO AUXILIAR: COLETAR SLOTS DE MEMÓRIA
+func getMemorySlotsInfo() (total int, used int) {
+    if runtime.GOOS != "windows" {
+        return 0, 0 
+    }
+
+    // 1. Total de Slots (MemoryDevices)
+    totalOutput := execWmic("memphysical get MemoryDevices")
+    totalString := strings.TrimSpace(totalOutput)
+    
+    totalValue, err := strconv.Atoi(totalString)
+    if err == nil && totalValue > 0 {
+        total = totalValue
+    }
+
+    // 2. Slots Usados (Conta quantos módulos de memória estão instalados)
+    cmd := exec.Command("wmic", "memorychip", "get", "banklabel")
+    var out bytes.Buffer
+    cmd.Stdout = &out
+    
+    if err := cmd.Run(); err != nil {
+        return total, 0
+    }
+    
+    // Contagem de linhas que contêm um BankLabel (slots usados)
+    lines := strings.Split(out.String(), "\n")
+    used = 0
+    for i, line := range lines {
+        line = strings.TrimSpace(line)
+        if i == 0 || line == "" || line == "BankLabel" {
+            continue 
+        }
+        // Se a linha tem conteúdo e não é o cabeçalho, é um slot usado
+        used++
+    }
+    
+    return total, used
+}
+
 
 // FUNÇÃO PARA MAPEAMENTO ESPECÍFICO DO TIPO DE CHASSIS (Notebook/Desktop/Servidor)
 func getMachineType() string {
@@ -169,9 +212,9 @@ func getGPUInfo() (model string, vramMB int) {
     return model, vramMB
 }
 
-// 🚨 FUNÇÃO DE COLETA PLACAS DE REDE CORRIGIDA (FINAL)
+// FUNÇÃO DE COLETA PLACAS DE REDE
 func collectNetworkInterfaces() []NetworkInterface {
-    interfaces, err := gonet.Interfaces() // Usando gonet (gopsutil/net)
+    interfaces, err := gonet.Interfaces() 
     if err != nil {
         return nil
     }
@@ -179,14 +222,11 @@ func collectNetworkInterfaces() []NetworkInterface {
     var nics []NetworkInterface
     for _, iface := range interfaces {
         
-        // Converte a slice de strings 'Flags' em uma única string para verificação
         flags := strings.Join(iface.Flags, ",") 
 
-        // 🛑 CORREÇÃO: Verifica se a string contém as flags 'loopback' e 'up'
         isLoopback := strings.Contains(flags, "loopback")
         isUp := strings.Contains(flags, "up")
         
-        // Ignora interfaces loopback, down, ou sem MAC
         if isLoopback || !isUp || iface.HardwareAddr == "" { 
             continue
         }
@@ -210,7 +250,6 @@ func getLocalIP() string {
 		return "N/A"
 	}
 	for _, iface := range ifaces {
-        // Usando as Flags do pacote net padrão do Go
 		if iface.Flags&net.FlagUp == 0 || iface.Flags&net.FlagLoopback != 0 {
 			continue
 		}
@@ -244,7 +283,7 @@ func getMachineUUID() string {
 	return fmt.Sprintf("%s-%s", h, username)
 }
 
-// 🚨 FUNÇÃO DE COLETA ESTÁTICA COM LAST_BOOT_TIME ADICIONADO
+// 🚨 FUNÇÃO DE COLETA ESTÁTICA COM SLOTS DE MEMÓRIA ADICIONADOS
 func collectStaticInfo() MachineInfo {
 	hInfo, _ := host.Info()
 	mInfo, _ := mem.VirtualMemory()
@@ -284,7 +323,7 @@ func collectStaticInfo() MachineInfo {
     // COLETANDO INFORMAÇÕES DA GPU
     gpuModel, gpuVRAM := getGPUInfo() 
 
-    // 🚨 COLETA DA ÚLTIMA INICIALIZAÇÃO
+    // COLETA DA ÚLTIMA INICIALIZAÇÃO
     bootTime, err := host.BootTime()
     var lastBootTime string
     if err == nil {
@@ -293,6 +332,9 @@ func collectStaticInfo() MachineInfo {
         lastBootTime = "N/A"
     }
 
+    // 🚨 COLETANDO SLOTS DE MEMÓRIA
+    memSlotsTotal, memSlotsUsed := getMemorySlotsInfo()
+    
     // COLETANDO PLACAS DE REDE
     networkInterfaces := collectNetworkInterfaces()
 
@@ -333,13 +375,16 @@ func collectStaticInfo() MachineInfo {
         GPUModel: gpuModel,
         GPUVRAMMB: gpuVRAM,
         
-        // 🚨 NOVO CAMPO ENVIADO
         LastBootTime: lastBootTime,
+        
+        // 🚨 NOVOS CAMPOS ENVIADOS
+        MemSlotsTotal: memSlotsTotal,
+        MemSlotsUsed: memSlotsUsed,
         
         // ENVIANDO O ARRAY DE PLACAS DE REDE
         NetworkInterfaces: networkInterfaces,
         
-		InstalledSoftware: []Software{{Name: "Agente Go", Version: "2.8"}},
+		InstalledSoftware: []Software{{Name: "Agente Go", Version: "2.9"}},
 	}
 }
 
