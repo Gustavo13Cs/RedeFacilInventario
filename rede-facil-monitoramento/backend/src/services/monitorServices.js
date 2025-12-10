@@ -252,13 +252,8 @@ exports.processTelemetry = async (data) => {
             `INSERT INTO telemetry_logs (
                 machine_id, cpu_usage_percent, ram_usage_percent, disk_free_percent,
                 disk_smart_status, temperature_celsius, last_backup_timestamp
-<<<<<<< HEAD
              ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
             [machine_id, cpu_usage, ram_usage, disk_free, disk_status, temperature, backup_time] // <--- MUDOU AQUI
-=======
-            ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-            [machine_id, cpu_usage, ram_usage, disk_free, disk_status, temperature, last_backup_timestamp]
->>>>>>> b793f4c98b9439697e51e4c9b53313921da35bb7
         );
 
         if (backup_time) {
