@@ -77,7 +77,7 @@ async function checkBackupHealth(machineId, lastBackupTimestamp) {
 }
 
 // ==========================================================
-// FUNÇÃO registerMachine (AJUSTADA)
+// FUNÇÃO registerMachine
 // ==========================================================
 exports.registerMachine = async ({
     uuid, hostname, ip_address, os_name,
@@ -93,6 +93,8 @@ exports.registerMachine = async ({
     mb_manufacturer,
     mb_model,
     mb_version,
+    gpu_model,
+    gpu_vram_mb,
     installed_software
 }) => {
     if (!uuid || !hostname || !ip_address || !os_name) {
@@ -130,18 +132,21 @@ exports.registerMachine = async ({
             machine_type || null,
             mb_manufacturer || null,
             mb_model || null,
-            mb_version || null
+            mb_version || null,
+            gpu_model || null,
+            gpu_vram_mb || null
         ];
 
         if (specsRows.length === 0) {
             await connection.execute(
                 `INSERT INTO hardware_specs (
                     machine_id, 
-                    cpu_model, cpu_speed_mhz, cpu_cores_physical, cpu_cores_logical, 
-                    ram_total_gb, disk_total_gb, mac_address, 
+                    cpu_model, cpu_speed_mhz, cpu_cores_physical, cpu_cores_logical,
+                    ram_total_gb, disk_total_gb, mac_address,
                     machine_model, serial_number, machine_type,
-                    mb_manufacturer, mb_model, mb_version
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                    mb_manufacturer, mb_model, mb_version,
+                    gpu_model, gpu_vram_mb
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
                 [machine_id, ...specsData]
             );
         } else {
@@ -150,7 +155,8 @@ exports.registerMachine = async ({
                     cpu_model=?, cpu_speed_mhz=?, cpu_cores_physical=?, cpu_cores_logical=?,
                     ram_total_gb=?, disk_total_gb=?, mac_address=?, 
                     machine_model=?, serial_number=?, machine_type=?,
-                    mb_manufacturer=?, mb_model=?, mb_version=?
+                    mb_manufacturer=?, mb_model=?, mb_version=?,
+                    gpu_model=?, gpu_vram_mb=?
                 WHERE machine_id = ?`,
                 [...specsData, machine_id]
             );
@@ -218,7 +224,7 @@ exports.processTelemetry = async (data) => {
             `INSERT INTO telemetry_logs (
                 machine_id, cpu_usage_percent, ram_usage_percent, disk_free_percent,
                 disk_smart_status, temperature_celsius, last_backup_timestamp
-             ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
             [machine_id, cpu_usage, ram_usage, disk_free, disk_status, temperature, last_backup_timestamp]
         );
 

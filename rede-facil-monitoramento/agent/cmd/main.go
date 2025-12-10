@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 	"path/filepath"
+    "strconv" // 🚨 NOVO IMPORT: Necessário para converter string (VRAM em bytes) para número
 
 	"github.com/shirou/gopsutil/v3/cpu"
 	"github.com/shirou/gopsutil/v3/disk"
@@ -50,10 +51,13 @@ type MachineInfo struct {
 	SerialNumber      string     `json:"serial_number"`
     MachineType       string     `json:"machine_type"`
     
-    // 🚨 NOVOS CAMPOS: PLACA-MÃE
     MotherboardManufacturer string `json:"mb_manufacturer"`
     MotherboardModel        string `json:"mb_model"`
     MotherboardVersion      string `json:"mb_version"`
+    
+    // 🚨 NOVOS CAMPOS: PLACA DE VÍDEO (GPU)
+    GPUModel                string `json:"gpu_model"`
+    GPUVRAMMB               int    `json:"gpu_vram_mb"` // Memória em MB
     
 	InstalledSoftware []Software `json:"installed_software"`
 }
@@ -97,6 +101,41 @@ func execWmic(query string) string {
 	}
 	return "N/A"
 }
+
+// 🚨 NOVA FUNÇÃO AUXILIAR: COLETAR INFORMAÇÕES DA GPU
+func getGPUInfo() (model string, vramMB int) {
+    if runtime.GOOS != "windows" {
+        return "N/A", 0
+    }
+
+    // Coleta o nome/modelo da GPU
+    model = execWmic("path Win32_VideoController get Name")
+    
+    // Coleta a VRAM em bytes e converte para MB
+    vramBytesOutput := execWmic("path Win32_VideoController get AdapterRAM")
+    vramBytesString := strings.TrimSpace(vramBytesOutput)
+    
+    // Tenta converter a string de bytes para um número inteiro
+    vramBytes, err := strconv.ParseInt(vramBytesString, 10, 64)
+    if err != nil {
+        return model, 0 // Se falhar a conversão, VRAM é 0
+    }
+
+    // 1 MB = 1024 * 1024 bytes
+    vramMB = int(vramBytes / (1024 * 1024))
+    
+    // Se o modelo for vazio ou genérico, assume que não há GPU dedicada.
+    if model == "" || strings.Contains(strings.ToLower(model), "basic render driver") {
+        // Se a VRAM for > 0, geralmente é GPU integrada, mas o modelo não é relevante.
+        if vramMB > 0 {
+             return "Integrada / Onboard", vramMB
+        }
+        return "N/A", 0
+    }
+    
+    return model, vramMB
+}
+
 
 // FUNÇÃO PARA MAPEAMENTO ESPECÍFICO DO TIPO DE CHASSIS (Notebook/Desktop/Servidor)
 func getMachineType() string {
@@ -199,10 +238,13 @@ func collectStaticInfo() MachineInfo {
     // COLETANDO O TIPO DA MÁQUINA
     machineType := getMachineType() 
     
-    // 🚨 COLETANDO INFORMAÇÕES DA PLACA-MÃE
+    // COLETANDO INFORMAÇÕES DA PLACA-MÃE
     mbManufacturer := execWmic("baseboard get manufacturer")
     mbModel := execWmic("baseboard get product")
     mbVersion := execWmic("baseboard get version")
+    
+    // 🚨 COLETANDO INFORMAÇÕES DA GPU
+    gpuModel, gpuVRAM := getGPUInfo() 
 
 	var diskTotalGB float64
 	rootPath := "/"
@@ -233,12 +275,16 @@ func collectStaticInfo() MachineInfo {
 		MachineModel:      machineModel,
 		SerialNumber:      serialNumber,
         MachineType:       machineType,
-        // 🚨 NOVOS DADOS ENVIADOS
+        
         MotherboardManufacturer: mbManufacturer,
         MotherboardModel: mbModel,
         MotherboardVersion: mbVersion,
         
-		InstalledSoftware: []Software{{Name: "Agente Go", Version: "2.3"}},
+        // 🚨 NOVOS DADOS GPU ENVIADOS
+        GPUModel: gpuModel,
+        GPUVRAMMB: gpuVRAM,
+        
+		InstalledSoftware: []Software{{Name: "Agente Go", Version: "2.4"}},
 	}
 }
 
