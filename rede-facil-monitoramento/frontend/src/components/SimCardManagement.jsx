@@ -58,6 +58,28 @@ export default function SimCardManagement({ userRole }) {
     }
   };
 
+  const handleOpenModal = (type, item = null) => {
+    setEditingItem(item);
+    if (item) {
+        setFormData({ ...item });
+    } else {
+        setFormData({});
+        if (type === 'general') {
+            setFormData({ carrier: 'Vivo', status: 'livre', whatsapp_type: 'Normal' });
+        } else if (type === 'devices') {
+            setFormData({ status: 'ativo' });
+        }
+    }
+    if (['general', 'devices', 'people'].includes(type)) {
+        setActiveTab(type);
+    }
+    setIsModalOpen(true);
+  };
+
+  const requestDelete = (id, type) => {
+    setDeleteData({ id, type });
+  };
+
   const handleSave = async (e) => {
     e.preventDefault();
     const config = getAuthHeaders(); 
@@ -68,7 +90,8 @@ export default function SimCardManagement({ userRole }) {
             if (editingItem) await axios.put(`${CHIPS_API}/${editingItem.id}`, payload, config); 
             else await axios.post(CHIPS_API, payload, config); 
         } else if (activeTab === 'devices') {
-            if (!editingItem) await axios.post(`${CHIPS_API}/devices`, formData, config); 
+            if (editingItem) await axios.put(`${CHIPS_API}/devices/${editingItem.id}`, formData, config); 
+            else await axios.post(`${CHIPS_API}/devices`, formData, config); 
         } else if (activeTab === 'people') {
             if (editingItem) await axios.put(`${CHIPS_API}/employees/${editingItem.id}`, formData, config);
             else await axios.post(`${CHIPS_API}/employees`, formData, config); 
@@ -104,7 +127,12 @@ export default function SimCardManagement({ userRole }) {
       const usedDeviceIds = safeChips.filter(c => c.id !== editingItem?.id).map(c => c.device_link_id).filter(Boolean);
       const usedEmployeeIds = safeChips.filter(c => c.id !== editingItem?.id).map(c => c.employee_link_id).filter(Boolean);
       
-      const availableDevices = (devices || []).filter(d => !usedDeviceIds.includes(d.id));
+      // AJUSTE AQUI: Filtra para mostrar apenas dispositivos ATIVOS e que não estão em uso
+      const availableDevices = (devices || []).filter(d => 
+        !usedDeviceIds.includes(d.id) && 
+        d.status === 'ativo' 
+      );
+
       const availableEmployees = (employees || []).filter(e => !usedEmployeeIds.includes(e.id));
       return { availableDevices, availableEmployees };
   };

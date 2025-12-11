@@ -154,13 +154,12 @@ func getMemorySlotsInfo() (total int, used int) {
     return total, used
 }
 
-// 🚨 NOVA FUNÇÃO: COLETAR SOFTWARE INSTALADO
+
 func collectInstalledSoftware() []Software {
 	if runtime.GOOS != "windows" {
 		return nil
 	}
 
-	// Comando WMIC que lista software. Pode ser lento.
 	cmd := exec.Command("wmic", "product", "get", "Name,Version")
 	var out bytes.Buffer
 	cmd.Stdout = &out
@@ -196,17 +195,13 @@ func collectInstalledSoftware() []Software {
         version := ""
         name := ""
 
-        // Tenta extrair Name e Version pela posição do cabeçalho
         if versionIndex < nameIndex && len(line) > nameIndex {
             version = strings.TrimSpace(line[:nameIndex])
             name = strings.TrimSpace(line[nameIndex:])
         } else if len(line) > versionIndex {
-            // Layout mais comum (Name à esquerda, Version à direita, mas pode ser inconsistente)
             version = strings.TrimSpace(line[versionIndex:])
             name = strings.TrimSpace(line[:versionIndex])
         }
-
-        // Fallback simples para tentar capturar campos que falharam no parse de índice
         if name == "" {
              parts := strings.Fields(line)
              if len(parts) >= 2 {
@@ -215,7 +210,6 @@ func collectInstalledSoftware() []Software {
              }
         }
         
-        // Limpeza e Filtragem
 		if name != "" && !strings.Contains(name, "Agente Go") && !strings.Contains(name, "Update") && !strings.Contains(name, "KB") {
 			softwareList = append(softwareList, Software{
 				Name:    name,
@@ -227,7 +221,6 @@ func collectInstalledSoftware() []Software {
 	return softwareList
 }
 
-// FUNÇÃO PARA MAPEAMENTO ESPECÍFICO DO TIPO DE CHASSIS (Notebook/Desktop/Servidor)
 func getMachineType() string {
     if runtime.GOOS != "windows" {
         return "Indefinido"
@@ -254,7 +247,7 @@ func getMachineType() string {
     }
 }
 
-// FUNÇÃO AUXILIAR: COLETAR INFORMAÇÕES DA GPU
+
 func getGPUInfo() (model string, vramMB int) {
     if runtime.GOOS != "windows" {
         return "N/A", 0
