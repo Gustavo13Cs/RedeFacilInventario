@@ -2,7 +2,6 @@ const { db } = require('../config/db');
 
 exports.getAssetReport = async () => {
     try {
-        // 1. Busca modelos de PCs (Trata NULL como 'PC Genérico')
         const [pcModels] = await db.execute(`
             SELECT 
                 COALESCE(NULLIF(h.system_model, ''), 'PC Genérico') as model, 
@@ -13,7 +12,6 @@ exports.getAssetReport = async () => {
             GROUP BY COALESCE(NULLIF(h.system_model, ''), 'PC Genérico')
         `);
 
-        // 2. Busca modelos do Inventário (Trata NULL como 'Item sem Modelo')
         const [invModels] = await db.execute(`
             SELECT 
                 COALESCE(NULLIF(model, ''), 'Item sem Modelo') as model, 
@@ -23,13 +21,27 @@ exports.getAssetReport = async () => {
             GROUP BY COALESCE(NULLIF(model, ''), 'Item sem Modelo'), type
         `);
 
-        // 3. Busca tabela de preços. Se der erro (tabela não existe), retorna array vazio.
+        let phoneModels = [];
+        try {
+            const [rows] = await db.execute(`
+                SELECT 
+                    COALESCE(NULLIF(model, ''), 'Celular não informado') as model, 
+                    'Smartphone' as type, 
+                    COUNT(*) as quantity 
+                FROM devices
+                GROUP BY COALESCE(NULLIF(model, ''), 'Celular não informado')
+            `);
+            phoneModels = rows;
+        } catch (err) {
+            console.warn("Aviso: Tabela 'devices' não encontrada ou coluna 'model' incorreta.");
+        }
+
         let catalog = [];
         try {
             const [rows] = await db.execute('SELECT model_name, unit_price FROM asset_catalog');
             catalog = rows;
         } catch (dbError) {
-            console.warn("Aviso: Tabela asset_catalog ainda não existe ou está vazia.");
+            console.warn("Aviso: Tabela asset_catalog vazia.");
         }
         
         const priceMap = {};
@@ -41,7 +53,6 @@ exports.getAssetReport = async () => {
 
         const combined = [];
 
-        // Função auxiliar para processar listas com segurança
         const processItems = (list, sourceName, defaultType) => {
             if (!Array.isArray(list)) return;
             
@@ -49,7 +60,7 @@ exports.getAssetReport = async () => {
                 const modelName = item.model || "Desconhecido";
                 const qty = parseInt(item.quantity) || 0;
                 
-                // Verifica se já adicionamos este modelo na lista combinada
+
                 const existing = combined.find(x => x.model.toLowerCase() === modelName.toLowerCase());
                 
                 if (existing) {
@@ -74,6 +85,7 @@ exports.getAssetReport = async () => {
 
         processItems(pcModels, 'Agente', 'Computador');
         processItems(invModels, 'Inventário', 'Outro');
+        processItems(phoneModels, 'Gestão de Celulares', 'Smartphone');
 
         const grandTotal = combined.reduce((acc, item) => acc + (item.total_value || 0), 0);
         const totalItems = combined.reduce((acc, item) => acc + (item.quantity || 0), 0);
@@ -86,13 +98,11 @@ exports.getAssetReport = async () => {
 
     } catch (e) {
         console.error("Erro CRÍTICO no serviço financeiro:", e);
-        // Retorna objeto vazio para não quebrar o front
         return { assets: [], grandTotal: 0, totalItems: 0 };
     }
 };
 
 exports.updateAssetPrice = async (model, price, cat) => {
-    // Garante que a tabela existe antes de inserir
     await db.execute(`
         CREATE TABLE IF NOT EXISTS asset_catalog (
             id INT AUTO_INCREMENT PRIMARY KEY,
