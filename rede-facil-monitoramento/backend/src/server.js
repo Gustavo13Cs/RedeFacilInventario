@@ -12,6 +12,8 @@ const alertRoutes = require('./routes/alertRoutes');
 const authRoutes = require('./routes/authRoutes');
 const simCardRoutes = require('./routes/simCardRoutes');
 
+const financialRoutes = require('./routes/financialRoutes'); 
+
 const authMiddleware = require('./middleware/auth'); 
 const socketHandler = require('./socket/socketHandler'); 
 const monitorService = require('./services/monitorServices'); 
@@ -20,7 +22,12 @@ const app = express();
 const server = http.createServer(app);
 
 app.use(express.json());
-app.use(cors());
+
+app.use(cors({
+    origin: '*', 
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'] 
+}));
 
 const io = socketHandler.init(server);
 if (monitorService.setSocketIo) {
@@ -43,7 +50,10 @@ app.use('/api/alerts', alertRoutes);
 app.use('/api/inventory', inventoryRoutes);
 app.use('/api/chips', simCardRoutes);
 
+app.use('/api/financial', financialRoutes); 
+
 const PORT = process.env.PORT || 3001;
 server.listen(PORT, '0.0.0.0', () => {
     console.log(`🔥 Servidor rodando na porta ${PORT}`);
+    console.log(`💰 Módulo Financeiro ativo em: http://localhost:${PORT}/api/financial/report`);
 });

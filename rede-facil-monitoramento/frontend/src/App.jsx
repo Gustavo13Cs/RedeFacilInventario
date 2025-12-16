@@ -1,12 +1,12 @@
 import React, { useEffect, useState } from 'react';
-import { LayoutDashboard, Server, Activity, Package, Users, LogOut, Smartphone, Loader2 } from 'lucide-react';
+import { LayoutDashboard, Server, Activity, Package, Users, LogOut, Smartphone, Loader2,DollarSign} from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import io from 'socket.io-client';
 import axios from 'axios';
+import FinancialDashboard from './components/FinancialDashboard';
 
-// Importação dos Componentes
 import Login from './components/Login';
 import MachineDetails from './components/MachineDetails';
 import Inventory from './components/Inventory'; 
@@ -43,7 +43,6 @@ function App() {
       const token = localStorage.getItem('token');
       if (!token) return;
 
-      // 🔐 ADICIONADO: TOKEN NO HEADER
       const res = await axios.get(`${API_URL}/api/machines`, {
         headers: { Authorization: `Bearer ${token}` }
       });
@@ -52,7 +51,7 @@ function App() {
     } catch (error) {
       console.error("Erro ao buscar máquinas:", error);
       if (error.response?.status === 401) {
-        handleLogout(); // Se o token expirou, desloga
+        handleLogout(); 
       }
     }
   };
@@ -89,7 +88,6 @@ function App() {
     setCurrentUser(user.name);
     setUserRole(user.role);
     localStorage.setItem('user_role', user.role);
-    // Pequeno delay para garantir que o token foi salvo
     setTimeout(() => fetchMachines(), 100);
   };
 
@@ -171,6 +169,16 @@ function App() {
 
           {userRole === 'admin' && (
             <button 
+              onClick={() => { setActiveTab('financial'); setSelectedMachine(null); }}
+              className={`w-full flex items-center px-3 py-2.5 text-sm font-medium rounded-md transition-colors ${activeTab === 'financial' ? 'bg-slate-800 text-white' : 'hover:bg-slate-800/50 hover:text-white'}`}
+            >
+              <DollarSign className="mr-3 h-5 w-5 text-yellow-500" />
+              Patrimônio
+            </button>
+          )}
+
+          {userRole === 'admin' && (
+            <button 
               onClick={() => { setActiveTab('users'); setSelectedMachine(null); }}
               className={`w-full flex items-center px-3 py-2.5 text-sm font-medium rounded-md transition-colors ${activeTab === 'users' ? 'bg-slate-800 text-white' : 'hover:bg-slate-800/50 hover:text-white'}`}
             >
@@ -236,7 +244,9 @@ function App() {
               <Inventory userRole={userRole} />
             ) : activeTab === 'chips' ? (
               <SimCardManagement userRole={userRole} />
-            ) : activeTab === 'users' ? ( 
+            ) : activeTab === 'financial' ? (
+                <FinancialDashboard />
+            ): activeTab === 'users' ? ( 
               <UserManagement />
             ) : selectedMachine ? (
               <MachineDetails 

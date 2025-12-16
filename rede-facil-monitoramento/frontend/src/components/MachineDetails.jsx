@@ -41,7 +41,7 @@ export default function MachineDetails({ machine: initialMachineData, onBack, so
             
             const encodedUuid = encodeURIComponent(initialMachineData.uuid);
 
-            const res = await axios.get(`${API_URL}/api/machines/${encodedUuid}`, {
+            const res = await axios.get(`${API_URL}/machines/${encodedUuid}`, {
                 headers: { Authorization: `Bearer ${token}` }
             });
             
@@ -62,7 +62,7 @@ export default function MachineDetails({ machine: initialMachineData, onBack, so
   const fetchMaintenanceLogs = async () => {
     try {
         const token = localStorage.getItem('token'); 
-        const res = await axios.get(`${API_URL}/api/machines/${initialMachineData.id}/logs`, {
+        const res = await axios.get(`${API_URL}/machines/${initialMachineData.id}/logs`, {
             headers: { Authorization: `Bearer ${token}` }
         });
         setLogs(res.data);
@@ -75,7 +75,7 @@ export default function MachineDetails({ machine: initialMachineData, onBack, so
     e.preventDefault();
     try {
         const token = localStorage.getItem('token'); 
-        await axios.post(`${API_URL}/api/machines/${machine.id}/logs`, {
+        await axios.post(`${API_URL}/machines/${machine.id}/logs`, {
             description: newLog.description,
             log_date: newLog.log_date || new Date()
         }, {
@@ -91,7 +91,6 @@ export default function MachineDetails({ machine: initialMachineData, onBack, so
     }
   };
 
-  // 3. SOCKET DE TELEMETRIA EM TEMPO REAL
   useEffect(() => {
     if (!socket) return;
 

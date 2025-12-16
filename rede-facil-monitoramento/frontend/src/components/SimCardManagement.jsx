@@ -37,7 +37,7 @@ export default function SimCardManagement({ userRole }) {
     return { headers: { Authorization: `Bearer ${token}` } };
   };
 
-  const CHIPS_API = `${API_URL}/api/chips`;
+  const CHIPS_API = `${API_URL}/chips`;
 
   useEffect(() => { fetchData(); }, []);
 

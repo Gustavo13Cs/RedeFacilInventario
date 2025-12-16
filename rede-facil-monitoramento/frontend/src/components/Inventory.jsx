@@ -31,7 +31,7 @@ export default function Inventory({ userRole }) {
     return { headers: { Authorization: `Bearer ${token}` } };
   };
 
-  const INVENTORY_API = `${API_URL}/api/inventory`;
+  const INVENTORY_API = `${API_URL}/inventory`;
 
   // --- BUSCA DADOS ---
   useEffect(() => { fetchInventory(); }, []);
