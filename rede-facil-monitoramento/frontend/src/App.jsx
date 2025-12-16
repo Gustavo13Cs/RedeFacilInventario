@@ -6,12 +6,12 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import io from 'socket.io-client';
 import axios from 'axios';
 
-
+// Importação dos Componentes
 import Login from './components/Login';
 import MachineDetails from './components/MachineDetails';
 import Inventory from './components/Inventory'; 
 import UserManagement from './components/UserManagement';
-import SimCardManagement from './components/SimCardManagement'; 
+import SimCardManagement from './components/SimCardManagement';
 
 const API_URL = "http://localhost:3001";
 const socket = io('http://localhost:3001', {
@@ -19,7 +19,6 @@ const socket = io('http://localhost:3001', {
 });
 
 function App() {
-
   const [machines, setMachines] = useState([]);
   const [stats, setStats] = useState({ total: 0, online: 0, critical: 0 });
   const [lastTelemetry, setLastTelemetry] = useState(null);
@@ -41,21 +40,19 @@ function App() {
 
   const fetchMachines = async () => {
     try {
-      const token = localStorage.getItem('token'); 
+      const token = localStorage.getItem('token');
+      if (!token) return;
 
+      // 🔐 ADICIONADO: TOKEN NO HEADER
       const res = await axios.get(`${API_URL}/api/machines`, {
-        headers: {
-            Authorization: `Bearer ${token}` 
-        }
+        headers: { Authorization: `Bearer ${token}` }
       });
-
       setMachines(res.data);
       updateStats(res.data);
     } catch (error) {
       console.error("Erro ao buscar máquinas:", error);
-      
-      if (error.response && error.response.status === 401) {
-        handleLogout();
+      if (error.response?.status === 401) {
+        handleLogout(); // Se o token expirou, desloga
       }
     }
   };
@@ -81,27 +78,19 @@ function App() {
       );
     });
 
-    socket.on("new_alert", (alert) => {
-      console.log("Novo Alerta:", alert);
-    });
-
     return () => {
       socket.off("connect");
       socket.off("new_telemetry");
-      socket.off("new_alert");
     };
   }, []);
-
-  // -----------------------------------------------------------------------
-  // 2. FUNÇÕES DE INTERAÇÃO (HANDLERS)
-  // -----------------------------------------------------------------------
 
   const handleLoginSuccess = (user) => {
     setIsAuthenticated(true);
     setCurrentUser(user.name);
     setUserRole(user.role);
     localStorage.setItem('user_role', user.role);
-    fetchMachines();
+    // Pequeno delay para garantir que o token foi salvo
+    setTimeout(() => fetchMachines(), 100);
   };
 
   const handleLogout = () => {
@@ -124,7 +113,6 @@ function App() {
     setSelectedMachine(machine);
   };
 
-  // Helpers de Visualização
   const getStatusBadgeVariant = (status) => {
       if (status === 'critical') return 'destructive';
       if (status === 'warning') return 'secondary';
@@ -138,10 +126,6 @@ function App() {
       if (status === 'online') return 'bg-emerald-100 text-emerald-700 border-emerald-200';
       return 'bg-slate-100 text-slate-500';
   };
-
-  // -----------------------------------------------------------------------
-  // 3. RENDERIZAÇÃO CONDICIONAL (AGORA PODE TER O RETURN)
-  // -----------------------------------------------------------------------
 
   if (!isAuthenticated) {
     return <Login onLoginSuccess={handleLoginSuccess} />;
@@ -175,14 +159,15 @@ function App() {
             Inventário
           </button>
 
-          {/* BOTÃO GESTÃO DE CHIPS */}
-          <button 
-            onClick={() => { setActiveTab('chips'); setSelectedMachine(null); }}
-            className={`w-full flex items-center px-3 py-2.5 text-sm font-medium rounded-md transition-colors ${activeTab === 'chips' ? 'bg-slate-800 text-white' : 'hover:bg-slate-800/50 hover:text-white'}`}
-          >
-            <Smartphone className="mr-3 h-5 w-5 text-orange-500" />
-            Gestão de Chips
-          </button>
+          {userRole !== 'viewer' && (
+            <button 
+              onClick={() => { setActiveTab('chips'); setSelectedMachine(null); }}
+              className={`w-full flex items-center px-3 py-2.5 text-sm font-medium rounded-md transition-colors ${activeTab === 'chips' ? 'bg-slate-800 text-white' : 'hover:bg-slate-800/50 hover:text-white'}`}
+            >
+              <Smartphone className="mr-3 h-5 w-5 text-orange-500" />
+              Gestão de Chips
+            </button>
+          )}
 
           {userRole === 'admin' && (
             <button 
@@ -229,7 +214,6 @@ function App() {
         </div>
       </aside>
 
-      {/* CONTEÚDO PRINCIPAL */}
       <main className="flex-1 flex flex-col overflow-hidden">
         <header className="h-16 bg-white border-b flex items-center justify-between px-8 shadow-sm shrink-0">
           <h2 className="text-xl font-semibold text-slate-800">
@@ -248,7 +232,6 @@ function App() {
 
         <div className="flex-1 overflow-auto p-8 space-y-6">
           
-          {/* LÓGICA DE NAVEGAÇÃO ENTRE TELAS */}
           {activeTab === 'inventory' ? (
               <Inventory userRole={userRole} />
             ) : activeTab === 'chips' ? (
@@ -263,7 +246,6 @@ function App() {
               />
             ) : (
             <>
-              {/* DASHBOARD PADRÃO */}
               <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
                 <Card>
                   <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">

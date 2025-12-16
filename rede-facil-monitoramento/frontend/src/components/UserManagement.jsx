@@ -149,10 +149,15 @@ export default function UserManagement() {
 
                     <div>
                         <label className="block text-sm font-semibold text-slate-700 mb-1">Cargo / Permissão</label>
-                        <select name="role" value={formData.role} onChange={handleInputChange} className="w-full border border-slate-300 rounded-md p-2 outline-none focus:ring-2 focus:ring-blue-500 bg-white">
+                        <select name="role" value={formData.role} onChange={handleInputChange} className="w-full border border-slate-300 rounded-md p-2 outline-none focus:ring-2 focus:ring-purple-500 bg-white">
                             <option value="admin">Administrador (Acesso Total)</option>
-                            <option value="suporte">Suporte (Visualização)</option>
+                            <option value="suporte">Suporte (Visualização Geral)</option>
+                            <option value="viewer">Visualizador (Apenas Máquinas)</option>
                         </select>
+                        <p className="text-xs text-slate-500 mt-1">
+                            {formData.role === 'viewer' ? 'Só vê o dashboard de máquinas e inventário. Sem acesso a chips.' : 
+                             formData.role === 'suporte' ? 'Vê tudo, mas não gerencia usuários.' : 'Acesso irrestrito.'}
+                        </p>
                     </div>
 
                     <div className="flex justify-end gap-3 pt-4 border-t border-slate-100 mt-4">

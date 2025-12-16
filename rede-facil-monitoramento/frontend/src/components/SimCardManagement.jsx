@@ -127,7 +127,6 @@ export default function SimCardManagement({ userRole }) {
       const usedDeviceIds = safeChips.filter(c => c.id !== editingItem?.id).map(c => c.device_link_id).filter(Boolean);
       const usedEmployeeIds = safeChips.filter(c => c.id !== editingItem?.id).map(c => c.employee_link_id).filter(Boolean);
       
-      // AJUSTE AQUI: Filtra para mostrar apenas dispositivos ATIVOS e que não estão em uso
       const availableDevices = (devices || []).filter(d => 
         !usedDeviceIds.includes(d.id) && 
         d.status === 'ativo' 
