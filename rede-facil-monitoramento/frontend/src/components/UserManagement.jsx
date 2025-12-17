@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { Plus, Trash2, Users, Shield, Mail, Key, X, Save,AlertTriangle ,CheckCircle,XCircle} from 'lucide-react';
+import { Plus, Trash2, Users, Mail, Key, X, Save, AlertTriangle, CheckCircle, XCircle } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -19,15 +19,27 @@ export default function UserManagement() {
     name: '', email: '', password: '', role: 'admin'
   });
 
-  const AUTH_API = `${API_URL}/auth`;
+  // --- CORREÇÃO AQUI ---
+  // Removemos '/api' para que a rota fique http://localhost:3001/auth
+  // Assim como é feito no componente Login.jsx
+  const baseUrl = API_URL.replace('/api', '');
+  const AUTH_API = `${baseUrl}/auth`;
+
+  // Função auxiliar para pegar o token
+  const getAuthHeaders = () => {
+    const token = localStorage.getItem('token');
+    return { headers: { Authorization: `Bearer ${token}` } };
+  };
 
   useEffect(() => { fetchUsers(); }, []);
 
   const fetchUsers = async () => {
     try {
-      const res = await axios.get(AUTH_API);
+      const res = await axios.get(AUTH_API, getAuthHeaders());
       setUsers(res.data);
-    } catch (error) { console.error("Erro ao buscar usuários:", error); }
+    } catch (error) { 
+        console.error("Erro ao buscar usuários:", error);
+    }
   };
 
   const handleInputChange = (e) => {
@@ -38,7 +50,7 @@ export default function UserManagement() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      await axios.post(`${AUTH_API}/register`, formData);
+      await axios.post(`${AUTH_API}/register`, formData, getAuthHeaders());
       fetchUsers();
       closeForm();
       setShowSuccessModal(true); 
@@ -53,7 +65,7 @@ export default function UserManagement() {
   const confirmDelete = async () => {
     if (userToDelete) {
       try {
-        await axios.delete(`${AUTH_API}/${userToDelete.id}`);
+        await axios.delete(`${AUTH_API}/${userToDelete.id}`, getAuthHeaders());
         fetchUsers(); 
         setUserToDelete(null); 
       } catch (error) { console.error("Erro ao deletar:", error); alert("Erro ao excluir usuário."); }
@@ -114,10 +126,11 @@ export default function UserManagement() {
         </CardContent>
       </Card>
 
+      {/* MODAIS (Criação, Exclusão, Sucesso, Erro) */}
+      
       {isFormOpen && createPortal(
         <div className="fixed inset-0 z-[9999] flex items-center justify-center">
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={closeForm} />
-          
           <Card className="relative z-10 w-full max-w-md animate-in zoom-in-95 bg-white border-none shadow-2xl">
             <CardHeader className="border-b border-slate-100 bg-white rounded-t-lg flex flex-row justify-between items-center">
                 <CardTitle>Novo Usuário</CardTitle>
@@ -125,12 +138,10 @@ export default function UserManagement() {
             </CardHeader>
             <CardContent className="pt-6 bg-white rounded-b-lg">
                 <form onSubmit={handleSubmit} className="space-y-4">
-                    
                     <div>
                         <label className="block text-sm font-semibold text-slate-700 mb-1">Nome Completo</label>
                         <input type="text" name="name" value={formData.name} onChange={handleInputChange} required className="w-full border border-slate-300 rounded-md p-2 outline-none focus:ring-2 focus:ring-blue-500" placeholder="Ex: João Silva" />
                     </div>
-
                     <div>
                         <label className="block text-sm font-semibold text-slate-700 mb-1">E-mail de Acesso</label>
                         <div className="relative">
@@ -138,7 +149,6 @@ export default function UserManagement() {
                             <input type="email" name="email" value={formData.email} onChange={handleInputChange} required className="w-full border border-slate-300 rounded-md pl-9 p-2 outline-none focus:ring-2 focus:ring-blue-500" placeholder="usuario@redefacil.com" />
                         </div>
                     </div>
-
                     <div>
                         <label className="block text-sm font-semibold text-slate-700 mb-1">Senha</label>
                         <div className="relative">
@@ -146,7 +156,6 @@ export default function UserManagement() {
                             <input type="password" name="password" value={formData.password} onChange={handleInputChange} required className="w-full border border-slate-300 rounded-md pl-9 p-2 outline-none focus:ring-2 focus:ring-blue-500" placeholder="••••••••" />
                         </div>
                     </div>
-
                     <div>
                         <label className="block text-sm font-semibold text-slate-700 mb-1">Cargo / Permissão</label>
                         <select name="role" value={formData.role} onChange={handleInputChange} className="w-full border border-slate-300 rounded-md p-2 outline-none focus:ring-2 focus:ring-purple-500 bg-white">
@@ -154,12 +163,7 @@ export default function UserManagement() {
                             <option value="suporte">Suporte (Visualização Geral)</option>
                             <option value="viewer">Visualizador (Apenas Máquinas)</option>
                         </select>
-                        <p className="text-xs text-slate-500 mt-1">
-                            {formData.role === 'viewer' ? 'Só vê o dashboard de máquinas e inventário. Sem acesso a chips.' : 
-                             formData.role === 'suporte' ? 'Vê tudo, mas não gerencia usuários.' : 'Acesso irrestrito.'}
-                        </p>
                     </div>
-
                     <div className="flex justify-end gap-3 pt-4 border-t border-slate-100 mt-4">
                         <Button type="button" variant="outline" onClick={closeForm}>Cancelar</Button>
                         <Button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white"><Save className="mr-2 h-4 w-4" /> Criar Usuário</Button>
@@ -171,45 +175,17 @@ export default function UserManagement() {
         document.body
       )}
       
-      {/* NOVO MODAL DE CONFIRMAÇÃO DE EXCLUSÃO */}
       {userToDelete && createPortal(
         <div className="fixed inset-0 z-[9999] flex items-center justify-center">
-          <div 
-            className="absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity" 
-            onClick={() => setUserToDelete(null)}
-          />
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity" onClick={() => setUserToDelete(null)} />
           <Card className="relative z-10 w-full max-w-sm bg-white shadow-2xl animate-in zoom-in-95 duration-200 border-none p-0 overflow-hidden">
             <div className="p-6 flex flex-col items-center text-center">
-              <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mb-4">
-                <AlertTriangle className="h-6 w-6 text-red-600" />
-              </div>
-
-              <h3 className="text-lg font-bold text-slate-800 mb-2">
-                Remover Usuário?
-              </h3>
-              
-              <p className="text-sm text-slate-500 mb-4">
-                Você está prestes a remover o acesso de: <br/>
-                <strong>{userToDelete.name}</strong> ({userToDelete.email})
-              </p>
-              <p className="text-xs text-red-500 font-medium mb-6 bg-red-50 px-3 py-1 rounded-full">
-                Essa ação não pode ser desfeita.
-              </p>
-
+              <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mb-4"><AlertTriangle className="h-6 w-6 text-red-600" /></div>
+              <h3 className="text-lg font-bold text-slate-800 mb-2">Remover Usuário?</h3>
+              <p className="text-sm text-slate-500 mb-4">Você está prestes a remover o acesso de: <br/><strong>{userToDelete.name}</strong></p>
               <div className="flex gap-3 w-full">
-                <Button 
-                  variant="outline" 
-                  onClick={() => setUserToDelete(null)}
-                  className="flex-1 border-slate-200 text-slate-700 hover:bg-slate-50"
-                >
-                  Cancelar
-                </Button>
-                <Button 
-                  onClick={confirmDelete}
-                  className="flex-1 bg-red-600 hover:bg-red-700 text-white shadow-sm font-medium"
-                >
-                  Sim, Remover
-                </Button>
+                <Button variant="outline" onClick={() => setUserToDelete(null)} className="flex-1 border-slate-200 text-slate-700 hover:bg-slate-50">Cancelar</Button>
+                <Button onClick={confirmDelete} className="flex-1 bg-red-600 hover:bg-red-700 text-white shadow-sm font-medium">Sim, Remover</Button>
               </div>
             </div>
           </Card>
@@ -217,71 +193,30 @@ export default function UserManagement() {
         document.body
       )}
 
-      {/* MODAL DE SUCESSO (CADASTRADO COM SUCESSO) */}
       {showSuccessModal && createPortal(
         <div className="fixed inset-0 z-[9999] flex items-center justify-center">
-          <div 
-            className="absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity" 
-            onClick={() => setShowSuccessModal(false)}
-          />
-
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity" onClick={() => setShowSuccessModal(false)} />
           <Card className="relative z-10 w-full max-w-sm bg-white shadow-2xl animate-in zoom-in-95 duration-200 border-none p-0 overflow-hidden">
             <div className="p-6 flex flex-col items-center text-center">
-              
-              <div className="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center mb-4 animate-in zoom-in duration-300">
-                <CheckCircle className="h-8 w-8 text-emerald-600" />
-              </div>
-
-              <h3 className="text-xl font-bold text-slate-800 mb-2">
-                Sucesso!
-              </h3>
-              
-              <p className="text-sm text-slate-500 mb-6">
-                O novo usuário foi cadastrado e já pode acessar o sistema com as credenciais informadas.
-              </p>
-
-              <Button 
-                onClick={() => setShowSuccessModal(false)}
-                className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-medium shadow-sm h-11"
-              >
-                Entendido
-              </Button>
+              <div className="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center mb-4"><CheckCircle className="h-8 w-8 text-emerald-600" /></div>
+              <h3 className="text-xl font-bold text-slate-800 mb-2">Sucesso!</h3>
+              <Button onClick={() => setShowSuccessModal(false)} className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-medium shadow-sm h-11">Entendido</Button>
             </div>
-            
             <div className="h-1.5 w-full bg-emerald-500" />
           </Card>
         </div>,
         document.body
       )}
 
-
-      {/* MODAL DE ERRO (E-MAIL DUPLICADO, ETC) */}
       {errorModal && createPortal(
         <div className="fixed inset-0 z-[9999] flex items-center justify-center">
-          <div 
-            className="absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity" 
-            onClick={() => setErrorModal(null)}
-          />
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity" onClick={() => setErrorModal(null)} />
           <Card className="relative z-10 w-full max-w-sm bg-white shadow-2xl animate-in zoom-in-95 duration-200 border-none p-0 overflow-hidden">
             <div className="p-6 flex flex-col items-center text-center">
-              <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mb-4 animate-in shake duration-300">
-                <XCircle className="h-8 w-8 text-red-600" />
-              </div>
-
-              <h3 className="text-xl font-bold text-slate-800 mb-2">
-                Atenção
-              </h3>
-              
-              <p className="text-sm text-slate-500 mb-6 px-2">
-                {errorModal} 
-              </p>
-
-              <Button 
-                onClick={() => setErrorModal(null)}
-                className="w-full bg-red-600 hover:bg-red-700 text-white font-medium shadow-sm h-11"
-              >
-                Tentar Novamente
-              </Button>
+              <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mb-4"><XCircle className="h-8 w-8 text-red-600" /></div>
+              <h3 className="text-xl font-bold text-slate-800 mb-2">Atenção</h3>
+              <p className="text-sm text-slate-500 mb-6 px-2">{errorModal}</p>
+              <Button onClick={() => setErrorModal(null)} className="w-full bg-red-600 hover:bg-red-700 text-white font-medium shadow-sm h-11">Tentar Novamente</Button>
             </div>
             <div className="h-1.5 w-full bg-red-500" />
           </Card>
