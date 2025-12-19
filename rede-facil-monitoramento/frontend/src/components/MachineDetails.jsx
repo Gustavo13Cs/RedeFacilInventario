@@ -7,7 +7,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { 
   ArrowLeft, Cpu, HardDrive, Activity, Thermometer, Database, 
   AlertTriangle, CheckCircle, Wrench, Calendar, Plus, Save, X, User,
-  CircuitBoard, MemoryStick, Monitor as MonitorIcon, Network, Layers, Search, AppWindow
+  CircuitBoard, MemoryStick, Monitor as MonitorIcon, Network, Layers, Search, AppWindow,
+  Terminal, Power, RefreshCw, Trash
 } from 'lucide-react'; 
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend} from 'recharts';
 import axios from 'axios'; 
@@ -19,6 +20,13 @@ export default function MachineDetails({ machine: initialMachineData, onBack, so
   const [loadingDetails, setLoadingDetails] = useState(true);
 
   const [activeTab, setActiveTab] = useState('monitoring'); 
+
+  const [confirmModal, setConfirmModal] = useState({ 
+    isOpen: false, 
+    type: null, 
+    label: null, 
+    description: '' 
+  });
 
   const [telemetryData, setTelemetryData] = useState([]);
   const [currentTemp, setCurrentTemp] = useState(0);
@@ -38,13 +46,10 @@ export default function MachineDetails({ machine: initialMachineData, onBack, so
     const fetchFullDetails = async () => {
         try {
             const token = localStorage.getItem('token');
-            
             const encodedUuid = encodeURIComponent(initialMachineData.uuid);
-
             const res = await axios.get(`${API_URL}/machines/${encodedUuid}`, {
                 headers: { Authorization: `Bearer ${token}` }
             });
-            
             setMachine(prev => ({ ...prev, ...res.data }));
         } catch (error) {
             console.error("Erro ao buscar detalhes completos:", error);
@@ -135,9 +140,103 @@ export default function MachineDetails({ machine: initialMachineData, onBack, so
     { name: 'Livre', value: currentDiskFree },
     { name: 'Usado', value: 100 - currentDiskFree }
   ];
+  const requestCommand = (commandType, commandLabel, description) => {
+    setConfirmModal({
+        isOpen: true,
+        type: commandType,
+        label: commandLabel,
+        description: description
+    });
+  };
 
+  const executeCommand = async () => {
+    try {
+        const token = localStorage.getItem('token');
+        
+        const safeUuid = encodeURIComponent(machine.uuid);
 
-  // --- RENDERIZAÇÃO DAS ABAS (COMPONENTES INTERNOS) ---
+        await axios.post(`${API_URL}/machines/${safeUuid}/command`, {
+            command: confirmModal.type
+        }, {
+            headers: { Authorization: `Bearer ${token}` }
+        });
+        
+        alert(`Comando "${confirmModal.label}" enviado com sucesso!`);
+        setConfirmModal({ isOpen: false, type: null, label: null, description: '' });
+    } catch (error) {
+        console.error("Erro ao enviar comando:", error);
+        alert("Falha ao enviar comando. Verifique se o UUID da máquina é válido.");
+        setConfirmModal({ ...confirmModal, isOpen: false });
+    }
+  };
+  
+  const renderRemoteTab = () => (
+    <Card className="border-slate-200 shadow-sm animate-in fade-in slide-in-from-bottom-4 duration-500">
+        <CardHeader className="bg-white border-b border-slate-100">
+            <CardTitle className="text-lg font-bold text-slate-800">Controle Remoto</CardTitle>
+            <p className="text-sm text-slate-500">Execução de comandos administrativos.</p>
+        </CardHeader>
+        <CardContent className="p-8">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                
+                {/* Botão Reiniciar */}
+                <button 
+                    onClick={() => requestCommand('restart', 'REINICIAR', 'Isso irá reiniciar o sistema operacional imediatamente.')}
+                    className="relative overflow-hidden flex flex-col items-center justify-center p-6 bg-white border-2 border-slate-100 rounded-xl hover:border-blue-500 hover:bg-blue-50 transition-all group duration-300"
+                >
+                    {/* Ícone de fundo (Marca d'água) */}
+                    <div className="absolute top-0 right-0 p-2 opacity-10 group-hover:opacity-20 transition-opacity pointer-events-none">
+                        <RefreshCw className="h-24 w-24 text-blue-600" />
+                    </div>
+                    
+                    {/* Ícone Principal */}
+                    <div className="bg-blue-100 p-4 rounded-full mb-3 group-hover:scale-110 transition-transform duration-300">
+                        <RefreshCw className="h-8 w-8 text-blue-600 group-hover:rotate-180 transition-transform duration-700" />
+                    </div>
+                    
+                    <span className="font-bold text-slate-700 text-lg group-hover:text-blue-700">REINICIAR</span>
+                    <span className="text-xs text-slate-400 mt-1">Reboot imediato</span>
+                </button>
+
+                {/* Botão Desligar */}
+                <button 
+                    onClick={() => requestCommand('shutdown', 'DESLIGAR', 'A máquina será desligada completamente.')}
+                    className="relative overflow-hidden flex flex-col items-center justify-center p-6 bg-white border-2 border-slate-100 rounded-xl hover:border-red-500 hover:bg-red-50 transition-all group duration-300"
+                >
+                    <div className="absolute top-0 right-0 p-2 opacity-10 group-hover:opacity-20 transition-opacity pointer-events-none">
+                        <Power className="h-24 w-24 text-red-600" />
+                    </div>
+                    <div className="bg-red-100 p-4 rounded-full mb-3 group-hover:scale-110 transition-transform duration-300">
+                        <Power className="h-8 w-8 text-red-600" />
+                    </div>
+                    <span className="font-bold text-slate-700 text-lg group-hover:text-red-700">DESLIGAR</span>
+                    <span className="text-xs text-slate-400 mt-1">Shutdown imediato</span>
+                </button>
+
+                {/* Botão Limpeza */}
+                <button 
+                    onClick={() => requestCommand('clean_temp', 'LIMPAR TEMPORÁRIOS', 'Isso apagará arquivos temporários e cache para liberar espaço.')}
+                    className="relative overflow-hidden flex flex-col items-center justify-center p-6 bg-white border-2 border-slate-100 rounded-xl hover:border-orange-500 hover:bg-orange-50 transition-all group duration-300"
+                >
+                    <div className="absolute top-0 right-0 p-2 opacity-10 group-hover:opacity-20 transition-opacity pointer-events-none">
+                        <Trash className="h-24 w-24 text-orange-600" />
+                    </div>
+                    <div className="bg-orange-100 p-4 rounded-full mb-3 group-hover:scale-110 transition-transform duration-300">
+                        <Trash className="h-8 w-8 text-orange-600" />
+                    </div>
+                    <span className="font-bold text-slate-700 text-lg group-hover:text-orange-700">LIMPEZA</span>
+                    <span className="text-xs text-slate-400 mt-1">Arquivos Temp</span>
+                </button>
+
+            </div>
+            
+            <div className="mt-8 p-4 bg-yellow-50 border border-yellow-200 rounded-md text-sm text-yellow-800 flex items-center gap-2">
+                <AlertTriangle className="h-5 w-5 text-yellow-600" />
+                <p><strong>Nota de Segurança:</strong> Os comandos são enviados em tempo real.</p>
+            </div>
+        </CardContent>
+    </Card>
+  );
 
   const renderMonitoringTab = () => (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -310,7 +409,6 @@ export default function MachineDetails({ machine: initialMachineData, onBack, so
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500 pb-10">
-      {/* Cabeçalho Fixo */}
       <div className="flex flex-col md:flex-row md:items-center gap-4 justify-between border-b border-slate-200 pb-6">
         <div className="flex items-center gap-4">
             <button onClick={onBack} className="p-2 hover:bg-slate-200 rounded-full transition-colors"><ArrowLeft className="h-6 w-6 text-slate-600" /></button>
@@ -329,7 +427,6 @@ export default function MachineDetails({ machine: initialMachineData, onBack, so
             </div>
         </div>
         
-        {/* Navegação de Abas */}
         <div className="flex bg-slate-100 p-1 rounded-lg self-start md:self-auto overflow-x-auto">
             <button onClick={() => setActiveTab('monitoring')} className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md transition-all whitespace-nowrap ${activeTab === 'monitoring' ? 'bg-white shadow text-blue-700' : 'text-slate-500 hover:text-slate-700'}`}>
                 <Activity className="w-4 h-4" /> Monitoramento
@@ -343,18 +440,20 @@ export default function MachineDetails({ machine: initialMachineData, onBack, so
             <button onClick={() => setActiveTab('logs')} className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md transition-all whitespace-nowrap ${activeTab === 'logs' ? 'bg-white shadow text-blue-700' : 'text-slate-500 hover:text-slate-700'}`}>
                 <Wrench className="w-4 h-4" /> Manutenção
             </button>
+            <button onClick={() => setActiveTab('remote')} className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md transition-all whitespace-nowrap ${activeTab === 'remote' ? 'bg-white shadow text-red-600' : 'text-slate-500 hover:text-slate-700'}`}>
+                <Terminal className="w-4 h-4" /> Controle
+            </button>
         </div>
       </div>
 
-      {/* Conteúdo das Abas */}
       <div className="min-h-[400px]">
         {activeTab === 'monitoring' && renderMonitoringTab()}
         {activeTab === 'hardware' && renderHardwareTab()}
         {activeTab === 'software' && renderSoftwareTab()}
         {activeTab === 'logs' && renderLogsTab()}
+        {activeTab === 'remote' && renderRemoteTab()}
       </div>
 
-      {/* MODAL DE LOGS (Portal) */}
       {isLogModalOpen && createPortal(
         <div className="fixed inset-0 z-[9999] flex items-center justify-center">
             <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setIsLogModalOpen(false)} />
@@ -383,6 +482,68 @@ export default function MachineDetails({ machine: initialMachineData, onBack, so
             </Card>
         </div>, document.body
       )}
+
+      {confirmModal.isOpen && createPortal(
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center">
+          <div 
+            className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm transition-opacity" 
+            onClick={() => setConfirmModal({ ...confirmModal, isOpen: false })}
+          />
+          
+          <Card className="relative z-10 w-full max-w-md bg-white shadow-2xl animate-in zoom-in-95 duration-200 border-none p-0 overflow-hidden">
+            <div className={`h-2 w-full ${
+                confirmModal.type === 'shutdown' ? 'bg-red-500' : 
+                confirmModal.type === 'restart' ? 'bg-blue-500' : 'bg-orange-500'
+            }`} />
+            
+            <div className="p-6">
+                <div className="flex flex-col items-center text-center">
+                    {/* Ícone Redondo */}
+                    <div className={`w-16 h-16 rounded-full flex items-center justify-center mb-4 ${
+                        confirmModal.type === 'shutdown' ? 'bg-red-100 text-red-600' : 
+                        confirmModal.type === 'restart' ? 'bg-blue-100 text-blue-600' : 'bg-orange-100 text-orange-600'
+                    }`}>
+                        {confirmModal.type === 'shutdown' ? <Power className="h-8 w-8" /> : 
+                         confirmModal.type === 'restart' ? <RefreshCw className="h-8 w-8" /> : 
+                         <Trash className="h-8 w-8" />}
+                    </div>
+
+                    <h3 className="text-xl font-bold text-slate-800 mb-2">
+                        Confirmar {confirmModal.label}?
+                    </h3>
+                    
+                    <p className="text-sm text-slate-500 mb-6 leading-relaxed">
+                        Você está prestes a enviar um comando para <strong>{machine.hostname}</strong>.<br/><br/>
+                        <span className="bg-slate-100 px-3 py-1.5 rounded text-slate-700 font-medium border border-slate-200 inline-block">
+                           {confirmModal.description}
+                        </span>
+                    </p>
+
+                    <div className="flex gap-3 w-full">
+                        <Button 
+                            variant="outline" 
+                            onClick={() => setConfirmModal({ ...confirmModal, isOpen: false })}
+                            className="flex-1 border-slate-200 text-slate-700 hover:bg-slate-50 h-11"
+                        >
+                            Cancelar
+                        </Button>
+                        <Button 
+                            onClick={executeCommand}
+                            className={`flex-1 text-white font-bold h-11 shadow-md ${
+                                confirmModal.type === 'shutdown' ? 'bg-red-600 hover:bg-red-700' : 
+                                confirmModal.type === 'restart' ? 'bg-blue-600 hover:bg-blue-700' : 'bg-orange-600 hover:bg-orange-700'
+                            }`}
+                        >
+                            Confirmar
+                        </Button>
+                    </div>
+                </div>
+            </div>
+          </Card>
+        </div>,
+        document.body
+      )}
+
     </div>
   );
 }

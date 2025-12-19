@@ -1,4 +1,3 @@
-// src/services/monitorServices.js
 const { db, getMachineId } = require('../config/db');
 const moment = require('moment');
 const socketHandler = require('../socket/socketHandler');

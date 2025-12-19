@@ -11,7 +11,6 @@ const inventoryRoutes = require('./routes/inventoryRoutes');
 const alertRoutes = require('./routes/alertRoutes');
 const authRoutes = require('./routes/authRoutes');
 const simCardRoutes = require('./routes/simCardRoutes');
-
 const financialRoutes = require('./routes/financialRoutes'); 
 
 const authMiddleware = require('./middleware/auth'); 

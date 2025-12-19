@@ -1,5 +1,6 @@
 const monitorServices = require('../services/monitorServices');
 const socketHandler = require('../socket/socketHandler'); 
+const commandService = require('../services/commandService');
 
 exports.registerMachine = async (req, res) => {
     try {
@@ -106,3 +107,27 @@ exports.getTelemetryHistory = async (req, res) => {
         res.status(500).json({ message: 'Erro ao buscar histórico de telemetria.', error: error.message });
     }
 };
+
+exports.sendCommand = async (req, res) => {
+    const { uuid } = req.params;
+    const { command } = req.body;
+
+    if (!command) return res.status(400).json({ message: 'Comando obrigatório.' });
+
+    try {
+
+        console.log(`📥 RECEBIDO PEDIDO DE COMANDO:`);
+        console.log(`   - Alvo (UUID): [${uuid}]`);
+        console.log(`   - Ação: ${command}`);
+        
+        commandService.addCommand(uuid, command);
+        const io = socketHandler.getIO();
+        io.emit('command_queued', { machine_uuid: uuid, command });
+
+        console.log(`🔌 Comando [${command}] agendado para ${uuid}`);
+        res.json({ message: `Comando enviado! Aguardando agente sincronizar...` });
+    } catch (error) {
+        res.status(500).json({ message: 'Erro ao processar comando.' });
+    }
+};
+
