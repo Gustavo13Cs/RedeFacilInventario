@@ -39,6 +39,13 @@ export default function MachineDetails({ machine: initialMachineData, onBack, so
 
   const [softwareSearch, setSoftwareSearch] = useState('');
 
+
+    const [successModal, setSuccessModal] = useState({ 
+        isOpen: false, 
+        title: '', 
+        message: '' 
+    });
+
   const PIE_COLORS = ['#10b981', '#1e293b'];
 
 
@@ -152,7 +159,6 @@ export default function MachineDetails({ machine: initialMachineData, onBack, so
   const executeCommand = async () => {
     try {
         const token = localStorage.getItem('token');
-        
         const safeUuid = encodeURIComponent(machine.uuid);
 
         await axios.post(`${API_URL}/machines/${safeUuid}/command`, {
@@ -161,11 +167,20 @@ export default function MachineDetails({ machine: initialMachineData, onBack, so
             headers: { Authorization: `Bearer ${token}` }
         });
         
-        alert(`Comando "${confirmModal.label}" enviado com sucesso!`);
-        setConfirmModal({ isOpen: false, type: null, label: null, description: '' });
+        setConfirmModal({ ...confirmModal, isOpen: false });
+
+        setSuccessModal({
+            isOpen: true,
+            title: 'Comando Enviado!',
+            message: `A ação "${confirmModal.label}" foi enfileirada com sucesso.`
+        });
+        setTimeout(() => {
+            setSuccessModal({ isOpen: false, title: '', message: '' });
+        }, 3000);
+
     } catch (error) {
         console.error("Erro ao enviar comando:", error);
-        alert("Falha ao enviar comando. Verifique se o UUID da máquina é válido.");
+        alert("Falha ao enviar comando."); 
         setConfirmModal({ ...confirmModal, isOpen: false });
     }
   };
@@ -480,8 +495,8 @@ export default function MachineDetails({ machine: initialMachineData, onBack, so
                     </form>
                 </CardContent>
             </Card>
-        </div>, document.body
-      )}
+        </div>
+      , document.body)}
 
       {confirmModal.isOpen && createPortal(
         <div className="fixed inset-0 z-[9999] flex items-center justify-center">
@@ -498,7 +513,6 @@ export default function MachineDetails({ machine: initialMachineData, onBack, so
             
             <div className="p-6">
                 <div className="flex flex-col items-center text-center">
-                    {/* Ícone Redondo */}
                     <div className={`w-16 h-16 rounded-full flex items-center justify-center mb-4 ${
                         confirmModal.type === 'shutdown' ? 'bg-red-100 text-red-600' : 
                         confirmModal.type === 'restart' ? 'bg-blue-100 text-blue-600' : 'bg-orange-100 text-orange-600'
@@ -540,6 +554,36 @@ export default function MachineDetails({ machine: initialMachineData, onBack, so
                 </div>
             </div>
           </Card>
+        </div>,
+        document.body 
+      )}
+
+      {successModal.isOpen && createPortal(
+        <div className="fixed inset-0 z-[10000] flex items-end justify-center sm:items-center px-4 py-6 sm:p-0">
+            <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm transition-opacity" />
+            <div className="relative z-10 transform overflow-hidden rounded-lg bg-white text-left shadow-2xl transition-all sm:w-full sm:max-w-sm animate-in fade-in zoom-in-95 duration-300">
+                <div className="p-6">
+                    <div className="flex items-center gap-4">
+                        <div className="mx-auto flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full bg-green-100 sm:mx-0">
+                            <CheckCircle className="h-6 w-6 text-green-600 animate-pulse" />
+                        </div>
+                        
+                        <div className="flex-1 text-left">
+                            <h3 className="text-lg font-bold text-slate-900 leading-6">
+                                {successModal.title}
+                            </h3>
+                            <div className="mt-1">
+                                <p className="text-sm text-slate-500">
+                                    {successModal.message}
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div className="h-1 w-full bg-slate-100">
+                    <div className="h-full bg-green-500 animate-[progress_3s_linear_forwards]" style={{width: '100%'}}></div>
+                </div>
+            </div>
         </div>,
         document.body
       )}

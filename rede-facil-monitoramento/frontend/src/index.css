@@ -7,7 +7,6 @@
   line-height: 1.5;
   font-weight: 400;
 
-  /* Removemos a cor escura forçada e definimos um padrão claro neutro */
   color-scheme: light; 
   font-synthesis: none;
   text-rendering: optimizeLegibility;
@@ -20,10 +19,15 @@ body {
   padding: 0;
   min-width: 100vw;
   min-height: 100vh;
-  background-color: #f8fafc; /* Cor de fundo suave (slate-50) para combinar com o app */
+  background-color: #f8fafc; 
 }
 
 #root {
   width: 100%;
   height: 100%;
+}
+
+@keyframes progress {
+  from { width: 100%; }
+  to { width: 0%; }
 }
