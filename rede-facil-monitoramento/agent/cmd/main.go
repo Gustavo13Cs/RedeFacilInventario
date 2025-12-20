@@ -89,29 +89,40 @@ type RegistrationResponse struct {
 	MachineIP string `json:"ip_address"`
 }
 
-// ESTRUTURA PARA LER A RESPOSTA COM COMANDOS
 type ServerResponse struct {
 	Message string `json:"message"`
 	Command string `json:"command"`
 }
 
-// --- FUNÇÕES AUXILIARES ---
 
-func execWmic(query string) string {
+func execWmic(args ...string) string {
 	if runtime.GOOS != "windows" {
 		return "N/A"
 	}
-	cmd := exec.Command("wmic", strings.Split(query, " ")...)
+	
+    var cmdArgs []string
+    if len(args) == 1 {
+        cmdArgs = strings.Fields(args[0]) 
+    } else {
+        cmdArgs = args
+    }
+
+	cmd := exec.Command("wmic", cmdArgs...)
 	var out bytes.Buffer
 	cmd.Stdout = &out
 	err := cmd.Run()
 	if err != nil {
 		return "N/A"
 	}
+    
 	result := strings.TrimSpace(out.String())
 	lines := strings.Split(result, "\n")
+    
 	if len(lines) > 1 {
-		return strings.TrimSpace(lines[1])
+        val := strings.TrimSpace(lines[1])
+        if val != "" {
+            return val
+        }
 	}
 	return "N/A"
 }
@@ -411,6 +422,38 @@ func getLastBackupTimestamp(dir string) string {
 	return ""
 }
 
+func getCPUTemperature() float64 {
+	if runtime.GOOS != "windows" {
+		sensors, err := host.SensorsTemperatures()
+		if err != nil || len(sensors) == 0 {
+			return 0.0
+		}
+		return sensors[0].Temperature
+	}
+
+
+	output := execWmic("/namespace:\\\\root\\wmi PATH MSAcpi_ThermalZoneTemperature get CurrentTemperature")
+	
+	output = strings.TrimSpace(output)
+	if output == "" || output == "N/A" {
+		return 0.0
+	}
+
+	kelvinDeci, err := strconv.ParseFloat(output, 64)
+	if err != nil {
+		return 0.0
+	}
+
+	celsius := (kelvinDeci / 10.0) - 273.15
+
+	if celsius < 0 || celsius > 150 {
+		return 0.0
+	}
+
+	return celsius
+}
+
+
 func collectTelemetryData() TelemetryData {
 	cpuPercents, _ := cpu.Percent(0, false)
 	cpuUsage := 0.0
@@ -441,35 +484,7 @@ func collectTelemetryData() TelemetryData {
 	}
 }
 
-func getCPUTemperature() float64 {
-	sensors, err := host.SensorsTemperatures()
-	if err != nil {
-		return 0.0
-	}
-	var cpuTemps []float64
-	cpuKeywords := []string{"core", "package", "die", "cpu"}
-	for _, sensor := range sensors {
-		key := strings.ToLower(sensor.SensorKey)
-		for _, keyword := range cpuKeywords {
-			if strings.Contains(key, keyword) && sensor.Temperature > 0 {
-				cpuTemps = append(cpuTemps, sensor.Temperature)
-				break
-			}
-		}
-	}
-	if len(cpuTemps) > 0 {
-		var total float64
-		for _, t := range cpuTemps {
-			total += t
-		}
-		return total / float64(len(cpuTemps))
-	}
-	return 0.0
-}
 
-// ---------------------------------------------------------
-// FUNÇÃO QUE FALTAVA: EXECUTAR COMANDO
-// ---------------------------------------------------------
 func handleRemoteCommand(command string) {
 	if command == "" {
 		return

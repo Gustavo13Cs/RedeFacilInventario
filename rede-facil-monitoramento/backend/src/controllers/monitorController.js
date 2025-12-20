@@ -22,11 +22,12 @@ exports.registerMachine = async (req, res) => {
     }
 };
 
+
 exports.processTelemetry = async (req, res) => { 
     try {
         const data = req.body;
         
-        if (!data.uuid || data.cpu_usage_percent === undefined || data.ram_usage_percent === undefined) {
+        if (!data.uuid || data.cpu_usage_percent === undefined) {
              return res.status(400).json({ message: 'Dados de telemetria incompletos.' });
         }
 
@@ -34,31 +35,34 @@ exports.processTelemetry = async (req, res) => {
         
         try {
             const io = socketHandler.getIO();
-            
             const telemetryPayload = {
                 machine_uuid: data.uuid, 
                 cpu_usage_percent: data.cpu_usage_percent,
                 ram_usage_percent: data.ram_usage_percent,
                 temperature_celsius: data.temperature_celsius,
-
                 disk_free_percent: data.disk_free_percent,
                 disk_smart_status: data.disk_smart_status || 'OK',
-
-                status: result.calculatedStatus
-                
+                status: result.calculatedStatus || 'online'
             };
-
             io.emit('new_telemetry', telemetryPayload);
         } catch (socketError) {
             console.error('⚠️ Erro ao tentar emitir socket:', socketError.message);
         }
 
+        const pendingCommand = commandService.getCommand(data.uuid);
+        
+        if (pendingCommand) {
+            console.log(`📤 ENVIANDO COMANDO [${pendingCommand}] PARA O AGENTE: ${data.uuid}`);
+        }
+        res.status(200).json({
+            message: 'Telemetria processada com sucesso.',
+            command: pendingCommand || null 
+        });
 
-        res.status(200).json(result);
     } catch (error) {
         console.error('❌ Erro no Controller (processTelemetry):', error.message);
         res.status(500).json({ 
-            message: 'Erro interno ao processar telemetria. Verifique se a máquina foi registrada.', 
+            message: 'Erro interno ao processar telemetria.', 
             error: error.message 
         });
     }
