@@ -29,7 +29,15 @@ exports.listSimCards = async () => {
 exports.createSimCard = async (data) => {
     const [result] = await db.execute(
         `INSERT INTO sim_cards (phone_number, carrier, status, device_link_id, employee_link_id, notes, whatsapp_type) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-        [data.phone_number, data.carrier, data.status, data.device_link_id || null, data.employee_link_id || null, data.notes, data.whatsapp_type || 'Normal']
+        [
+            data.phone_number || null, 
+            data.carrier || null, 
+            data.status || 'ativo', 
+            data.device_link_id || null, 
+            data.employee_link_id || null, 
+            data.notes || null, 
+            data.whatsapp_type || 'Normal'
+        ]
     );
 
     if (data.device_link_id) {
@@ -47,35 +55,32 @@ exports.createSimCard = async (data) => {
 exports.updateSimCard = async (id, data) => {
     const [oldRows] = await db.execute('SELECT device_link_id, employee_link_id, status, phone_number FROM sim_cards WHERE id = ?', [id]);
     const oldData = oldRows[0];
+    
+    const deviceLink = (data.device_link_id && data.device_link_id !== '0') ? data.device_link_id : null;
+    const employeeLink = (data.employee_link_id && data.employee_link_id !== '0') ? data.employee_link_id : null;
 
     await db.execute(
         `UPDATE sim_cards SET phone_number=?, carrier=?, status=?, device_link_id=?, employee_link_id=?, notes=?, whatsapp_type=? WHERE id=?`,
-        [data.phone_number, data.carrier, data.status, data.device_link_id || null, data.employee_link_id || null, data.notes, data.whatsapp_type || 'Normal', id]
+        [
+            data.phone_number || null, 
+            data.carrier || null, 
+            data.status || null, 
+            deviceLink, 
+            employeeLink, 
+            data.notes || null, 
+            data.whatsapp_type || 'Normal', 
+            id
+        ]
     );
 
-
     if (oldData) {
-        const deviceId = data.device_link_id || oldData.device_link_id; 
+        const deviceId = deviceLink || oldData.device_link_id; 
 
         if (deviceId) {
-            if (oldData.status !== data.status) {
+            if (oldData.status !== data.status && data.status) {
                 const actionType = data.status === 'banido' ? 'ALERTA' : 'Status';
                 const desc = `O Chip ${data.phone_number} mudou o status de "${oldData.status}" para "${data.status}".`;
                 await createDeviceLog(deviceId, actionType, desc);
-            }
-
-            if (data.employee_link_id && oldData.employee_link_id != data.employee_link_id) {
-                const [emp] = await db.execute('SELECT name FROM employees WHERE id = ?', [data.employee_link_id]);
-                const empName = emp[0]?.name || 'Desconhecido';
-                await createDeviceLog(deviceId, 'Troca Responsável', `Chip ${data.phone_number} repassado para: ${empName}.`);
-            }
-
-            if (data.device_link_id && oldData.device_link_id != data.device_link_id) {
-                await createDeviceLog(data.device_link_id, 'Inclusão', `Chip ${data.phone_number} inserido neste aparelho.`);
-            }
-            
-            if (oldData.device_link_id && oldData.device_link_id != data.device_link_id) {
-                await createDeviceLog(oldData.device_link_id, 'Remoção', `Chip ${oldData.phone_number} removido deste aparelho.`);
             }
         }
     }
