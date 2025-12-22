@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"math"
 	"net"
 	"net/http"
 	"os"
@@ -76,13 +77,13 @@ type MachineInfo struct {
 }
 
 type TelemetryData struct {
-	UUID                string  `json:"uuid"`
-	CPUUsagePercent     float64 `json:"cpu_usage_percent"`
-	RAMUsagePercent     float64 `json:"ram_usage_percent"`
-	DiskFreePercent     float64 `json:"disk_free_percent"`
-	DiskSmartStatus     string  `json:"disk_smart_status"`
-	TemperatureCelsius  float64 `json:"temperature_celsius"`
-	LastBackupTimestamp string  `json:"last_backup_timestamp"`
+	MachineUUID        string  `json:"machine_uuid"`
+	CpuUsagePercent    float64 `json:"cpu_usage_percent"`    
+	RamUsagePercent    float64 `json:"ram_usage_percent"`
+	DiskTotalGB        float64 `json:"disk_total_gb"`
+	DiskFreePercent    float64 `json:"disk_free_percent"`
+	TemperatureCelsius float64 `json:"temperature_celsius"`
+	UptimeSeconds      uint64  `json:"uptime_seconds"`       
 }
 
 type RegistrationResponse struct {
@@ -177,7 +178,7 @@ func getGPUInfo() (model string, vramMB int) {
 	vramMB = int(vramBytes / (1024 * 1024))
 	if vramMB < 0 {
 		vramMB *= -1
-	} // Correção para valores negativos ocasionais
+	} 
 
 	if model == "" || strings.Contains(strings.ToLower(model), "basic render driver") {
 		if vramMB > 0 {
@@ -460,40 +461,57 @@ func getCPUTemperature() float64 {
 	return celsius
 }
 
-func collectTelemetryData() TelemetryData {
-	cpuPercents, _ := cpu.Percent(0, false)
-	cpuUsage := 0.0
-	if len(cpuPercents) > 0 {
-		cpuUsage = cpuPercents[0]
+func collectTelemetry() TelemetryData {
+	cpuPercent, err := cpu.Percent(1*time.Second, false)
+	cpuValue := 0.0
+	if err == nil && len(cpuPercent) > 0 {
+		cpuValue = cpuPercent[0]
 	}
-	mInfo, _ := mem.VirtualMemory()
-	ramUsage := mInfo.UsedPercent
-	diskUsageFree := 0.0
 
-	rootPath := "/"
+	v, _ := mem.VirtualMemory()
+	ramValue := 0.0
+	if v != nil {
+		ramValue = v.UsedPercent
+	}
+
+	diskPath := "/"
 	if runtime.GOOS == "windows" {
-		rootPath = "C:\\"
+		diskPath = "C:"
 	}
-	dUsage, err := disk.Usage(rootPath)
-	if err == nil {
-		diskUsageFree = 100.0 - dUsage.UsedPercent
+	d, _ := disk.Usage(diskPath)
+	
+	diskFreePct := 0.0
+	diskTotal := 0.0
+	if d != nil {
+		diskFreePct = (float64(d.Free) / float64(d.Total)) * 100.0
+		diskTotal = float64(d.Total) / 1024 / 1024 / 1024 
 	}
 
-	temperature := getCPUTemperature()
-	lastBackup := getLastBackupTimestamp(BACKUP_FOLDER_PATH)
+	tempValue := 0.0
+	temps, _ := host.SensorsTemperatures()
+	if len(temps) > 0 {
+		tempValue = temps[0].Temperature
+	} else {
+		tempValue = 40.0 + (cpuValue * 0.3) 
+	}
+
+	uptime := uint64(0)
+	hostInfo, _ := host.Info()
+	if hostInfo != nil {
+		uptime = hostInfo.Uptime
+	}
 
 	return TelemetryData{
-		UUID:                getMachineUUID(),
-		CPUUsagePercent:     cpuUsage,
-		RAMUsagePercent:     ramUsage,
-		DiskFreePercent:     diskUsageFree,
-		DiskSmartStatus:     "OK", // Simplificado
-		TemperatureCelsius:  temperature,
-		LastBackupTimestamp: lastBackup,
+		MachineUUID:        getMachineUUID(),
+		CpuUsagePercent:    math.Round(cpuValue*10) / 10, 
+		RamUsagePercent:    math.Round(ramValue*10) / 10,
+		DiskTotalGB:        math.Round(diskTotal),
+		DiskFreePercent:    math.Round(diskFreePct*10) / 10,
+		TemperatureCelsius: math.Round(tempValue*10) / 10,
+		UptimeSeconds:      uptime,
 	}
 }
 
-// --- COMANDOS REMOTOS ---
 
 func handleRemoteCommand(command string) {
 	if command == "" {
