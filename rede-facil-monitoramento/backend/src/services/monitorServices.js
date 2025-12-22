@@ -53,11 +53,11 @@ const resolveAlert = async (machine_id, type) => {
 };
 
 async function checkBackupHealth(machineId, lastBackupTimestamp) {
-    if (!lastBackupTimestamp || lastBackupTimestamp === "NÃO EXECUTADO") return;
+    if (!lastBackupTimestamp || lastBackupTimestamp === "NÃO EXECUTADO" || lastBackupTimestamp === "N/A") return;
 
     try {
         const now = moment();
-        const lastBackup = moment(lastBackupTimestamp);
+        const lastBackup = moment(lastBackupTimestamp, "YYYY-MM-DD HH:mm:ss");
 
         if (!lastBackup.isValid()) return;
 
@@ -96,7 +96,6 @@ exports.registerMachine = async (data) => {
         connection = await db.getConnection();
         await connection.beginTransaction();
 
-        // 1. Inserir ou Atualizar Máquina
         await connection.execute(
             `INSERT INTO machines (uuid, hostname, ip_address, os_name, status) 
              VALUES (?, ?, ?, ?, 'online') 
@@ -108,7 +107,6 @@ exports.registerMachine = async (data) => {
         const [rows] = await connection.execute('SELECT id FROM machines WHERE uuid = ?', [uuid]);
         const machine_id = rows[0].id;
 
-        // 2. Hardware Specs
         const specsData = [
             cpu_model || null, cpu_speed_mhz || null, cpu_cores_physical || null, cpu_cores_logical || null,
             ram_total_gb || null, mem_slots_total || null, mem_slots_used || null, disk_total_gb || null,
@@ -141,7 +139,6 @@ exports.registerMachine = async (data) => {
             );
         }
 
-        // 3. Network & Software (Limpa e reinsere para manter atualizado)
         await connection.execute('DELETE FROM network_interfaces WHERE machine_id = ?', [machine_id]);
         if (network_interfaces?.length > 0) {
             const values = network_interfaces.map(n => [machine_id, n.interface_name, n.mac_address, n.is_up, n.speed_mbps]);
@@ -165,7 +162,7 @@ exports.registerMachine = async (data) => {
     }
 };
 
-// --- Processamento de Telemetria ---
+// --- Processamento de Telemetria (AJUSTADO PARA REDE E BACKUP) ---
 
 exports.processTelemetry = async (data) => {
     if (!data || !data.uuid) throw new Error('Dados inválidos.');
@@ -173,7 +170,6 @@ exports.processTelemetry = async (data) => {
     const machine_id = await getMachineId(data.uuid);
     if (!machine_id) throw new Error('Máquina não encontrada.');
 
-    // Helper para limpar números
     const cleanNum = (val) => (val === null || isNaN(parseFloat(val))) ? null : parseFloat(parseFloat(val).toFixed(2));
 
     const telemetry = {
@@ -182,21 +178,32 @@ exports.processTelemetry = async (data) => {
         disk: cleanNum(data.disk_free_percent),
         temp: cleanNum(data.temperature_celsius),
         smart: data.disk_smart_status || 'OK',
-        backup: (data.last_backup_timestamp && data.last_backup_timestamp !== "NÃO EXECUTADO") ? data.last_backup_timestamp : null
+        backup: (data.last_backup_timestamp && data.last_backup_timestamp !== "NÃO EXECUTADO" && data.last_backup_timestamp !== "N/A") ? data.last_backup_timestamp : null,
+        // --- NOVOS CAMPOS DO AGENTE ---
+        backup_status: data.backup_status || 'OK',
+        net_latency: cleanNum(data.network_latency_ms),
+        net_loss: cleanNum(data.packet_loss_percent)
     };
 
     try {
-        // 1. Salvar Log
-        await db.execute(
-            `INSERT INTO telemetry_logs (machine_id, cpu_usage_percent, ram_usage_percent, disk_free_percent, disk_smart_status, temperature_celsius, last_backup_timestamp) 
-             VALUES (?, ?, ?, ?, ?, ?, ?)`,
-            [machine_id, telemetry.cpu, telemetry.ram, telemetry.disk, telemetry.smart, telemetry.temp, telemetry.backup]
-        );
+        // 1. Salvar Log com as novas colunas
+     await db.execute(
+    `INSERT INTO telemetry_logs (
+        machine_id, cpu_usage_percent, ram_usage_percent, disk_free_percent, 
+        disk_smart_status, temperature_celsius, last_backup_timestamp, 
+        backup_status, network_latency_ms, packet_loss_percent
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+        machine_id, telemetry.cpu, telemetry.ram, telemetry.disk, 
+        telemetry.smart, telemetry.temp, telemetry.backup,
+        telemetry.backup_status, telemetry.net_latency, telemetry.net_loss
+    ]
+);
 
-        // 2. Checar Saúde do Backup
+        // 2. Checar Saúde do Backup (Lógica de alertas 48h)
         if (telemetry.backup) await checkBackupHealth(machine_id, telemetry.backup);
 
-        // 3. Atualizar Status e Alertas
+        // 3. Atualizar Status e Alertas baseados na telemetria
         let newStatus = 'online';
         const [machine] = await db.execute('SELECT hostname FROM machines WHERE id = ?', [machine_id]);
         const hostname = machine[0]?.hostname || 'PC';
@@ -215,6 +222,13 @@ exports.processTelemetry = async (data) => {
             await resolveAlert(machine_id, 'warning');
         }
 
+        // Alerta opcional para latência alta (> 200ms)
+        if (telemetry.net_latency > 200) {
+            await createAlert(machine_id, 'network_delay', `Latência alta detectada (${telemetry.net_latency}ms) em ${hostname}`);
+        } else {
+            await resolveAlert(machine_id, 'network_delay');
+        }
+
         await db.execute('UPDATE machines SET status = ?, last_seen = CURRENT_TIMESTAMP WHERE id = ?', [newStatus, machine_id]);
 
         // 4. Socket.io Real-time
@@ -229,12 +243,12 @@ exports.processTelemetry = async (data) => {
     }
 };
 
-// --- Consultas ---
+// --- Consultas MANTIDAS ---
 
 exports.listMachines = async () => {
     const [machines] = await db.execute(`
         SELECT m.id, m.uuid, m.hostname, m.ip_address, m.os_name, m.status, m.last_seen, 
-               h.cpu_model, h.ram_total_gb, h.disk_total_gb, h.machine_type
+                h.cpu_model, h.ram_total_gb, h.disk_total_gb, h.machine_type
         FROM machines m 
         LEFT JOIN hardware_specs h ON m.id = h.machine_id 
         ORDER BY m.status DESC, m.hostname
