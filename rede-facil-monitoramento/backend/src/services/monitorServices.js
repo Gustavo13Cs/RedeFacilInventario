@@ -16,7 +16,6 @@ const MAX_TELEMETRY_RECORDS = 5;
 const MAX_BACKUP_LAG_HOURS = 48;
 const BACKUP_ALERT_TYPE = 'backup_failure';
 
-// --- Funções de Alerta ---
 
 const createAlert = async (machine_id, type, message) => {
     const io = socketHandler.getIO() || globalIo;
@@ -108,7 +107,6 @@ exports.registerMachine = async (data) => {
         const [rows] = await connection.execute('SELECT id FROM machines WHERE uuid = ?', [uuid]);
         const machine_id = rows[0].id;
 
-        // 2. Hardware Specs
         const specsData = [
             cpu_model || null, cpu_speed_mhz || null, cpu_cores_physical || null, cpu_cores_logical || null,
             ram_total_gb || null, mem_slots_total || null, mem_slots_used || null, disk_total_gb || null,
@@ -165,71 +163,71 @@ exports.registerMachine = async (data) => {
     }
 };
 
-// --- Processamento de Telemetria ---
-
 exports.processTelemetry = async (data) => {
-    if (!data || !data.uuid) throw new Error('Dados inválidos.');
-
-    const machine_id = await getMachineId(data.uuid);
-    if (!machine_id) throw new Error('Máquina não encontrada.');
-
-    // Helper para limpar números
-    const cleanNum = (val) => (val === null || isNaN(parseFloat(val))) ? null : parseFloat(parseFloat(val).toFixed(2));
-
-    const telemetry = {
-        cpu: cleanNum(data.cpu_usage_percent),
-        ram: cleanNum(data.ram_usage_percent),
-        disk: cleanNum(data.disk_free_percent),
-        temp: cleanNum(data.temperature_celsius),
-        smart: data.disk_smart_status || 'OK',
-        backup: (data.last_backup_timestamp && data.last_backup_timestamp !== "NÃO EXECUTADO") ? data.last_backup_timestamp : null
-    };
-
     try {
-        // 1. Salvar Log
-        await db.execute(
-            `INSERT INTO telemetry_logs (machine_id, cpu_usage_percent, ram_usage_percent, disk_free_percent, disk_smart_status, temperature_celsius, last_backup_timestamp) 
-             VALUES (?, ?, ?, ?, ?, ?, ?)`,
-            [machine_id, telemetry.cpu, telemetry.ram, telemetry.disk, telemetry.smart, telemetry.temp, telemetry.backup]
-        );
+        const { 
+            machine_uuid, 
+            cpu_usage_percent, 
+            ram_usage_percent, 
+            disk_free_percent, 
+            temperature_celsius 
+        } = data;
 
-        // 2. Checar Saúde do Backup
-        if (telemetry.backup) await checkBackupHealth(machine_id, telemetry.backup);
+        if (!machine_uuid) return;
 
-        // 3. Atualizar Status e Alertas
-        let newStatus = 'online';
-        const [machine] = await db.execute('SELECT hostname FROM machines WHERE id = ?', [machine_id]);
-        const hostname = machine[0]?.hostname || 'PC';
+        const cpu = parseFloat(cpu_usage_percent) || 0;
+        const ram = parseFloat(ram_usage_percent) || 0;
+        const diskFree = parseFloat(disk_free_percent) || 0;
+        const temp = parseFloat(temperature_celsius) || 0;
 
-        if (telemetry.cpu > 90) {
-            await createAlert(machine_id, 'critical', `Uso de CPU crítico (${telemetry.cpu}%) em ${hostname}`);
-            newStatus = 'critical';
-        } else if (telemetry.cpu <= 85) {
-            await resolveAlert(machine_id, 'critical');
+        await db.execute(`
+            UPDATE machines SET 
+                cpu_usage = ?, 
+                ram_usage = ?, 
+                disk_usage = ?, 
+                temperature = ?, 
+                last_seen = NOW(), 
+                status = 'online'
+            WHERE uuid = ?
+        `, [cpu, ram, diskFree, temp, machine_uuid]);
+
+        try {
+            const [rows] = await db.execute('SELECT id FROM machines WHERE uuid = ?', [machine_uuid]);
+            if (rows.length > 0) {
+                const machineId = rows[0].id;
+                await db.execute(`
+                    INSERT INTO telemetry_logs (machine_id, cpu_usage, ram_usage, disk_usage, temperature)
+                    VALUES (?, ?, ?, ?, ?)
+                `, [machineId, cpu, ram, diskFree, temp]);
+            }
+        } catch (dbErr) {
+            console.error("Erro ao salvar log de telemetria (ignorado):", dbErr.message);
         }
 
-        if (telemetry.disk < 10) {
-            await createAlert(machine_id, 'warning', `Espaço em disco baixo (${telemetry.disk}%) em ${hostname}`);
-            if (newStatus !== 'critical') newStatus = 'warning';
-        } else if (telemetry.disk >= 15) {
-            await resolveAlert(machine_id, 'warning');
+        const socketData = {
+            uuid: machine_uuid,
+            cpu: cpu,
+            ram: ram,
+            disk: diskFree,
+            temp: temp,
+            last_seen: new Date()
+        };
+
+        const io = globalIo || socketHandler.getIO(); 
+        
+        if (io) {
+            io.emit('machine_update', socketData); 
+            io.emit(`machine_${machine_uuid}`, socketData);
+            console.log(`📡 Socket emitido para: machine_${machine_uuid}`);
+        } else {
+            console.warn("⚠️ Socket.IO não disponível para enviar atualizações.");
         }
 
-        await db.execute('UPDATE machines SET status = ?, last_seen = CURRENT_TIMESTAMP WHERE id = ?', [newStatus, machine_id]);
-
-        // 4. Socket.io Real-time
-        if (globalIo) {
-            globalIo.emit('new_telemetry', { ...telemetry, machine_uuid: data.uuid, status: newStatus });
-        }
-
-        return { message: 'Telemetria processada' };
+        return { message: "Telemetria processada" };
     } catch (error) {
-        console.error('Erro no processTelemetry:', error.message);
-        throw error;
+        console.error("Erro crítico no processTelemetry:", error);
     }
 };
-
-// --- Consultas ---
 
 exports.listMachines = async () => {
     const [machines] = await db.execute(`

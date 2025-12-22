@@ -29,7 +29,7 @@ const BACKUP_FOLDER_PATH = "C:\\Users\\Windows 10\\Documents\\backup_agente"
 const RESTORE_POINT_FILE = "restore_point_last_run.txt"
 const API_BASE_URL = "http://localhost:3001/api"
 const TELEMETRY_INTERVAL = 5 * time.Second
-const RESTORE_POINT_INTERVAL = 120 * time.Hour 
+const RESTORE_POINT_INTERVAL = 120 * time.Hour
 
 const MAX_RETRIES = 3
 const RETRY_DELAY = 10 * time.Second
@@ -78,12 +78,12 @@ type MachineInfo struct {
 
 type TelemetryData struct {
 	MachineUUID        string  `json:"machine_uuid"`
-	CpuUsagePercent    float64 `json:"cpu_usage_percent"`    
-	RamUsagePercent    float64 `json:"ram_usage_percent"`
+	CpuUsagePercent    float64 `json:"cpu_usage_percent"` 
+	RamUsagePercent    float64 `json:"ram_usage_percent"` 
 	DiskTotalGB        float64 `json:"disk_total_gb"`
 	DiskFreePercent    float64 `json:"disk_free_percent"`
 	TemperatureCelsius float64 `json:"temperature_celsius"`
-	UptimeSeconds      uint64  `json:"uptime_seconds"`       
+	UptimeSeconds      uint64  `json:"uptime_seconds"`
 }
 
 type RegistrationResponse struct {
@@ -96,7 +96,6 @@ type ServerResponse struct {
 	Command string `json:"command"`
 }
 
-// --- FUNÇÕES DE SISTEMA (WMIC/CMD) ---
 
 func execWmic(args ...string) string {
 	if runtime.GOOS != "windows" {
@@ -105,7 +104,6 @@ func execWmic(args ...string) string {
 
 	var cmdArgs []string
 	if len(args) == 1 {
-		// Se passar uma string só com espaços, divide ela (compatibilidade)
 		cmdArgs = strings.Fields(args[0])
 	} else {
 		cmdArgs = args
@@ -114,10 +112,7 @@ func execWmic(args ...string) string {
 	cmd := exec.Command("wmic", cmdArgs...)
 	var out bytes.Buffer
 	cmd.Stdout = &out
-	// Ignora erro do run, tenta pegar output mesmo assim ou retorna N/A
-	if err := cmd.Run(); err != nil {
-		return "N/A"
-	}
+	_ = cmd.Run()
 
 	result := strings.TrimSpace(out.String())
 	lines := strings.Split(result, "\n")
@@ -178,7 +173,7 @@ func getGPUInfo() (model string, vramMB int) {
 	vramMB = int(vramBytes / (1024 * 1024))
 	if vramMB < 0 {
 		vramMB *= -1
-	} 
+	}
 
 	if model == "" || strings.Contains(strings.ToLower(model), "basic render driver") {
 		if vramMB > 0 {
@@ -207,14 +202,10 @@ func getMachineType() string {
 	}
 }
 
-// --- COLETA DE DADOS ---
-
 func collectInstalledSoftware() []Software {
 	if runtime.GOOS != "windows" {
 		return nil
 	}
-
-	// Nota: wmic product é lento, mas funcional para este exemplo
 	cmd := exec.Command("wmic", "product", "get", "Name,Version")
 	var out bytes.Buffer
 	cmd.Stdout = &out
@@ -245,8 +236,6 @@ func collectInstalledSoftware() []Software {
 
 		name := ""
 		version := ""
-
-		// Lógica simples de corte de string baseada no header
 		if len(line) > nameIndex {
 			if versionIndex < nameIndex {
 				version = strings.TrimSpace(line[versionIndex:nameIndex])
@@ -277,7 +266,6 @@ func collectNetworkInterfaces() []NetworkInterface {
 		flags := strings.Join(iface.Flags, ",")
 		isLoopback := strings.Contains(flags, "loopback")
 		isUp := strings.Contains(flags, "up")
-		// Filtra interfaces inativas ou sem MAC
 		if isLoopback || !isUp || iface.HardwareAddr == "" {
 			continue
 		}
@@ -286,7 +274,7 @@ func collectNetworkInterfaces() []NetworkInterface {
 			InterfaceName: iface.Name,
 			MACAddress:    iface.HardwareAddr,
 			IsUp:          isUp,
-			SpeedMbps:     0, // Go não pega velocidade do link facilmente sem CGO/WMI complexo
+			SpeedMbps:     0,
 		})
 	}
 	return nics
@@ -311,7 +299,6 @@ func getMachineUUID() string {
 		username = parts[len(parts)-1]
 	}
 	rawUUID := fmt.Sprintf("%s-%s", h, username)
-	// Sanitização para evitar problemas em URLs
 	safeUUID := strings.ReplaceAll(rawUUID, "\\", "-")
 	safeUUID = strings.ReplaceAll(safeUUID, "/", "-")
 	return safeUUID
@@ -355,7 +342,7 @@ func collectStaticInfo() MachineInfo {
 
 	memSlotsTotal, memSlotsUsed := getMemorySlotsInfo()
 	networkInterfaces := collectNetworkInterfaces()
-	installedSoftware := collectInstalledSoftware() // Cuidado: pode ser lento
+	installedSoftware := collectInstalledSoftware()
 
 	var diskTotalGB float64
 	rootPath := "/"
@@ -366,7 +353,6 @@ func collectStaticInfo() MachineInfo {
 	if err == nil {
 		diskTotalGB = float64(dUsage.Total) / (1024 * 1024 * 1024)
 	} else if len(dPartitions) > 0 {
-		// Fallback para primeira partição encontrada
 		dUsage, _ := disk.Usage(dPartitions[0].Mountpoint)
 		diskTotalGB = float64(dUsage.Total) / (1024 * 1024 * 1024)
 	}
@@ -382,7 +368,7 @@ func collectStaticInfo() MachineInfo {
 		CPUCoresLogical:         cpuCoresLogical,
 		RAMTotalGB:              float64(mInfo.Total) / (1024 * 1024 * 1024),
 		DiskTotalGB:             diskTotalGB,
-		MACAddress:              "00:00:00:00:00:00", // Preenchido nas interfaces de rede
+		MACAddress:              "00:00:00:00:00:00",
 		MachineModel:            machineModel,
 		SerialNumber:            serialNumber,
 		MachineType:             machineType,
@@ -399,8 +385,6 @@ func collectStaticInfo() MachineInfo {
 	}
 }
 
-// --- TELEMETRIA E MANUTENÇÃO ---
-
 func ensureBackupFolderExists(folderPath string) {
 	err := os.MkdirAll(folderPath, 0755)
 	if err != nil {
@@ -411,55 +395,6 @@ func ensureBackupFolderExists(folderPath string) {
 	}
 }
 
-func getLastBackupTimestamp(dir string) string {
-	var latestTime time.Time
-	err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return nil
-		}
-		if !info.IsDir() {
-			modTime := info.ModTime()
-			if modTime.After(latestTime) {
-				latestTime = modTime
-			}
-		}
-		return nil
-	})
-	if err != nil {
-		return ""
-	}
-	if !latestTime.IsZero() {
-		return latestTime.Format("2006-01-02 15:04:05")
-	}
-	return ""
-}
-
-func getCPUTemperature() float64 {
-	if runtime.GOOS != "windows" {
-		sensors, err := host.SensorsTemperatures()
-		if err != nil || len(sensors) == 0 {
-			return 0.0
-		}
-		return sensors[0].Temperature
-	}
-	// WMI para temperatura (pode precisar de permissões de admin)
-	output := execWmic("/namespace:\\\\root\\wmi PATH MSAcpi_ThermalZoneTemperature get CurrentTemperature")
-	output = strings.TrimSpace(output)
-	if output == "" || output == "N/A" {
-		return 0.0
-	}
-
-	kelvinDeci, err := strconv.ParseFloat(output, 64)
-	if err != nil {
-		return 0.0
-	}
-
-	celsius := (kelvinDeci / 10.0) - 273.15
-	if celsius < 0 || celsius > 150 {
-		return 0.0
-	}
-	return celsius
-}
 
 func collectTelemetry() TelemetryData {
 	cpuPercent, err := cpu.Percent(1*time.Second, false)
@@ -474,17 +409,18 @@ func collectTelemetry() TelemetryData {
 		ramValue = v.UsedPercent
 	}
 
+
 	diskPath := "/"
 	if runtime.GOOS == "windows" {
 		diskPath = "C:"
 	}
 	d, _ := disk.Usage(diskPath)
-	
+
 	diskFreePct := 0.0
 	diskTotal := 0.0
 	if d != nil {
 		diskFreePct = (float64(d.Free) / float64(d.Total)) * 100.0
-		diskTotal = float64(d.Total) / 1024 / 1024 / 1024 
+		diskTotal = float64(d.Total) / 1024 / 1024 / 1024
 	}
 
 	tempValue := 0.0
@@ -492,9 +428,10 @@ func collectTelemetry() TelemetryData {
 	if len(temps) > 0 {
 		tempValue = temps[0].Temperature
 	} else {
-		tempValue = 40.0 + (cpuValue * 0.3) 
+		tempValue = 40.0 + (cpuValue * 0.3)
 	}
 
+	// 5. Uptime
 	uptime := uint64(0)
 	hostInfo, _ := host.Info()
 	if hostInfo != nil {
@@ -503,7 +440,7 @@ func collectTelemetry() TelemetryData {
 
 	return TelemetryData{
 		MachineUUID:        getMachineUUID(),
-		CpuUsagePercent:    math.Round(cpuValue*10) / 10, 
+		CpuUsagePercent:    math.Round(cpuValue*10) / 10,
 		RamUsagePercent:    math.Round(ramValue*10) / 10,
 		DiskTotalGB:        math.Round(diskTotal),
 		DiskFreePercent:    math.Round(diskFreePct*10) / 10,
@@ -511,7 +448,6 @@ func collectTelemetry() TelemetryData {
 		UptimeSeconds:      uptime,
 	}
 }
-
 
 func handleRemoteCommand(command string) {
 	if command == "" {
@@ -552,8 +488,6 @@ func handleRemoteCommand(command string) {
 	}
 }
 
-// --- API E LÓGICA DE BACKUP ---
-
 func createRestorePoint() {
 	if runtime.GOOS != "windows" {
 		return
@@ -562,19 +496,16 @@ func createRestorePoint() {
 	ensureBackupFolderExists(BACKUP_FOLDER_PATH)
 	restoreFile := filepath.Join(BACKUP_FOLDER_PATH, RESTORE_POINT_FILE)
 
-	// Verifica a última execução para não floodar
 	var lastRun time.Time
 	if content, err := os.ReadFile(restoreFile); err == nil {
 		lastRun, _ = time.Parse("2006-01-02 15:04:05", strings.TrimSpace(string(content)))
 	}
 
 	if time.Since(lastRun) < RESTORE_POINT_INTERVAL {
-		// Ainda está no período de "cooldown", não cria outro ponto
 		return
 	}
 
 	log.Println("🛠️ Iniciando criação de Ponto de Restauração agendado...")
-	// Comando PowerShell que requer Admin
 	cmd := exec.Command("powershell.exe", "-ExecutionPolicy", "Bypass", "-Command", "Checkpoint-Computer -Description 'Agente Rede Facil' -RestorePointType 'MODIFY_SETTINGS'")
 
 	err := cmd.Run()
@@ -608,7 +539,6 @@ func postData(endpoint string, data interface{}) {
 		defer resp.Body.Close()
 
 		if resp.StatusCode >= 200 && resp.StatusCode < 300 {
-			// Lê resposta para ver se tem comando
 			body, _ := io.ReadAll(resp.Body)
 			var serverResp ServerResponse
 			if err := json.Unmarshal(body, &serverResp); err == nil {
@@ -626,11 +556,10 @@ func postData(endpoint string, data interface{}) {
 }
 
 func registerMachine() {
-	// Usa a função de coleta unificada para não duplicar lógica
 	info := collectStaticInfo()
 
 	url := fmt.Sprintf("%s/register", API_BASE_URL)
-	client := http.Client{Timeout: 15 * time.Second} // Aumentado timeout pois coleta de soft é pesada
+	client := http.Client{Timeout: 30 * time.Second} 
 
 	jsonValue, _ := json.Marshal(info)
 
@@ -658,26 +587,22 @@ func registerMachine() {
 	}
 }
 
-// --- MAIN ---
-
 func main() {
 	log.Println("Agente Rede Fácil v3 (Monitoramento) iniciando...")
 
-	// 1. Tenta registrar a máquina
 	registerMachine()
 
-	// 2. Loop principal de monitoramento
 	ticker := time.NewTicker(TELEMETRY_INTERVAL)
-	restoreCheck := time.NewTicker(1 * time.Hour) // Checa se precisa criar ponto a cada hora
+	restoreCheck := time.NewTicker(1 * time.Hour)
 
 	for {
 		select {
 		case <-ticker.C:
-			data := collectTelemetryData()
+			data := collectTelemetry()
 			log.Printf("Stats -> Temp: %.1f°C | CPU: %.1f%% | RAM: %.1f%%",
 				data.TemperatureCelsius,
-				data.CPUUsagePercent,
-				data.RAMUsagePercent)
+				data.CpuUsagePercent, 
+				data.RamUsagePercent) 
 			postData("/telemetry", data)
 
 		case <-restoreCheck.C:
