@@ -13,6 +13,7 @@ router.use(authMiddleware);
 router.get('/machines', monitorController.listMachines);
 router.get('/machines/:uuid', monitorController.getMachineDetails);
 router.get('/telemetry/:uuid/history', monitorController.getTelemetryHistory);
+router.get('/topology', monitorController.getTopology);
 
 router.post('/machines/:uuid/command', monitorController.sendCommand);
 

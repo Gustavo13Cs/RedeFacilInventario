@@ -136,3 +136,11 @@ exports.sendCommand = async (req, res) => {
     }
 };
 
+exports.getTopology = async (req, res) => {
+    try {
+        const map = await monitorServices.getTopology();
+        res.json(map);
+    } catch (error) {
+        res.status(500).json({ error: 'Erro ao gerar topologia' });
+    }
+};

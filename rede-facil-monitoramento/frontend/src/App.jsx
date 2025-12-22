@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { LayoutDashboard, Server, Activity, Package, Users, LogOut, Smartphone, Loader2,DollarSign} from 'lucide-react';
+import { LayoutDashboard, Server, Activity, Package, Users, LogOut, Smartphone, Loader2,DollarSign,Network} from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -7,11 +7,13 @@ import io from 'socket.io-client';
 import axios from 'axios';
 import FinancialDashboard from './components/FinancialDashboard';
 
+
 import Login from './components/Login';
 import MachineDetails from './components/MachineDetails';
 import Inventory from './components/Inventory'; 
 import UserManagement from './components/UserManagement';
 import SimCardManagement from './components/SimCardManagement';
+import NetworkMap from './pages/NetworkMap';
 
 const API_URL = "http://localhost:3001";
 const socket = io('http://localhost:3001', {
@@ -25,7 +27,6 @@ function App() {
 
   const [selectedMachine, setSelectedMachine] = useState(null);
   const [activeTab, setActiveTab] = useState('dashboard');
-
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [currentUser, setCurrentUser] = useState('');
   const [userRole, setUserRole] = useState('');
@@ -177,6 +178,16 @@ function App() {
             </button>
           )}
 
+          <button 
+            onClick={() => { setActiveTab('network'); setSelectedMachine(null); }}
+            className={`w-full flex items-center px-3 py-2.5 text-sm font-medium rounded-md transition-colors ${activeTab === 'network' ? 'bg-slate-800 text-white' : 'hover:bg-slate-800/50 hover:text-white'}`}
+          >
+            <Network className="mr-3 h-5 w-5 text-indigo-500" />
+            Mapa de Rede
+          </button>
+
+          
+
           {userRole === 'admin' && (
             <button 
               onClick={() => { setActiveTab('users'); setSelectedMachine(null); }}
@@ -246,9 +257,11 @@ function App() {
               <SimCardManagement userRole={userRole} />
             ) : activeTab === 'financial' ? (
                 <FinancialDashboard />
-            ): activeTab === 'users' ? ( 
+            ): activeTab === 'users' ?( 
               <UserManagement />
-            ) : selectedMachine ? (
+            ): activeTab === 'network' ? (
+            <NetworkMap />
+            ): selectedMachine ? (
               <MachineDetails 
                 machine={selectedMachine} 
                 onBack={() => setSelectedMachine(null)}

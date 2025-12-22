@@ -26,7 +26,7 @@ import (
 )
 
 const RESTORE_POINT_FILE = "restore_point_last_run.txt"
-const API_BASE_URL = "http://localhost:3001/api" 
+const API_BASE_URL = "http://localhost:3001/api"
 const TELEMETRY_INTERVAL = 5 * time.Second
 const RESTORE_POINT_INTERVAL = 168 * time.Hour
 
@@ -34,8 +34,6 @@ const MAX_RETRIES = 3
 const RETRY_DELAY = 10 * time.Second
 
 var GlobalMachineIP string
-
-
 
 type NetworkInterface struct {
 	InterfaceName string `json:"interface_name"`
@@ -53,6 +51,8 @@ type MachineInfo struct {
 	UUID                    string             `json:"uuid"`
 	Hostname                string             `json:"hostname"`
 	IPAddress               string             `json:"ip_address"`
+	DefaultGateway          string             `json:"default_gateway"`
+	SubnetMask              string             `json:"subnet_mask"`
 	OSName                  string             `json:"os_name"`
 	CPUModel                string             `json:"cpu_model"`
 	CPUSpeedMhz             float64            `json:"cpu_speed_mhz"`
@@ -70,7 +70,7 @@ type MachineInfo struct {
 	GPUModel                string             `json:"gpu_model"`
 	GPUVRAMMB               int                `json:"gpu_vram_mb"`
 	LastBootTime            string             `json:"last_boot_time"`
-	LastRestorePoint        string             `json:"last_restore_point"` 
+	LastRestorePoint        string             `json:"last_restore_point"`
 	MemSlotsTotal           int                `json:"mem_slots_total"`
 	MemSlotsUsed            int                `json:"mem_slots_used"`
 	NetworkInterfaces       []NetworkInterface `json:"network_interfaces"`
@@ -96,7 +96,6 @@ type ServerResponse struct {
 	Message string `json:"message"`
 	Command string `json:"command"`
 }
-
 
 func getBackupFolderPath() string {
 	homeDir, err := os.UserHomeDir()
@@ -313,7 +312,6 @@ func getMachineUUID() string {
 	return safeUUID
 }
 
-// Leitura usando o caminho dinâmico
 func getLastRestorePoint() string {
 	if runtime.GOOS != "windows" {
 		return "N/A"
@@ -356,6 +354,7 @@ func collectStaticInfo() MachineInfo {
 	mbModel := execWmic("baseboard get product")
 	mbVersion := execWmic("baseboard get version")
 	gpuModel, gpuVRAM := getGPUInfo()
+	gw, mask := getNetworkDetails()
 
 	bootTime, err := host.BootTime()
 	var lastBootTime string
@@ -386,6 +385,8 @@ func collectStaticInfo() MachineInfo {
 		UUID:                    getMachineUUID(),
 		Hostname:                hInfo.Hostname,
 		IPAddress:               getLocalIP(),
+		DefaultGateway:          gw,
+		SubnetMask:              mask,
 		OSName:                  fmt.Sprintf("%s %s", hInfo.OS, hInfo.Platform),
 		CPUModel:                cpuModel,
 		CPUSpeedMhz:             cpuSpeed,
@@ -623,6 +624,30 @@ func registerMachine() {
 		log.Printf("Erro no registro (Status %s)", resp.Status)
 		return
 	}
+}
+
+func getNetworkDetails() (gateway string, mask string) {
+	if runtime.GOOS != "windows" {
+		return "N/A", "N/A"
+	}
+
+	cmd := exec.Command("wmic", "nicconfig", "where", "IPEnabled=true and DefaultIPGateway is not null", "get", "DefaultIPGateway,IPSubnet")
+	var out bytes.Buffer
+	cmd.Stdout = &out
+	if err := cmd.Run(); err != nil {
+		return "N/A", "N/A"
+	}
+
+	lines := strings.Split(strings.TrimSpace(out.String()), "\n")
+	if len(lines) > 1 {
+		vals := strings.Fields(lines[1])
+		if len(vals) >= 2 {
+			g := strings.Trim(vals[0], "{\"}")
+			m := strings.Trim(vals[1], "{\"}")
+			return g, m
+		}
+	}
+	return "N/A", "N/A"
 }
 
 func main() {

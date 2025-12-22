@@ -78,6 +78,7 @@ async function checkBackupHealth(machineId, lastBackupTimestamp) {
 exports.registerMachine = async (data) => {
     const {
         uuid, hostname, ip_address, os_name,
+        default_gateway, subnet_mask,
         cpu_model, cpu_speed_mhz, cpu_cores_physical, cpu_cores_logical,
         ram_total_gb, mem_slots_total, mem_slots_used, disk_total_gb,
         mac_address, machine_model, serial_number, machine_type,
@@ -95,14 +96,16 @@ exports.registerMachine = async (data) => {
         connection = await db.getConnection();
         await connection.beginTransaction();
 
-        // 1. Inserir ou Atualizar Máquina
-        await connection.execute(
-            `INSERT INTO machines (uuid, hostname, ip_address, os_name, status) 
-             VALUES (?, ?, ?, ?, 'online') 
-             ON DUPLICATE KEY UPDATE 
-             hostname=?, ip_address=?, os_name=?, last_seen=CURRENT_TIMESTAMP, status='online'`,
-            [uuid, hostname, ip_address, os_name, hostname, ip_address, os_name]
-        );
+       await connection.execute(
+        `INSERT INTO machines (uuid, hostname, ip_address, default_gateway, subnet_mask, os_name, status) 
+         VALUES (?, ?, ?, ?, ?, ?, 'online') 
+         ON DUPLICATE KEY UPDATE 
+         hostname=?, ip_address=?, default_gateway=?, subnet_mask=?, os_name=?, last_seen=CURRENT_TIMESTAMP, status='online'`,
+        [
+            uuid, hostname, ip_address, default_gateway || null, subnet_mask || null, os_name, 
+            hostname, ip_address, default_gateway || null, subnet_mask || null, os_name 
+        ]
+    );
 
         const [rows] = await connection.execute('SELECT id FROM machines WHERE uuid = ?', [uuid]);
         const machine_id = rows[0].id;
@@ -258,3 +261,28 @@ exports.getMachineDetails = async (uuid) => {
         open_alerts: alerts
     };
 };
+
+exports.getTopology = async () => {
+    const [machines] = await db.execute(`
+        SELECT id, uuid, hostname, ip_address, default_gateway, subnet_mask, status, os_name 
+        FROM machines 
+        ORDER BY default_gateway, ip_address
+    `);
+
+    const topology = {};
+    
+    machines.forEach(m => {
+        const gw = m.default_gateway || 'Sem Gateway / Desconhecido';
+        if (!topology[gw]) {
+            topology[gw] = {
+                gateway: gw,
+                subnet: m.subnet_mask || 'N/A',
+                machines: []
+            };
+        }
+        topology[gw].machines.push(m);
+    });
+
+    return Object.values(topology);
+};
+
