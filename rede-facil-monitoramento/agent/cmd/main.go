@@ -25,16 +25,16 @@ import (
 	gonet "github.com/shirou/gopsutil/v3/net"
 )
 
-const BACKUP_FOLDER_PATH = "C:\\Users\\Windows 10\\Documents\\backup_agente"
 const RESTORE_POINT_FILE = "restore_point_last_run.txt"
-const API_BASE_URL = "http://localhost:3001/api"
+const API_BASE_URL = "http://localhost:3001/api" 
 const TELEMETRY_INTERVAL = 5 * time.Second
-const RESTORE_POINT_INTERVAL = 120 * time.Hour
+const RESTORE_POINT_INTERVAL = 168 * time.Hour
 
 const MAX_RETRIES = 3
 const RETRY_DELAY = 10 * time.Second
 
 var GlobalMachineIP string
+
 
 
 type NetworkInterface struct {
@@ -70,6 +70,7 @@ type MachineInfo struct {
 	GPUModel                string             `json:"gpu_model"`
 	GPUVRAMMB               int                `json:"gpu_vram_mb"`
 	LastBootTime            string             `json:"last_boot_time"`
+	LastRestorePoint        string             `json:"last_restore_point"` 
 	MemSlotsTotal           int                `json:"mem_slots_total"`
 	MemSlotsUsed            int                `json:"mem_slots_used"`
 	NetworkInterfaces       []NetworkInterface `json:"network_interfaces"`
@@ -78,8 +79,8 @@ type MachineInfo struct {
 
 type TelemetryData struct {
 	MachineUUID        string  `json:"machine_uuid"`
-	CpuUsagePercent    float64 `json:"cpu_usage_percent"` 
-	RamUsagePercent    float64 `json:"ram_usage_percent"` 
+	CpuUsagePercent    float64 `json:"cpu_usage_percent"`
+	RamUsagePercent    float64 `json:"ram_usage_percent"`
 	DiskTotalGB        float64 `json:"disk_total_gb"`
 	DiskFreePercent    float64 `json:"disk_free_percent"`
 	TemperatureCelsius float64 `json:"temperature_celsius"`
@@ -96,6 +97,14 @@ type ServerResponse struct {
 	Command string `json:"command"`
 }
 
+
+func getBackupFolderPath() string {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return "C:\\backup_agente"
+	}
+	return filepath.Join(homeDir, "Documents", "backup_agente")
+}
 
 func execWmic(args ...string) string {
 	if runtime.GOOS != "windows" {
@@ -304,11 +313,27 @@ func getMachineUUID() string {
 	return safeUUID
 }
 
+// Leitura usando o caminho dinâmico
+func getLastRestorePoint() string {
+	if runtime.GOOS != "windows" {
+		return "N/A"
+	}
+	backupFolder := getBackupFolderPath()
+	restoreFile := filepath.Join(backupFolder, RESTORE_POINT_FILE)
+	content, err := os.ReadFile(restoreFile)
+	if err != nil {
+		return "Nunca realizado"
+	}
+	return strings.TrimSpace(string(content))
+}
+
 func collectStaticInfo() MachineInfo {
 	hInfo, _ := host.Info()
 	mInfo, _ := mem.VirtualMemory()
 	cInfos, _ := cpu.Info()
 	dPartitions, _ := disk.Partitions(false)
+
+	lastRestore := getLastRestorePoint()
 
 	cpuModel := "N/A"
 	var cpuSpeed float64
@@ -378,6 +403,7 @@ func collectStaticInfo() MachineInfo {
 		GPUModel:                gpuModel,
 		GPUVRAMMB:               gpuVRAM,
 		LastBootTime:            lastBootTime,
+		LastRestorePoint:        lastRestore,
 		MemSlotsTotal:           memSlotsTotal,
 		MemSlotsUsed:            memSlotsUsed,
 		NetworkInterfaces:       networkInterfaces,
@@ -385,16 +411,13 @@ func collectStaticInfo() MachineInfo {
 	}
 }
 
-func ensureBackupFolderExists(folderPath string) {
+func ensureBackupFolderExists(folderPath string) error {
 	err := os.MkdirAll(folderPath, 0755)
 	if err != nil {
-		if os.IsExist(err) {
-			return
-		}
-		log.Printf("Erro ao criar pasta de backup '%s': %v", folderPath, err)
+		return err
 	}
+	return nil
 }
-
 
 func collectTelemetry() TelemetryData {
 	cpuPercent, err := cpu.Percent(1*time.Second, false)
@@ -408,7 +431,6 @@ func collectTelemetry() TelemetryData {
 	if v != nil {
 		ramValue = v.UsedPercent
 	}
-
 
 	diskPath := "/"
 	if runtime.GOOS == "windows" {
@@ -431,7 +453,6 @@ func collectTelemetry() TelemetryData {
 		tempValue = 40.0 + (cpuValue * 0.3)
 	}
 
-	// 5. Uptime
 	uptime := uint64(0)
 	hostInfo, _ := host.Info()
 	if hostInfo != nil {
@@ -493,28 +514,45 @@ func createRestorePoint() {
 		return
 	}
 
-	ensureBackupFolderExists(BACKUP_FOLDER_PATH)
-	restoreFile := filepath.Join(BACKUP_FOLDER_PATH, RESTORE_POINT_FILE)
+	backupFolder := getBackupFolderPath()
+	if err := ensureBackupFolderExists(backupFolder); err != nil {
+		log.Printf("❌ Erro ao criar pasta de backup: %v", err)
+		return
+	}
+
+	restoreFile := filepath.Join(backupFolder, RESTORE_POINT_FILE)
 
 	var lastRun time.Time
 	if content, err := os.ReadFile(restoreFile); err == nil {
 		lastRun, _ = time.Parse("2006-01-02 15:04:05", strings.TrimSpace(string(content)))
 	}
 
-	if time.Since(lastRun) < RESTORE_POINT_INTERVAL {
+	if time.Since(lastRun) < RESTORE_POINT_INTERVAL && !lastRun.IsZero() {
 		return
 	}
 
-	log.Println("🛠️ Iniciando criação de Ponto de Restauração agendado...")
-	cmd := exec.Command("powershell.exe", "-ExecutionPolicy", "Bypass", "-Command", "Checkpoint-Computer -Description 'Agente Rede Facil' -RestorePointType 'MODIFY_SETTINGS'")
+	log.Println("🛠️ Iniciando criação de Ponto de Restauração (7 dias)...")
+
+	psScript := `
+    Enable-ComputerRestore -Drive "C:\"
+    Checkpoint-Computer -Description "Agente Rede Facil Auto" -RestorePointType "MODIFY_SETTINGS"
+    `
+
+	cmd := exec.Command("powershell.exe", "-ExecutionPolicy", "Bypass", "-Command", psScript)
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
 
 	err := cmd.Run()
 	if err == nil {
 		now := time.Now().Format("2006-01-02 15:04:05")
 		_ = os.WriteFile(restoreFile, []byte(now), 0644)
 		log.Println("✅ Ponto de Restauração criado com sucesso.")
+
+		go registerMachine()
 	} else {
-		log.Printf("⚠️ Falha ao criar ponto de restauração (Requer Admin?): %v", err)
+		log.Printf("⚠️ Falha ao criar ponto de restauração: %v", err)
+		log.Printf("📝 Detalhe do erro (PowerShell): %s", stderr.String())
+		log.Println("🔴 DICA: Execute o agente como ADMINISTRADOR.")
 	}
 }
 
@@ -559,7 +597,7 @@ func registerMachine() {
 	info := collectStaticInfo()
 
 	url := fmt.Sprintf("%s/register", API_BASE_URL)
-	client := http.Client{Timeout: 30 * time.Second} 
+	client := http.Client{Timeout: 30 * time.Second}
 
 	jsonValue, _ := json.Marshal(info)
 
@@ -588,7 +626,9 @@ func registerMachine() {
 }
 
 func main() {
-	log.Println("Agente Rede Fácil v3 (Monitoramento) iniciando...")
+	log.Println("Agente Rede Fácil v3.1 (Backup Automático) iniciando...")
+
+	createRestorePoint()
 
 	registerMachine()
 
@@ -601,8 +641,8 @@ func main() {
 			data := collectTelemetry()
 			log.Printf("Stats -> Temp: %.1f°C | CPU: %.1f%% | RAM: %.1f%%",
 				data.TemperatureCelsius,
-				data.CpuUsagePercent, 
-				data.RamUsagePercent) 
+				data.CpuUsagePercent,
+				data.RamUsagePercent)
 			postData("/telemetry", data)
 
 		case <-restoreCheck.C:

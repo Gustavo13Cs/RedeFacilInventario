@@ -312,6 +312,14 @@ export default function MachineDetails({ machine: initialMachineData, onBack, so
                     <div><p className="text-xs text-slate-500 font-bold uppercase">Modelo</p><p className="text-sm text-slate-700">{machine.mb_model || 'N/A'}</p></div>
                     <div><p className="text-xs text-slate-500 font-bold uppercase">Versão</p><p className="text-sm text-slate-700">{machine.mb_version || 'N/A'}</p></div>
                     <div><p className="text-xs text-slate-500 font-bold uppercase">Serial</p><p className="text-sm font-mono text-slate-600 bg-slate-100 w-fit px-2 py-0.5 rounded">{machine.serial_number || 'N/A'}</p></div>
+                    <div className="col-span-2 mt-2 pt-2 border-t border-slate-100">
+                        <p className="text-xs text-slate-500 font-bold uppercase flex items-center gap-1">
+                            <Activity className="w-3 h-3 text-emerald-500" /> Último Ponto de Restauração
+                        </p>
+                        <p className="text-sm font-medium text-slate-800 mt-1">
+                            {machine.last_restore_point ? machine.last_restore_point : 'Nenhum registro encontrado'}
+                        </p>
+                    </div>
                 </div>
             </CardContent>
         </Card>

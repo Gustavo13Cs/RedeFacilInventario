@@ -82,7 +82,7 @@ exports.registerMachine = async (data) => {
         ram_total_gb, mem_slots_total, mem_slots_used, disk_total_gb,
         mac_address, machine_model, serial_number, machine_type,
         mb_manufacturer, mb_model, mb_version,
-        gpu_model, gpu_vram_mb, last_boot_time,
+        gpu_model, gpu_vram_mb, last_boot_time,last_restore_point,
         network_interfaces, installed_software
     } = data;
 
@@ -108,38 +108,38 @@ exports.registerMachine = async (data) => {
         const machine_id = rows[0].id;
 
         const specsData = [
-            cpu_model || null, cpu_speed_mhz || null, cpu_cores_physical || null, cpu_cores_logical || null,
-            ram_total_gb || null, mem_slots_total || null, mem_slots_used || null, disk_total_gb || null,
-            mac_address || null, machine_model || null, serial_number || null, machine_type || null,
-            mb_manufacturer || null, mb_model || null, mb_version || null,
-            gpu_model || null, gpu_vram_mb || null, last_boot_time || null
-        ];
+        cpu_model || null, cpu_speed_mhz || null, cpu_cores_physical || null, cpu_cores_logical || null,
+        ram_total_gb || null, mem_slots_total || null, mem_slots_used || null, disk_total_gb || null,
+        mac_address || null, machine_model || null, serial_number || null, machine_type || null,
+        mb_manufacturer || null, mb_model || null, mb_version || null,
+        gpu_model || null, gpu_vram_mb || null, last_boot_time || null,
+        last_restore_point || null 
+    ];
 
-        const [specsRows] = await connection.execute('SELECT id FROM hardware_specs WHERE machine_id = ?', [machine_id]);
+       const [specsRows] = await connection.execute('SELECT id FROM hardware_specs WHERE machine_id = ?', [machine_id]);
 
         if (specsRows.length === 0) {
-            await connection.execute(
-                `INSERT INTO hardware_specs (
-                    machine_id, cpu_model, cpu_speed_mhz, cpu_cores_physical, cpu_cores_logical,
-                    ram_total_gb, mem_slots_total, mem_slots_used, disk_total_gb, mac_address,
-                    machine_model, serial_number, machine_type, mb_manufacturer, mb_model, mb_version,
-                    gpu_model, gpu_vram_mb, last_boot_time
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-                [machine_id, ...specsData]
-            );
-        } else {
-            await connection.execute(
-                `UPDATE hardware_specs SET 
-                    cpu_model=?, cpu_speed_mhz=?, cpu_cores_physical=?, cpu_cores_logical=?,
-                    ram_total_gb=?, mem_slots_total=?, mem_slots_used=?, disk_total_gb=?, mac_address=?,
-                    machine_model=?, serial_number=?, machine_type=?, mb_manufacturer=?, mb_model=?, mb_version=?,
-                    gpu_model=?, gpu_vram_mb=?, last_boot_time=?
-                WHERE machine_id = ?`,
-                [...specsData, machine_id]
-            );
-        }
+        await connection.execute(
+            `INSERT INTO hardware_specs (
+                machine_id, cpu_model, cpu_speed_mhz, cpu_cores_physical, cpu_cores_logical,
+                ram_total_gb, mem_slots_total, mem_slots_used, disk_total_gb, mac_address,
+                machine_model, serial_number, machine_type, mb_manufacturer, mb_model, mb_version,
+                gpu_model, gpu_vram_mb, last_boot_time, last_restore_point
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [machine_id, ...specsData]
+        );
+    } else {
+        await connection.execute(
+            `UPDATE hardware_specs SET 
+                cpu_model=?, cpu_speed_mhz=?, cpu_cores_physical=?, cpu_cores_logical=?,
+                ram_total_gb=?, mem_slots_total=?, mem_slots_used=?, disk_total_gb=?, mac_address=?,
+                machine_model=?, serial_number=?, machine_type=?, mb_manufacturer=?, mb_model=?, mb_version=?,
+                gpu_model=?, gpu_vram_mb=?, last_boot_time=?, last_restore_point=?
+            WHERE machine_id = ?`,
+            [...specsData, machine_id]
+        );
+    }
 
-        // 3. Network & Software (Limpa e reinsere para manter atualizado)
         await connection.execute('DELETE FROM network_interfaces WHERE machine_id = ?', [machine_id]);
         if (network_interfaces?.length > 0) {
             const values = network_interfaces.map(n => [machine_id, n.interface_name, n.mac_address, n.is_up, n.speed_mbps]);
