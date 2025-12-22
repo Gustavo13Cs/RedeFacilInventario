@@ -24,7 +24,6 @@ import (
 	gonet "github.com/shirou/gopsutil/v3/net"
 )
 
-// --- CONFIGURAÇÕES GLOBAIS ---
 const BACKUP_FOLDER_PATH = "C:\\Users\\Windows 10\\Documents\\backup_agente"
 const RESTORE_POINT_FILE = "restore_point_last_run.txt"
 const API_BASE_URL = "http://localhost:3001/api"
@@ -36,7 +35,6 @@ const RETRY_DELAY = 10 * time.Second
 
 var GlobalMachineIP string
 
-// --- ESTRUTURAS ---
 
 type NetworkInterface struct {
 	InterfaceName string `json:"interface_name"`
