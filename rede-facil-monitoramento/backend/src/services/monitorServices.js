@@ -16,6 +16,8 @@ const MAX_TELEMETRY_RECORDS = 5;
 const MAX_BACKUP_LAG_HOURS = 48;
 const BACKUP_ALERT_TYPE = 'backup_failure';
 
+// --- Funções de Alerta ---
+
 const createAlert = async (machine_id, type, message) => {
     const io = socketHandler.getIO() || globalIo;
 
@@ -51,7 +53,7 @@ const resolveAlert = async (machine_id, type) => {
 };
 
 async function checkBackupHealth(machineId, lastBackupTimestamp) {
-    if (!lastBackupTimestamp) return;
+    if (!lastBackupTimestamp || lastBackupTimestamp === "NÃO EXECUTADO") return;
 
     try {
         const now = moment();
@@ -62,7 +64,7 @@ async function checkBackupHealth(machineId, lastBackupTimestamp) {
         const lagHours = now.diff(lastBackup, 'hours');
 
         if (lagHours > MAX_BACKUP_LAG_HOURS) {
-            const message = `Falha Crítica de Backup: Nenhum arquivo novo encontrado há ${lagHours} horas. (Limite: ${MAX_BACKUP_LAG_HOURS}h)`;
+            const message = `Falha Crítica de Backup: Nenhum ponto de restauração encontrado há ${lagHours} horas. (Limite: ${MAX_BACKUP_LAG_HOURS}h)`;
             await createAlert(machineId, BACKUP_ALERT_TYPE, message);
         } else {
             await resolveAlert(machineId, BACKUP_ALERT_TYPE);
@@ -72,33 +74,21 @@ async function checkBackupHealth(machineId, lastBackupTimestamp) {
     }
 }
 
-// ==========================================================
-// FUNÇÃO registerMachine (COM SLOTS DE MEMÓRIA)
-// ==========================================================
-exports.registerMachine = async ({
-    uuid, hostname, ip_address, os_name,
-    cpu_model,
-    cpu_speed_mhz,
-    cpu_cores_physical,
-    cpu_cores_logical,
-    ram_total_gb,
-    mem_slots_total,
-    mem_slots_used,
-    disk_total_gb,
-    mac_address,
-    machine_model, serial_number,
-    machine_type,
-    mb_manufacturer,
-    mb_model,
-    mb_version,
-    gpu_model,
-    gpu_vram_mb,
-    last_boot_time,
-    network_interfaces,
-    installed_software
-}) => {
-    if (!uuid || !hostname || !ip_address || !os_name) {
-        throw new Error('Dados essenciais faltando.');
+// --- Registro de Máquina (Inventário) ---
+
+exports.registerMachine = async (data) => {
+    const {
+        uuid, hostname, ip_address, os_name,
+        cpu_model, cpu_speed_mhz, cpu_cores_physical, cpu_cores_logical,
+        ram_total_gb, mem_slots_total, mem_slots_used, disk_total_gb,
+        mac_address, machine_model, serial_number, machine_type,
+        mb_manufacturer, mb_model, mb_version,
+        gpu_model, gpu_vram_mb, last_boot_time,
+        network_interfaces, installed_software
+    } = data;
+
+    if (!uuid || !hostname) {
+        throw new Error('Dados essenciais (UUID/Hostname) faltando.');
     }
 
     let connection;
@@ -106,6 +96,7 @@ exports.registerMachine = async ({
         connection = await db.getConnection();
         await connection.beginTransaction();
 
+        // 1. Inserir ou Atualizar Máquina
         await connection.execute(
             `INSERT INTO machines (uuid, hostname, ip_address, os_name, status) 
              VALUES (?, ?, ?, ?, 'online') 
@@ -117,37 +108,23 @@ exports.registerMachine = async ({
         const [rows] = await connection.execute('SELECT id FROM machines WHERE uuid = ?', [uuid]);
         const machine_id = rows[0].id;
 
-        const [specsRows] = await connection.execute('SELECT id FROM hardware_specs WHERE machine_id = ?', [machine_id]);
-
+        // 2. Hardware Specs
         const specsData = [
-            cpu_model || null,
-            cpu_speed_mhz || null,
-            cpu_cores_physical || null,
-            cpu_cores_logical || null,
-            ram_total_gb || null,
-            mem_slots_total || null,
-            mem_slots_used || null,
-            disk_total_gb || null,
-            mac_address || null,
-            machine_model || null,
-            serial_number || null,
-            machine_type || null,
-            mb_manufacturer || null,
-            mb_model || null,
-            mb_version || null,
-            gpu_model || null,
-            gpu_vram_mb || null,
-            last_boot_time || null
+            cpu_model || null, cpu_speed_mhz || null, cpu_cores_physical || null, cpu_cores_logical || null,
+            ram_total_gb || null, mem_slots_total || null, mem_slots_used || null, disk_total_gb || null,
+            mac_address || null, machine_model || null, serial_number || null, machine_type || null,
+            mb_manufacturer || null, mb_model || null, mb_version || null,
+            gpu_model || null, gpu_vram_mb || null, last_boot_time || null
         ];
+
+        const [specsRows] = await connection.execute('SELECT id FROM hardware_specs WHERE machine_id = ?', [machine_id]);
 
         if (specsRows.length === 0) {
             await connection.execute(
                 `INSERT INTO hardware_specs (
-                    machine_id,
-                    cpu_model, cpu_speed_mhz, cpu_cores_physical, cpu_cores_logical,
+                    machine_id, cpu_model, cpu_speed_mhz, cpu_cores_physical, cpu_cores_logical,
                     ram_total_gb, mem_slots_total, mem_slots_used, disk_total_gb, mac_address,
-                    machine_model, serial_number, machine_type,
-                    mb_manufacturer, mb_model, mb_version,
+                    machine_model, serial_number, machine_type, mb_manufacturer, mb_model, mb_version,
                     gpu_model, gpu_vram_mb, last_boot_time
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
                 [machine_id, ...specsData]
@@ -157,52 +134,29 @@ exports.registerMachine = async ({
                 `UPDATE hardware_specs SET 
                     cpu_model=?, cpu_speed_mhz=?, cpu_cores_physical=?, cpu_cores_logical=?,
                     ram_total_gb=?, mem_slots_total=?, mem_slots_used=?, disk_total_gb=?, mac_address=?,
-                    machine_model=?, serial_number=?, machine_type=?,
-                    mb_manufacturer=?, mb_model=?, mb_version=?,
+                    machine_model=?, serial_number=?, machine_type=?, mb_manufacturer=?, mb_model=?, mb_version=?,
                     gpu_model=?, gpu_vram_mb=?, last_boot_time=?
                 WHERE machine_id = ?`,
                 [...specsData, machine_id]
             );
         }
 
-        if (network_interfaces && network_interfaces.length > 0) {
-            await connection.execute('DELETE FROM network_interfaces WHERE machine_id = ?', [machine_id]);
-
-            const interfaceValues = network_interfaces.map(nic => [
-                machine_id,
-                nic.interface_name || 'N/A',
-                nic.mac_address || null,
-                nic.is_up || false,
-                nic.speed_mbps || null,
-            ]);
-
-            await connection.query(
-                'INSERT INTO network_interfaces (machine_id, interface_name, mac_address, is_up, speed_mbps) VALUES ?',
-                [interfaceValues]
-            );
+        // 3. Network & Software (Limpa e reinsere para manter atualizado)
+        await connection.execute('DELETE FROM network_interfaces WHERE machine_id = ?', [machine_id]);
+        if (network_interfaces?.length > 0) {
+            const values = network_interfaces.map(n => [machine_id, n.interface_name, n.mac_address, n.is_up, n.speed_mbps]);
+            await connection.query('INSERT INTO network_interfaces (machine_id, interface_name, mac_address, is_up, speed_mbps) VALUES ?', [values]);
         }
 
         await connection.execute('DELETE FROM installed_software WHERE machine_id = ?', [machine_id]);
-
         const validSoftware = (installed_software || []).filter(isValidSoftware);
-
         if (validSoftware.length > 0) {
-            const softwareValues = validSoftware.map(s => [
-                machine_id,
-                s.name,
-                s.version || null,
-                s.install_date || null
-            ]);
-
-            await connection.query(
-                'INSERT INTO installed_software (machine_id, software_name, version, install_date) VALUES ?',
-                [softwareValues]
-            );
+            const values = validSoftware.map(s => [machine_id, s.name, s.version, null]);
+            await connection.query('INSERT INTO installed_software (machine_id, software_name, version, install_date) VALUES ?', [values]);
         }
 
         await connection.commit();
         return { message: 'Máquina registrada com sucesso', machine_id };
-
     } catch (error) {
         if (connection) await connection.rollback();
         throw error;
@@ -211,259 +165,98 @@ exports.registerMachine = async ({
     }
 };
 
-// ==========================================================
-// FUNÇÃO processTelemetry
-// ==========================================================
+// --- Processamento de Telemetria ---
+
 exports.processTelemetry = async (data) => {
-    if (!data) return;
+    if (!data || !data.uuid) throw new Error('Dados inválidos.');
 
-    const {
-        uuid, cpu_usage_percent, ram_usage_percent, disk_free_percent,
-        temperature_celsius, disk_smart_status, last_backup_timestamp
-    } = data;
+    const machine_id = await getMachineId(data.uuid);
+    if (!machine_id) throw new Error('Máquina não encontrada.');
 
-    if (!uuid) throw new Error('UUID da máquina é obrigatório.');
+    // Helper para limpar números
+    const cleanNum = (val) => (val === null || isNaN(parseFloat(val))) ? null : parseFloat(parseFloat(val).toFixed(2));
+
+    const telemetry = {
+        cpu: cleanNum(data.cpu_usage_percent),
+        ram: cleanNum(data.ram_usage_percent),
+        disk: cleanNum(data.disk_free_percent),
+        temp: cleanNum(data.temperature_celsius),
+        smart: data.disk_smart_status || 'OK',
+        backup: (data.last_backup_timestamp && data.last_backup_timestamp !== "NÃO EXECUTADO") ? data.last_backup_timestamp : null
+    };
 
     try {
-        const machine_id = await getMachineId(uuid);
-        if (!machine_id) throw new Error('Máquina não encontrada.');
-
-        const cpu_raw = parseFloat(cpu_usage_percent);
-        const ram_raw = parseFloat(ram_usage_percent);
-        const disk_raw = parseFloat(disk_free_percent);
-        const temp_raw = temperature_celsius ? parseFloat(temperature_celsius) : null;
-
-        const cpu_usage = isNaN(cpu_raw) ? null : parseFloat(cpu_raw.toFixed(2));
-        const ram_usage = isNaN(ram_raw) ? null : parseFloat(ram_raw.toFixed(2));
-        const disk_free = isNaN(disk_raw) ? null : parseFloat(disk_raw.toFixed(4));
-        const temperature = temp_raw === null || isNaN(temp_raw) ? null : parseFloat(temp_raw.toFixed(2));
-
-        const disk_status = disk_smart_status || 'OK';
-
-        const backup_time = (last_backup_timestamp && last_backup_timestamp.trim() !== "") 
-                            ? last_backup_timestamp 
-                            : null;
-
+        // 1. Salvar Log
         await db.execute(
-            `INSERT INTO telemetry_logs (
-                machine_id, cpu_usage_percent, ram_usage_percent, disk_free_percent,
-                disk_smart_status, temperature_celsius, last_backup_timestamp
-             ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-            [machine_id, cpu_usage, ram_usage, disk_free, disk_status, temperature, backup_time] // <--- MUDOU AQUI
+            `INSERT INTO telemetry_logs (machine_id, cpu_usage_percent, ram_usage_percent, disk_free_percent, disk_smart_status, temperature_celsius, last_backup_timestamp) 
+             VALUES (?, ?, ?, ?, ?, ?, ?)`,
+            [machine_id, telemetry.cpu, telemetry.ram, telemetry.disk, telemetry.smart, telemetry.temp, telemetry.backup]
         );
 
-        if (backup_time) {
-            await checkBackupHealth(machine_id, backup_time);
-        }
+        // 2. Checar Saúde do Backup
+        if (telemetry.backup) await checkBackupHealth(machine_id, telemetry.backup);
 
-        if (last_backup_timestamp) {
-            await checkBackupHealth(machine_id, last_backup_timestamp);
-        }
+        // 3. Atualizar Status e Alertas
+        let newStatus = 'online';
+        const [machine] = await db.execute('SELECT hostname FROM machines WHERE id = ?', [machine_id]);
+        const hostname = machine[0]?.hostname || 'PC';
 
-        const offset = MAX_TELEMETRY_RECORDS - 1;
-
-        const [lastKeepRows] = await db.execute(
-            `SELECT id FROM telemetry_logs 
-             WHERE machine_id = ? 
-             ORDER BY created_at DESC 
-             LIMIT 1 OFFSET ${offset}`,
-            [machine_id]
-        );
-
-        if (lastKeepRows.length > 0) {
-            const keep_id = lastKeepRows[0].id;
-            await db.execute(
-                `DELETE FROM telemetry_logs 
-                 WHERE machine_id = ? AND id < ?`,
-                [machine_id, keep_id]
-            );
-        }
-
-        const [machineRow] = await db.execute(
-            'SELECT hostname FROM machines WHERE id = ?',
-            [machine_id]
-        );
-
-        const hostname = machineRow[0].hostname;
-
-        if (cpu_usage !== null && cpu_usage <= 85) {
+        if (telemetry.cpu > 90) {
+            await createAlert(machine_id, 'critical', `Uso de CPU crítico (${telemetry.cpu}%) em ${hostname}`);
+            newStatus = 'critical';
+        } else if (telemetry.cpu <= 85) {
             await resolveAlert(machine_id, 'critical');
         }
-        if (disk_free !== null && disk_free >= 15) {
+
+        if (telemetry.disk < 10) {
+            await createAlert(machine_id, 'warning', `Espaço em disco baixo (${telemetry.disk}%) em ${hostname}`);
+            if (newStatus !== 'critical') newStatus = 'warning';
+        } else if (telemetry.disk >= 15) {
             await resolveAlert(machine_id, 'warning');
         }
 
-        if (cpu_usage && cpu_usage > 90) {
-            await createAlert(
-                machine_id,
-                'critical',
-                `Uso de CPU crítico (${cpu_usage.toFixed(2)}%) na máquina ${hostname} (${uuid}).`
-            );
-        }
+        await db.execute('UPDATE machines SET status = ?, last_seen = CURRENT_TIMESTAMP WHERE id = ?', [newStatus, machine_id]);
 
-        if (disk_free !== null && disk_free < 10) {
-            await createAlert(
-                machine_id,
-                'warning',
-                `Espaço em disco baixo (${disk_free.toFixed(2)}% livre) na máquina ${hostname}.`
-            );
-        }
-
-        if (disk_status && disk_status.toUpperCase() !== 'OK') {
-            await createAlert(
-                machine_id,
-                'hardware',
-                `FALHA S.M.A.R.T DETECTADA no disco da máquina ${hostname}.`
-            );
-        }
-
-        let newStatus = 'online';
-
-        if (cpu_usage > 90 || ram_usage > 95 || disk_free < 5) {
-            newStatus = 'critical';
-        } else if (temperature > 85 || cpu_usage > 85 || disk_free < 10) {
-            newStatus = 'warning';
-        }
-
-        await db.execute(
-            `UPDATE machines 
-             SET status = ?, last_seen = CURRENT_TIMESTAMP 
-             WHERE id = ?`,
-            [newStatus, machine_id]
-        );
-
+        // 4. Socket.io Real-time
         if (globalIo) {
-            globalIo.emit('new_telemetry', {
-                machine_uuid: uuid,
-                cpu_usage_percent: cpu_usage,
-                ram_usage_percent: ram_usage,
-                disk_free_percent: disk_free,
-                disk_smart_status: disk_status,
-                temperature_celsius: temperature,
-                last_backup_timestamp,
-                status: newStatus
-            });
+            globalIo.emit('new_telemetry', { ...telemetry, machine_uuid: data.uuid, status: newStatus });
         }
 
         return { message: 'Telemetria processada' };
-
     } catch (error) {
-        console.error('Erro em processTelemetry:', error.message);
+        console.error('Erro no processTelemetry:', error.message);
         throw error;
     }
 };
 
+// --- Consultas ---
+
 exports.listMachines = async () => {
-    try {
-        const [machines] = await db.execute(
-            `SELECT m.id, m.uuid, m.hostname, m.ip_address, m.os_name, m.status, m.last_seen, 
-                    h.cpu_model, h.cpu_speed_mhz, h.cpu_cores_physical, h.cpu_cores_logical, 
-                    h.ram_total_gb, h.disk_total_gb, h.machine_type, h.gpu_model, 
-                    h.mem_slots_total, h.mem_slots_used
-             FROM machines m 
-             LEFT JOIN hardware_specs h ON m.id = h.machine_id 
-             ORDER BY m.status DESC, m.hostname`
-        );
-        return machines;
-    } catch (error) {
-        console.error('Erro em listMachines:', error.message);
-        throw error;
-    }
+    const [machines] = await db.execute(`
+        SELECT m.id, m.uuid, m.hostname, m.ip_address, m.os_name, m.status, m.last_seen, 
+               h.cpu_model, h.ram_total_gb, h.disk_total_gb, h.machine_type
+        FROM machines m 
+        LEFT JOIN hardware_specs h ON m.id = h.machine_id 
+        ORDER BY m.status DESC, m.hostname
+    `);
+    return machines;
 };
 
 exports.getMachineDetails = async (uuid) => {
-    if (!uuid) return null;
+    const machine_id = await getMachineId(uuid);
+    if (!machine_id) return null;
 
-    try {
-        const machine_id = await getMachineId(uuid);
-        if (!machine_id) return null;
+    const [details] = await db.execute('SELECT m.*, h.* FROM machines m LEFT JOIN hardware_specs h ON m.id = h.machine_id WHERE m.uuid = ?', [uuid]);
+    const [network] = await db.execute('SELECT * FROM network_interfaces WHERE machine_id = ?', [machine_id]);
+    const [software] = await db.execute('SELECT * FROM installed_software WHERE machine_id = ?', [machine_id]);
+    const [telemetry] = await db.execute('SELECT * FROM telemetry_logs WHERE machine_id = ? ORDER BY created_at DESC LIMIT 1', [machine_id]);
+    const [alerts] = await db.execute('SELECT * FROM alerts WHERE machine_id = ? AND is_resolved = FALSE', [machine_id]);
 
-        const [details] = await db.execute(
-            `SELECT 
-                m.uuid, m.hostname, m.ip_address, m.os_name, m.status, m.last_seen, m.created_at, m.id as machine_id,
-                h.cpu_model, h.cpu_speed_mhz, h.cpu_cores_physical, h.cpu_cores_logical,
-                h.ram_total_gb, h.disk_total_gb, h.mac_address,
-                h.machine_model, h.serial_number, h.machine_type,
-                h.mb_manufacturer, h.mb_model, h.mb_version,
-                h.gpu_model, h.gpu_vram_mb, h.last_boot_time,
-                h.mem_slots_total, h.mem_slots_used
-             FROM machines m
-             LEFT JOIN hardware_specs h ON m.id = h.machine_id
-             WHERE m.uuid = ?`,
-            [uuid]
-        );
-
-        if (details.length === 0) return null;
-
-        const [networkInterfaces] = await db.execute(
-            `SELECT interface_name, mac_address, is_up, speed_mbps 
-             FROM network_interfaces 
-             WHERE machine_id = ?`,
-            [machine_id]
-        );
-
-        const [software] = await db.execute(
-            `SELECT software_name, version, install_date FROM installed_software WHERE machine_id = ? ORDER BY software_name`,
-            [machine_id]
-        );
-
-        const [lastTelemetry] = await db.execute(
-            `SELECT cpu_usage_percent, ram_usage_percent, disk_free_percent, 
-                    disk_smart_status, temperature_celsius, created_at, last_backup_timestamp
-             FROM telemetry_logs 
-             WHERE machine_id = ? 
-             ORDER BY created_at DESC 
-             LIMIT 1`,
-            [machine_id]
-        );
-
-        const [openAlerts] = await db.execute(
-            `SELECT id, alert_type, message, created_at 
-             FROM alerts 
-             WHERE machine_id = ? AND is_resolved = FALSE 
-             ORDER BY created_at DESC`,
-            [machine_id]
-        );
-
-        return {
-            ...details[0],
-            network_interfaces: networkInterfaces,
-            installed_software: software,
-            last_telemetry: lastTelemetry[0] || null,
-            open_alerts: openAlerts
-        };
-
-    } catch (error) {
-        console.error('Erro no Service (getMachineDetails):', error.message);
-        throw error;
-    }
-};
-
-exports.getTelemetryHistory = async (uuid, limit = 100) => {
-    if (!uuid) return [];
-
-    try {
-        const machine_id = await getMachineId(uuid);
-        if (!machine_id) return [];
-
-        const numericLimit = Math.max(1, parseInt(limit, 10));
-
-        const [history] = await db.execute(
-            `SELECT 
-                cpu_usage_percent, ram_usage_percent, disk_free_percent, 
-                disk_smart_status, temperature_celsius, created_at, 
-                last_backup_timestamp
-             FROM telemetry_logs
-             WHERE machine_id = ?
-             ORDER BY created_at DESC
-             LIMIT ?`,
-            [machine_id, numericLimit]
-        );
-
-        return history;
-
-    } catch (error) {
-        console.error('Erro em getTelemetryHistory:', error.message);
-        throw error;
-    }
+    return {
+        ...details[0],
+        network_interfaces: network,
+        installed_software: software,
+        last_telemetry: telemetry[0] || null,
+        open_alerts: alerts
+    };
 };
