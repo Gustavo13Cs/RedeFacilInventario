@@ -28,6 +28,7 @@ export default function MachineDetails({ machine: initialMachineData, onBack, so
     description: '' 
   });
 
+  const [customScript, setCustomScript] = useState('');
   const [telemetryData, setTelemetryData] = useState([]);
   const [currentTemp, setCurrentTemp] = useState(0);
   const [currentDiskFree, setCurrentDiskFree] = useState(0);
@@ -160,14 +161,17 @@ export default function MachineDetails({ machine: initialMachineData, onBack, so
     try {
         const token = localStorage.getItem('token');
         const safeUuid = encodeURIComponent(machine.uuid);
+        const bodyData = confirmModal.type === 'custom_script' 
+            ? { command: 'custom_script', payload: customScript }
+            : { command: confirmModal.type };
 
-        await axios.post(`${API_URL}/machines/${safeUuid}/command`, {
-            command: confirmModal.type
-        }, {
+        await axios.post(`${API_URL}/machines/${safeUuid}/command`, bodyData, {
             headers: { Authorization: `Bearer ${token}` }
         });
         
         setConfirmModal({ ...confirmModal, isOpen: false });
+        
+        if (confirmModal.type === 'custom_script') setCustomScript(''); 
 
         setSuccessModal({
             isOpen: true,
@@ -183,7 +187,7 @@ export default function MachineDetails({ machine: initialMachineData, onBack, so
         alert("Falha ao enviar comando."); 
         setConfirmModal({ ...confirmModal, isOpen: false });
     }
-  };
+};
   
   const renderRemoteTab = () => (
     <Card className="border-slate-200 shadow-sm animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -192,66 +196,54 @@ export default function MachineDetails({ machine: initialMachineData, onBack, so
             <p className="text-sm text-slate-500">Execução de comandos administrativos.</p>
         </CardHeader>
         <CardContent className="p-8">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                
-                {/* Botão Reiniciar */}
-                <button 
-                    onClick={() => requestCommand('restart', 'REINICIAR', 'Isso irá reiniciar o sistema operacional imediatamente.')}
-                    className="relative overflow-hidden flex flex-col items-center justify-center p-6 bg-white border-2 border-slate-100 rounded-xl hover:border-blue-500 hover:bg-blue-50 transition-all group duration-300"
-                >
-                    {/* Ícone de fundo (Marca d'água) */}
-                    <div className="absolute top-0 right-0 p-2 opacity-10 group-hover:opacity-20 transition-opacity pointer-events-none">
-                        <RefreshCw className="h-24 w-24 text-blue-600" />
-                    </div>
-                    
-                    {/* Ícone Principal */}
-                    <div className="bg-blue-100 p-4 rounded-full mb-3 group-hover:scale-110 transition-transform duration-300">
-                        <RefreshCw className="h-8 w-8 text-blue-600 group-hover:rotate-180 transition-transform duration-700" />
-                    </div>
-                    
-                    <span className="font-bold text-slate-700 text-lg group-hover:text-blue-700">REINICIAR</span>
-                    <span className="text-xs text-slate-400 mt-1">Reboot imediato</span>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+               <button onClick={() => requestCommand('restart', 'REINICIAR', 'Reiniciar sistema')} className="relative overflow-hidden flex flex-col items-center justify-center p-6 bg-white border-2 border-slate-100 rounded-xl hover:border-blue-500 hover:bg-blue-50 transition-all group duration-300">
+                    <div className="bg-blue-100 p-4 rounded-full mb-3"><RefreshCw className="h-8 w-8 text-blue-600" /></div>
+                    <span className="font-bold text-slate-700">REINICIAR</span>
                 </button>
-
-                {/* Botão Desligar */}
-                <button 
-                    onClick={() => requestCommand('shutdown', 'DESLIGAR', 'A máquina será desligada completamente.')}
-                    className="relative overflow-hidden flex flex-col items-center justify-center p-6 bg-white border-2 border-slate-100 rounded-xl hover:border-red-500 hover:bg-red-50 transition-all group duration-300"
-                >
-                    <div className="absolute top-0 right-0 p-2 opacity-10 group-hover:opacity-20 transition-opacity pointer-events-none">
-                        <Power className="h-24 w-24 text-red-600" />
-                    </div>
-                    <div className="bg-red-100 p-4 rounded-full mb-3 group-hover:scale-110 transition-transform duration-300">
-                        <Power className="h-8 w-8 text-red-600" />
-                    </div>
-                    <span className="font-bold text-slate-700 text-lg group-hover:text-red-700">DESLIGAR</span>
-                    <span className="text-xs text-slate-400 mt-1">Shutdown imediato</span>
+                <button onClick={() => requestCommand('shutdown', 'DESLIGAR', 'Desligar')} className="relative overflow-hidden flex flex-col items-center justify-center p-6 bg-white border-2 border-slate-100 rounded-xl hover:border-red-500 hover:bg-red-50 transition-all group duration-300">
+                    <div className="bg-red-100 p-4 rounded-full mb-3"><Power className="h-8 w-8 text-red-600" /></div>
+                    <span className="font-bold text-slate-700">DESLIGAR</span>
                 </button>
-
-                {/* Botão Limpeza */}
-                <button 
-                    onClick={() => requestCommand('clean_temp', 'LIMPAR TEMPORÁRIOS', 'Isso apagará arquivos temporários e cache para liberar espaço.')}
-                    className="relative overflow-hidden flex flex-col items-center justify-center p-6 bg-white border-2 border-slate-100 rounded-xl hover:border-orange-500 hover:bg-orange-50 transition-all group duration-300"
-                >
-                    <div className="absolute top-0 right-0 p-2 opacity-10 group-hover:opacity-20 transition-opacity pointer-events-none">
-                        <Trash className="h-24 w-24 text-orange-600" />
-                    </div>
-                    <div className="bg-orange-100 p-4 rounded-full mb-3 group-hover:scale-110 transition-transform duration-300">
-                        <Trash className="h-8 w-8 text-orange-600" />
-                    </div>
-                    <span className="font-bold text-slate-700 text-lg group-hover:text-orange-700">LIMPEZA</span>
-                    <span className="text-xs text-slate-400 mt-1">Arquivos Temp</span>
+                <button onClick={() => requestCommand('clean_temp', 'LIMPEZA', 'Limpar Temp')} className="relative overflow-hidden flex flex-col items-center justify-center p-6 bg-white border-2 border-slate-100 rounded-xl hover:border-orange-500 hover:bg-orange-50 transition-all group duration-300">
+                    <div className="bg-orange-100 p-4 rounded-full mb-3"><Trash className="h-8 w-8 text-orange-600" /></div>
+                    <span className="font-bold text-slate-700">LIMPEZA</span>
                 </button>
+            </div>
 
+            <div className="bg-slate-900 rounded-lg p-4 border border-slate-700 shadow-inner">
+                <div className="flex items-center justify-between mb-2">
+                    <h3 className="text-white font-mono text-sm flex items-center gap-2">
+                        <Terminal className="h-4 w-4 text-emerald-500" /> 
+                        Executar PowerShell / Batch
+                    </h3>
+                    <Badge variant="outline" className="text-xs text-slate-400 border-slate-600">Admin Mode</Badge>
+                </div>
+                <textarea 
+                    value={customScript}
+                    onChange={(e) => setCustomScript(e.target.value)}
+                    placeholder="Escreva seu script aqui... Ex: ipconfig /flushdns"
+                    className="w-full h-32 bg-slate-800 text-emerald-400 font-mono text-sm p-3 rounded border border-slate-700 outline-none focus:border-emerald-500 resize-none placeholder:text-slate-600"
+                    spellCheck="false"
+                />
+                <div className="flex justify-end mt-3">
+                    <Button 
+                        disabled={!customScript.trim()}
+                        onClick={() => requestCommand('custom_script', 'EXECUTAR SCRIPT', 'O script será executado no terminal da máquina.')}
+                        className="bg-emerald-600 hover:bg-emerald-700 text-white font-mono text-xs"
+                    >
+                        <Terminal className="mr-2 h-4 w-4" /> Run Script
+                    </Button>
+                </div>
             </div>
             
-            <div className="mt-8 p-4 bg-yellow-50 border border-yellow-200 rounded-md text-sm text-yellow-800 flex items-center gap-2">
+            <div className="mt-6 p-4 bg-yellow-50 border border-yellow-200 rounded-md text-sm text-yellow-800 flex items-center gap-2">
                 <AlertTriangle className="h-5 w-5 text-yellow-600" />
-                <p><strong>Nota de Segurança:</strong> Os comandos são enviados em tempo real.</p>
+                <p><strong>Nota de Segurança:</strong> Os comandos são enviados em tempo real e executados com privilégios elevados.</p>
             </div>
         </CardContent>
     </Card>
-  );
+);
 
   const renderMonitoringTab = () => (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">

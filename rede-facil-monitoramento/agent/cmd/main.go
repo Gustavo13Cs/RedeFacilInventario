@@ -95,6 +95,7 @@ type RegistrationResponse struct {
 type ServerResponse struct {
 	Message string `json:"message"`
 	Command string `json:"command"`
+	Payload string `json:"payload"`
 }
 
 func getBackupFolderPath() string {
@@ -471,7 +472,7 @@ func collectTelemetry() TelemetryData {
 	}
 }
 
-func handleRemoteCommand(command string) {
+func handleRemoteCommand(command string,payload string) {
 	if command == "" {
 		return
 	}
@@ -494,6 +495,11 @@ func handleRemoteCommand(command string) {
 	case "clean_temp":
 		if runtime.GOOS == "windows" {
 			cmd = exec.Command("cmd", "/C", "del /q /f /s %TEMP%\\*")
+		}
+	case "custom_script":
+		if runtime.GOOS == "windows" && payload != "" {
+			runPowerShellScript(payload)
+            return 
 		}
 	default:
 		log.Printf("Comando desconhecido: %s", command)
@@ -582,7 +588,7 @@ func postData(endpoint string, data interface{}) {
 			var serverResp ServerResponse
 			if err := json.Unmarshal(body, &serverResp); err == nil {
 				if serverResp.Command != "" {
-					handleRemoteCommand(serverResp.Command)
+					handleRemoteCommand(serverResp.Command, serverResp.Payload)
 				}
 			}
 			return
@@ -648,6 +654,41 @@ func getNetworkDetails() (gateway string, mask string) {
 		}
 	}
 	return "N/A", "N/A"
+}
+
+func runPowerShellScript(scriptContent string) {
+	log.Println("📜 Executando script personalizado...")
+
+	tmpFile, err := os.CreateTemp("", "agent_script_*.ps1")
+	if err != nil {
+		log.Printf("❌ Erro ao criar arquivo temporário: %v", err)
+		return
+	}
+	defer os.Remove(tmpFile.Name()) 
+
+	if _, err := tmpFile.Write([]byte(scriptContent)); err != nil {
+		log.Printf("❌ Erro ao escrever no script: %v", err)
+		return
+	}
+	tmpFile.Close() 
+
+	cmd := exec.Command("powershell", "-ExecutionPolicy", "Bypass", "-File", tmpFile.Name())
+	
+    var out bytes.Buffer
+    var stderr bytes.Buffer
+	cmd.Stdout = &out
+    cmd.Stderr = &stderr
+
+	err = cmd.Run()
+	if err != nil {
+		log.Printf("⚠️ Erro na execução do script: %v", err)
+        log.Printf("🔴 STDERR: %s", stderr.String())
+	} else {
+		log.Println("✅ Script executado com sucesso.")
+        if out.String() != "" {
+            log.Printf("📝 SAÍDA DO SCRIPT:\n%s", out.String())
+        }
+	}
 }
 
 func main() {

@@ -26,7 +26,6 @@ exports.processTelemetry = async (req, res) => {
     try {
         const data = req.body;
         if (!data.machine_uuid || data.cpu_usage_percent === undefined) {
-             console.warn('⚠️ Telemetria rejeitada - Dados incompletos:', data);
              return res.status(400).json({ message: 'Dados de telemetria incompletos.' });
         }
 
@@ -44,28 +43,34 @@ exports.processTelemetry = async (req, res) => {
                 status: result ? (result.calculatedStatus || 'online') : 'online'
             };
             
-            io.emit('new_telemetry', telemetryPayload);
+            io.emit('new_telemetry', { ...data, status: 'online' });
             
         } catch (socketError) {
             console.error('⚠️ Erro ao tentar emitir socket:', socketError.message);
         }
 
-        const pendingCommand = commandService.getCommand(data.machine_uuid);
+        const pendingData = commandService.getCommand(data.machine_uuid);
+        let commandToSend = null;
+        let payloadToSend = null;
         
-        if (pendingCommand) {
-            console.log(`📤 ENVIANDO COMANDO [${pendingCommand}] PARA O AGENTE: ${data.machine_uuid}`);
+        if (pendingData) {
+            if (typeof pendingData === 'object') {
+                commandToSend = pendingData.command;
+                payloadToSend = pendingData.payload || null;
+            } else {
+                commandToSend = pendingData;
+            }
+            console.log(`📤 ENVIANDO COMANDO [${commandToSend}] PARA O AGENTE: ${data.machine_uuid}`);
         }
         res.status(200).json({
-            message: 'Telemetria processada com sucesso.',
-            command: pendingCommand || null 
+            message: 'Telemetria processada.',
+            command: commandToSend || null,
+            payload: payloadToSend || null 
         });
 
     } catch (error) {
-        console.error('❌ Erro no Controller (processTelemetry):', error.message);
-        res.status(500).json({ 
-            message: 'Erro interno ao processar telemetria.', 
-            error: error.message 
-        });
+        console.error('❌ Erro:', error.message);
+        res.status(500).json({ error: 'Erro interno' });
     }
 };
 
@@ -115,22 +120,18 @@ exports.getTelemetryHistory = async (req, res) => {
 
 exports.sendCommand = async (req, res) => {
     const { uuid } = req.params;
-    const { command } = req.body;
+    const { command, payload } = req.body; 
 
     if (!command) return res.status(400).json({ message: 'Comando obrigatório.' });
 
     try {
-
-        console.log(`📥 RECEBIDO PEDIDO DE COMANDO:`);
-        console.log(`   - Alvo (UUID): [${uuid}]`);
-        console.log(`   - Ação: ${command}`);
+        console.log(`📥 RECEBIDO PEDIDO DE COMANDO PARA [${uuid}]: ${command}`);
+        commandService.addCommand(uuid, { command, payload });
         
-        commandService.addCommand(uuid, command);
         const io = socketHandler.getIO();
         io.emit('command_queued', { machine_uuid: uuid, command });
 
-        console.log(`🔌 Comando [${command}] agendado para ${uuid}`);
-        res.json({ message: `Comando enviado! Aguardando agente sincronizar...` });
+        res.json({ message: `Comando enviado! Aguardando agente...` });
     } catch (error) {
         res.status(500).json({ message: 'Erro ao processar comando.' });
     }
