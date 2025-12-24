@@ -12,20 +12,24 @@ exports.receiveTelemetry = async (req, res) => {
 
         try {
             const io = socketHandler.getIO();
-            io.emit('new_telemetry', { ...data, machine_uuid: data.uuid }); 
+            
+            io.emit('new_telemetry', { 
+                ...data, 
+                machine_uuid: data.machine_uuid || data.uuid 
+            }); 
+            
         } catch (e) { console.error("Erro socket:", e.message); }
 
-        const pendingCommand = commandService.getCommand(data.uuid);
+        const pendingCommand = commandService.getCommand(data.machine_uuid || data.uuid);
         
         if (pendingCommand) {
-            console.log(`🚀 ENVIANDO COMANDO ['${pendingCommand}'] PARA O AGENTE: ${data.uuid}`);
-            console.log(`🚀 ENTREGANDO COMANDO PARA O AGENTE:`);
-            console.log(`   - Agente solicitante: [${data.uuid}]`);
-            console.log(`   - Comando enviado: ${pendingCommand}`);
+            console.log(`🚀 COMANDO ENVIADO PARA AGENTE: ${data.machine_uuid}`);
         } 
+        
         res.status(200).json({ 
             message: 'ok', 
-            command: pendingCommand || null 
+            command: pendingCommand ? pendingCommand.command : null,
+            payload: pendingCommand ? pendingCommand.payload : null
         });
 
     } catch (error) {

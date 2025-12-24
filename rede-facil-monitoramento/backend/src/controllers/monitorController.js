@@ -25,6 +25,7 @@ exports.registerMachine = async (req, res) => {
 exports.processTelemetry = async (req, res) => { 
     try {
         const data = req.body;
+        
         if (!data.machine_uuid || data.cpu_usage_percent === undefined) {
              return res.status(400).json({ message: 'Dados de telemetria incompletos.' });
         }
@@ -33,17 +34,15 @@ exports.processTelemetry = async (req, res) => {
         
         try {
             const io = socketHandler.getIO();
+            
             const telemetryPayload = {
-                machine_uuid: data.machine_uuid, 
-                cpu_usage_percent: data.cpu_usage_percent,
-                ram_usage_percent: data.ram_usage_percent,
-                temperature_celsius: data.temperature_celsius,
-                disk_free_percent: data.disk_free_percent,
-                disk_smart_status: data.disk_smart_status || 'OK',
-                status: result ? (result.calculatedStatus || 'online') : 'online'
+                ...data, 
+                status: 'online'
             };
             
-            io.emit('new_telemetry', { ...data, status: 'online' });
+            console.log(`📡 Socket enviado para ${data.machine_uuid} | CPU: ${data.cpu_usage_percent}%`);
+            
+            io.emit('new_telemetry', telemetryPayload);
             
         } catch (socketError) {
             console.error('⚠️ Erro ao tentar emitir socket:', socketError.message);
@@ -62,6 +61,7 @@ exports.processTelemetry = async (req, res) => {
             }
             console.log(`📤 ENVIANDO COMANDO [${commandToSend}] PARA O AGENTE: ${data.machine_uuid}`);
         }
+
         res.status(200).json({
             message: 'Telemetria processada.',
             command: commandToSend || null,
@@ -69,7 +69,7 @@ exports.processTelemetry = async (req, res) => {
         });
 
     } catch (error) {
-        console.error('❌ Erro:', error.message);
+        console.error('❌ Erro no processTelemetry:', error.message);
         res.status(500).json({ error: 'Erro interno' });
     }
 };
@@ -143,5 +143,31 @@ exports.getTopology = async (req, res) => {
         res.json(map);
     } catch (error) {
         res.status(500).json({ error: 'Erro ao gerar topologia' });
+    }
+};
+
+
+exports.receiveCommandResult = async (req, res) => {
+    try {
+        const { uuid } = req.params; 
+        const { output, error } = req.body; 
+
+        console.log(`📝 RESPOSTA DO AGENTE [${uuid}]:`);
+        
+        const cleanOutput = output || "Comando executado sem retorno de texto.";
+        const cleanError = error || null;
+
+        const io = socketHandler.getIO();
+        
+        io.emit('command_output', { 
+            machine_uuid: uuid, 
+            output: cleanOutput, 
+            error: cleanError 
+        });
+
+        res.status(200).json({ message: 'Output recebido e processado' });
+    } catch (err) {
+        console.error("Erro ao processar output:", err);
+        res.status(500).json({ message: 'Erro interno' });
     }
 };

@@ -33,6 +33,7 @@ export default function MachineDetails({ machine: initialMachineData, onBack, so
   const [currentTemp, setCurrentTemp] = useState(0);
   const [currentDiskFree, setCurrentDiskFree] = useState(0);
   const [currentSmartStatus, setCurrentSmartStatus] = useState('N/A');
+  const [terminalOutput, setTerminalOutput] = useState([]);
 
   const [logs, setLogs] = useState([]);
   const [isLogModalOpen, setIsLogModalOpen] = useState(false);
@@ -140,9 +141,29 @@ export default function MachineDetails({ machine: initialMachineData, onBack, so
         }
     };
 
+    
+const handleCommandOutput = (data) => {
+        if (data.machine_uuid === machine.uuid) {
+            const timestamp = new Date().toLocaleTimeString();
+
+            const newLog = {
+                time: timestamp,
+                text: data.output || data.error || "Comando executado (sem retorno visual).",
+                isError: !!data.error
+            };
+
+            setTerminalOutput(prev => [newLog, ...prev]);
+        }
+    };
+
     socket.on('new_telemetry', handleNewTelemetry);
-    return () => { socket.off('new_telemetry', handleNewTelemetry); };
-  }, [machine.uuid, socket, machine.last_telemetry]);
+    socket.on('command_output', handleCommandOutput);
+
+    return () => { 
+        socket.off('new_telemetry', handleNewTelemetry);
+        socket.off('command_output', handleCommandOutput); 
+    };
+}, [machine.uuid, socket]);
 
   const diskUsageData = [
     { name: 'Livre', value: currentDiskFree },
@@ -234,6 +255,25 @@ export default function MachineDetails({ machine: initialMachineData, onBack, so
                     >
                         <Terminal className="mr-2 h-4 w-4" /> Run Script
                     </Button>
+                    
+                    <div className="mt-4 bg-black rounded-lg p-4 border border-slate-700 h-64 overflow-y-auto font-mono text-xs">
+                        <div className="text-slate-500 mb-2 border-b border-slate-800 pb-1">console output ~</div>
+
+                        {terminalOutput.length === 0 ? (
+                            <p className="text-slate-600 italic">Aguardando execução...</p>
+                        ) : (
+                            terminalOutput.map((log, index) => (
+                                <div key={index} className="mb-3 border-b border-slate-900 pb-2 last:border-0">
+                                    <span className="text-slate-500 mr-2">[{log.time}]</span>
+                                    {log.isError ? (
+                                        <span className="text-red-400 whitespace-pre-wrap">{log.text}</span>
+                                    ) : (
+                                        <span className="text-emerald-300 whitespace-pre-wrap">{log.text}</span>
+                                    )}
+                                </div>
+                            ))
+                        )}
+                    </div>
                 </div>
             </div>
             
