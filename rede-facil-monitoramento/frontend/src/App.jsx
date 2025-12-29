@@ -1,11 +1,13 @@
 import React, { useEffect, useState } from 'react';
-import { LayoutDashboard, Server, Activity, Package, Users, LogOut, Smartphone, Loader2,DollarSign,Network} from 'lucide-react';
+import { LayoutDashboard, Server, Activity, Package, Users, LogOut, Smartphone, Loader2,DollarSign,Network,MessageCircle} from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import io from 'socket.io-client';
 import axios from 'axios';
 import FinancialDashboard from './components/FinancialDashboard';
+import WhatsAppConfig from './pages/WhatsAppConfig';
+
 
 
 import Login from './components/Login';
@@ -186,6 +188,15 @@ function App() {
             Mapa de Rede
           </button>
 
+          {userRole === 'admin' && (
+            <button 
+              onClick={() => { setActiveTab('whatsapp'); setSelectedMachine(null); }}
+              className={`w-full flex items-center px-3 py-2.5 text-sm font-medium rounded-md transition-colors ${activeTab === 'whatsapp' ? 'bg-slate-800 text-white' : 'hover:bg-slate-800/50 hover:text-white'}`}
+            >
+              <MessageCircle className="mr-3 h-5 w-5 text-green-500" />
+              Notificações
+            </button>
+          )}
           
 
           {userRole === 'admin' && (
@@ -240,6 +251,7 @@ function App() {
              activeTab === 'inventory' ? 'Gestão de Inventário' : 
              activeTab === 'chips' ? 'Gestão de Telefonia' :
              activeTab === 'users' ? 'Gestão de Usuários' :
+             activeTab === 'whatsapp' ? 'Configuração WhatsApp' :
              'Dashboard de Monitoramento'}
           </h2>
           <div className="flex items-center gap-4">
@@ -253,6 +265,8 @@ function App() {
           
           {activeTab === 'inventory' ? (
               <Inventory userRole={userRole} />
+            ) : activeTab === 'whatsapp' ? (
+              <WhatsAppConfig />
             ) : activeTab === 'chips' ? (
               <SimCardManagement userRole={userRole} />
             ) : activeTab === 'financial' ? (
