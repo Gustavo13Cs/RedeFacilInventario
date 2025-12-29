@@ -1,6 +1,7 @@
 const { db, getMachineId } = require('../config/db');
 const moment = require('moment');
 const socketHandler = require('../socket/socketHandler');
+const whatsappService = require('./whatsappService')
 
 let globalIo;
 
@@ -15,6 +16,7 @@ const isValidSoftware = (s) => {
 const MAX_TELEMETRY_RECORDS = 5;
 const MAX_BACKUP_LAG_HOURS = 48;
 const BACKUP_ALERT_TYPE = 'backup_failure';
+const NOTIFICATION_TARGET = '557991196403@g.us';
 
 
 const createAlert = async (machine_id, type, message) => {
@@ -30,6 +32,9 @@ const createAlert = async (machine_id, type, message) => {
             `INSERT INTO alerts (machine_id, alert_type, message, is_resolved) VALUES (?, ?, ?, FALSE)`,
             [machine_id, type, message]
         );
+
+        const whatsappMsg = `🚨 *ALERTA REDE FÁCIL*\n\n🖥️ *Máquina:* ${machine_id}\n⚠️ *Tipo:* ${type}\n📝 *Mensagem:* ${message}`;
+        whatsappService.sendMessage(NOTIFICATION_TARGET, whatsappMsg);
 
         if (io) {
             io.emit('new_alert', {
