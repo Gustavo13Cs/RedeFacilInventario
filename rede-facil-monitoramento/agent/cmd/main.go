@@ -25,7 +25,6 @@ import (
 	gonet "github.com/shirou/gopsutil/v3/net"
 )
 
-// --- CONFIGURAÇÕES ---
 const RESTORE_POINT_FILE = "restore_point_last_run.txt"
 const API_BASE_URL = "http://localhost:3001/api"
 const TELEMETRY_INTERVAL = 5 * time.Second

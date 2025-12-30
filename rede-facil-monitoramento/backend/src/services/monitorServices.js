@@ -16,7 +16,7 @@ const isValidSoftware = (s) => {
 const MAX_TELEMETRY_RECORDS = 5;
 const MAX_BACKUP_LAG_HOURS = 48;
 const BACKUP_ALERT_TYPE = 'backup_failure';
-const NOTIFICATION_TARGET = '557991196403@g.us';
+const NOTIFICATION_TARGET = '120363420551985100@g.us';
 
 
 const createAlert = async (machine_id, type, message) => {
@@ -78,7 +78,7 @@ async function checkBackupHealth(machineId, lastBackupTimestamp) {
     }
 }
 
-// --- Registro de Máquina (Inventário) ---
+
 
 exports.registerMachine = async (data) => {
     const {
