@@ -4,6 +4,7 @@ const http = require('http');
 
 require('./config/db'); 
 
+// Rotas
 const maintenanceRoutes = require('./routes/maintenanceRoutes'); 
 const monitorRoutes = require('./routes/monitorRoutes');
 const telemetryRoutes = require('./routes/telemetryRoutes');
@@ -14,6 +15,7 @@ const simCardRoutes = require('./routes/simCardRoutes');
 const financialRoutes = require('./routes/financialRoutes'); 
 const whatsappRoutes = require('./routes/whatsappRoutes');
 
+// Serviços e Middleware
 const authMiddleware = require('./middleware/auth'); 
 const socketHandler = require('./socket/socketHandler'); 
 const monitorService = require('./services/monitorServices'); 
@@ -39,13 +41,20 @@ app.get('/', (req, res) => {
     res.json({ message: 'API Rede Fácil Financeira - Online 🚀' });
 });
 
+// ==================================================================
+// 🟢 ZONA PÚBLICA (Acesso LIBERADO sem senha)
+// ==================================================================
+
 app.use('/api', monitorRoutes); 
 app.use('/auth', authRoutes);  
 
+// 👇 AQUI! O WhatsApp agora está acessível para você pegar o ID
 app.use('/api/whatsapp', whatsappRoutes); 
 
-
-app.use(authMiddleware); 
+// ==================================================================
+// 🔴 ZONA PRIVADA (Bloqueia tudo abaixo pedindo senha)
+// ==================================================================
+app.use(authMiddleware); // <--- O Porteiro
 
 app.use('/api', maintenanceRoutes);
 app.use('/api/telemetry', telemetryRoutes); 
@@ -53,7 +62,6 @@ app.use('/api/alerts', alertRoutes);
 app.use('/api/inventory', inventoryRoutes);
 app.use('/api/chips', simCardRoutes);
 app.use('/api/financial', financialRoutes); 
-
 
 const PORT = process.env.PORT || 3001;
 server.listen(PORT, '0.0.0.0', () => {
