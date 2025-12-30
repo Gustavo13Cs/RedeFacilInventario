@@ -39,25 +39,21 @@ app.get('/', (req, res) => {
     res.json({ message: 'API Rede Fácil Financeira - Online 🚀' });
 });
 
-
-// --- ROTAS PÚBLICAS (Sem senha) ---
 app.use('/api', monitorRoutes); 
 app.use('/auth', authRoutes);  
 
-// 👇 AQUI! Movemos o WhatsApp para cá temporariamente para você pegar o ID
 app.use('/api/whatsapp', whatsappRoutes); 
 
-// --- O "PORTEIRO" (Bloqueia tudo que vier abaixo) ---
-app.use(authMiddleware);
 
-// --- ROTAS PROTEGIDAS (Precisam de login) ---
+app.use(authMiddleware); 
+
 app.use('/api', maintenanceRoutes);
 app.use('/api/telemetry', telemetryRoutes); 
 app.use('/api/alerts', alertRoutes);
 app.use('/api/inventory', inventoryRoutes);
 app.use('/api/chips', simCardRoutes);
 app.use('/api/financial', financialRoutes); 
-// (A linha do whatsapp estava aqui antes)
+
 
 const PORT = process.env.PORT || 3001;
 server.listen(PORT, '0.0.0.0', () => {

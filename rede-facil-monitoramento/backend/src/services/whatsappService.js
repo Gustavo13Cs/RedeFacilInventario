@@ -4,7 +4,6 @@ let clientSession = null;
 let currentQRCode = null;
 let connectionStatus = 'DISCONNECTED'; 
 
-
 const start = async () => {
     console.log('🚀 Iniciando serviço do WhatsApp...');
     try {
@@ -13,12 +12,12 @@ const start = async () => {
             autoClose: 0, 
             authTimeout: 0,
             catchQR: (base64Qr, asciiQR) => {
-                console.log('⚠️  NOVO QR CODE GERADO NO TERMINAL');
+                console.log('⚠️  NOVO QR CODE GERADO NO TERMINAL - ESCANEIE AGORA!');
                 currentQRCode = base64Qr; 
                 connectionStatus = 'SCAN_QR';
             },
             statusFind: (statusSession, session) => {
-                console.log('📊 Status WhatsApp:', statusSession);
+                console.log('📊 Status:', statusSession);
                 if (statusSession === 'isLogged' || statusSession === 'inChat') {
                     connectionStatus = 'CONNECTED';
                     currentQRCode = null; 
@@ -34,21 +33,30 @@ const start = async () => {
             connectionStatus = 'CONNECTED';
             console.log('✅ WhatsApp Conectado!');
 
-            console.log('🔎 Buscando seus grupos...');
-            try {
-                const groups = await client.getAllGroups();
-                console.log('\n\n================ LISTA DE GRUPOS ================');
-                groups.forEach(g => {
-                    console.log(`📌 NOME: ${g.name}  |  ID: ${g.id._serialized}`);
-                });
-                console.log('=================================================\n\n');
-            } catch (err) {
-                console.error('Erro ao listar grupos:', err);
-            }
-            // ----------------------------------------------
+            console.log('⏳ Aguardando 5 segundos para sincronizar grupos...');
+            setTimeout(async () => {
+                try {
+                    console.log('🔎 LENDO GRUPOS AGORA...');
+                    const groups = await client.getAllGroups();
+                    
+                    console.log('\n\n👇👇👇 COPIE O ID ABAIXO 👇👇👇');
+                    console.log('=========================================');
+                    if (groups.length === 0) {
+                        console.log('⚠️ NENHUM GRUPO ENCONTRADO. MANDE UM "OI" NO GRUPO E REINICIE.');
+                    }
+                    groups.forEach(g => {
+                        console.log(`📌 GRUPO: ${g.name}`);
+                        console.log(`🆔 ID: ${g.id._serialized}`); 
+                        console.log('-----------------------------------------');
+                    });
+                    console.log('=========================================\n\n');
+                } catch (err) {
+                    console.error('❌ Erro ao ler grupos:', err);
+                }
+            }, 5000); 
         });
     } catch (error) {
-        console.error('❌ Erro fatal ao iniciar WhatsApp:', error);
+        console.error('❌ Erro fatal:', error);
     }
 };
 
@@ -57,21 +65,14 @@ const getStatus = () => {
 };
 
 const sendMessage = async (phoneOrGroupId, message) => {
-    if (!clientSession || connectionStatus !== 'CONNECTED') {
-        console.warn('⚠️ Tentativa de envio sem conexão.');
-        return;
-    }
+    if (!clientSession) return;
     await clientSession.sendText(phoneOrGroupId, message);
 };
 
 const listGroups = async () => {
     if (!clientSession) return [];
-    try {
-        const groups = await clientSession.getAllGroups();
-        return groups.map(g => ({ name: g.name, id: g.id._serialized }));
-    } catch (error) {
-        return [];
-    }
+    const groups = await clientSession.getAllGroups();
+    return groups.map(g => ({ name: g.name, id: g.id._serialized }));
 };
 
 module.exports = { start, getStatus, sendMessage, listGroups };
