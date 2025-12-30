@@ -1,0 +1,8 @@
+node_modules
+.env
+tokens
+rede-facil-bot
+.wppconnect-auth
+logs
+dist
+.DS_Store

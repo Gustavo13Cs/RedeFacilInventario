@@ -1,4 +1,5 @@
 const wppconnect = require('@wppconnect-team/wppconnect');
+const fs = require('fs');
 
 let clientSession = null;
 let currentQRCode = null;
@@ -6,57 +7,62 @@ let connectionStatus = 'DISCONNECTED';
 
 const start = async () => {
     console.log('🚀 Iniciando serviço do WhatsApp...');
+    
+    // Verificação de segurança para não recriar sessão se já existe
+    if (clientSession) {
+        console.log('✅ Sessão já está ativa na memória.');
+        return;
+    }
+
     try {
         await wppconnect.create({
             session: 'rede-facil-bot',
+            folderNameToken: 'tokens', 
             autoClose: 0, 
             authTimeout: 0,
+            
             catchQR: (base64Qr, asciiQR) => {
-                console.log('⚠️  NOVO QR CODE GERADO NO TERMINAL - ESCANEIE AGORA!');
+                console.log('⚠️ QR CODE GERADO (Escaneie apenas se não estiver conectado)');
                 currentQRCode = base64Qr; 
                 connectionStatus = 'SCAN_QR';
             },
             statusFind: (statusSession, session) => {
-                console.log('📊 Status:', statusSession);
+                console.log('📊 Status Conexão:', statusSession);
+                
                 if (statusSession === 'isLogged' || statusSession === 'inChat') {
                     connectionStatus = 'CONNECTED';
                     currentQRCode = null; 
                 }
+                
+                if (statusSession === 'browserClose' || statusSession === 'qrReadFail') {
+                    connectionStatus = 'DISCONNECTED';
+                }
             },
+            
             headless: true,
             useChrome: false,
-            browserArgs: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-accelerated-2d-canvas', '--no-first-run', '--no-zygote', '--single-process', '--disable-gpu'],
-            puppeteerOptions: { executablePath: '/usr/bin/chromium-browser', args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-gpu'] }
+            browserArgs: [
+                '--no-sandbox',
+                '--disable-setuid-sandbox',
+                '--disable-dev-shm-usage',
+                '--disable-accelerated-2d-canvas',
+                '--no-first-run',
+                '--no-zygote',
+                '--single-process', 
+                '--disable-gpu'
+            ],
+            puppeteerOptions: {
+                executablePath: '/usr/bin/chromium-browser',
+                args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-gpu']
+            }
         })
-        .then(async (client) => {
+        .then((client) => {
             clientSession = client;
             connectionStatus = 'CONNECTED';
-            console.log('✅ WhatsApp Conectado!');
-
-            console.log('⏳ Aguardando 5 segundos para sincronizar grupos...');
-            setTimeout(async () => {
-                try {
-                    console.log('🔎 LENDO GRUPOS AGORA...');
-                    const groups = await client.getAllGroups();
-                    
-                    console.log('\n\n👇👇👇 COPIE O ID ABAIXO 👇👇👇');
-                    console.log('=========================================');
-                    if (groups.length === 0) {
-                        console.log('⚠️ NENHUM GRUPO ENCONTRADO. MANDE UM "OI" NO GRUPO E REINICIE.');
-                    }
-                    groups.forEach(g => {
-                        console.log(`📌 GRUPO: ${g.name}`);
-                        console.log(`🆔 ID: ${g.id._serialized}`); 
-                        console.log('-----------------------------------------');
-                    });
-                    console.log('=========================================\n\n');
-                } catch (err) {
-                    console.error('❌ Erro ao ler grupos:', err);
-                }
-            }, 5000); 
+            console.log('✅ WhatsApp Conectado e Sessão Salva!');
         });
     } catch (error) {
-        console.error('❌ Erro fatal:', error);
+        console.error('❌ Erro fatal ao iniciar WhatsApp:', error);
     }
 };
 
