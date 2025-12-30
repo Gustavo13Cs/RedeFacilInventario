@@ -1,9 +1,14 @@
 const { db, getMachineId } = require('../config/db');
 const moment = require('moment');
 const socketHandler = require('../socket/socketHandler');
-const whatsappService = require('./whatsappService')
+const whatsappService = require('./whatsappService');
 
 let globalIo;
+
+const NOTIFICATION_TARGET = '120363391746200252@g.us'
+const CPU_THRESHOLD = 95; // Consideramos "100%" qualquer coisa acima de 95% para garantir
+const CPU_TIME_WINDOW = 2; // Minutos
+const OFFLINE_THRESHOLD = 1; // Minutos sem sinal para considerar Offline
 
 exports.setSocketIo = (ioInstance) => {
     globalIo = ioInstance;
@@ -13,17 +18,11 @@ const isValidSoftware = (s) => {
     return s && typeof s.name === 'string' && s.name.trim().length > 0;
 };
 
-const MAX_TELEMETRY_RECORDS = 5;
-const MAX_BACKUP_LAG_HOURS = 48;
-const BACKUP_ALERT_TYPE = 'backup_failure';
-const NOTIFICATION_TARGET = '120363420551985100@g.us';
-
-
 const createAlert = async (machine_id, type, message) => {
     const io = socketHandler.getIO() || globalIo;
 
     const [existingAlerts] = await db.execute(
-        `SELECT id FROM alerts WHERE machine_id = ? AND alert_type = ? AND is_resolved = FALSE AND created_at > DATE_SUB(NOW(), INTERVAL 1 HOUR)`,
+        `SELECT id FROM alerts WHERE machine_id = ? AND alert_type = ? AND created_at > DATE_SUB(NOW(), INTERVAL 1 HOUR)`,
         [machine_id, type]
     );
 
@@ -33,7 +32,7 @@ const createAlert = async (machine_id, type, message) => {
             [machine_id, type, message]
         );
 
-        const whatsappMsg = `🚨 *ALERTA REDE FÁCIL*\n\n🖥️ *Máquina:* ${machine_id}\n⚠️ *Tipo:* ${type}\n📝 *Mensagem:* ${message}`;
+        const whatsappMsg = `🚨 *ALERTA REDE FÁCIL*\n\n⚠️ *Tipo:* ${type}\n📝 *Mensagem:* ${message}`;
         whatsappService.sendMessage(NOTIFICATION_TARGET, whatsappMsg);
 
         if (io) {
@@ -56,29 +55,68 @@ const resolveAlert = async (machine_id, type) => {
     );
 };
 
-async function checkBackupHealth(machineId, lastBackupTimestamp) {
-    if (!lastBackupTimestamp || lastBackupTimestamp === "NÃO EXECUTADO") return;
 
-    try {
-        const now = moment();
-        const lastBackup = moment(lastBackupTimestamp);
+async function checkCpuHealth(machineId, currentCpu) {
+    if (currentCpu < CPU_THRESHOLD) return;
 
-        if (!lastBackup.isValid()) return;
+    const [logs] = await db.execute(`
+        SELECT AVG(cpu_usage) as avg_cpu, COUNT(*) as count 
+        FROM telemetry_logs 
+        WHERE machine_id = ? AND created_at > DATE_SUB(NOW(), INTERVAL ? MINUTE)
+    `, [machineId, CPU_TIME_WINDOW]);
 
-        const lagHours = now.diff(lastBackup, 'hours');
-
-        if (lagHours > MAX_BACKUP_LAG_HOURS) {
-            const message = `Falha Crítica de Backup: Nenhum ponto de restauração encontrado há ${lagHours} horas. (Limite: ${MAX_BACKUP_LAG_HOURS}h)`;
-            await createAlert(machineId, BACKUP_ALERT_TYPE, message);
-        } else {
-            await resolveAlert(machineId, BACKUP_ALERT_TYPE);
-        }
-    } catch (error) {
-        console.error(`Erro ao processar backup para máquina ${machineId}:`, error);
+    if (logs[0].count > 5 && logs[0].avg_cpu >= CPU_THRESHOLD) {
+        const msg = `🔥 CPU CRÍTICA: A máquina está operando acima de ${CPU_THRESHOLD}% há mais de ${CPU_TIME_WINDOW} minutos!`;
+        await createAlert(machineId, 'HIGH_CPU', msg);
     }
 }
 
+exports.checkOfflineMachines = async () => {
+    try {
+        const now = moment().utcOffset(-3); 
+        
+        const day = now.day(); 
+        const hour = now.hours();
+        const minute = now.minutes();
 
+        const currentMinutes = (hour * 60) + minute;
+        
+        const startWork = (8 * 60) + 30;  
+        const endWork = (18 * 60) + 15;   
+
+        const isWeekDay = (day >= 1 && day <= 5); 
+        const isWorkTime = (currentMinutes >= startWork && currentMinutes <= endWork);
+        
+        const isBusinessHours = isWeekDay && isWorkTime;
+
+        console.log(`🕒 Hora Brasília: ${now.format('HH:mm')} | Horário Comercial: ${isBusinessHours ? 'SIM' : 'NÃO'}`);
+
+        const [offlineMachines] = await db.execute(`
+            SELECT id, uuid, hostname, last_seen, TIMESTAMPDIFF(MINUTE, last_seen, NOW()) as minutes_offline
+            FROM machines 
+            WHERE status = 'online' 
+            AND last_seen < DATE_SUB(NOW(), INTERVAL ? MINUTE)
+        `, [OFFLINE_THRESHOLD]);
+
+        for (const machine of offlineMachines) {
+            console.log(`⚠️ DETECTADO: ${machine.hostname} caiu há ${machine.minutes_offline} minutos.`);
+            
+            await db.execute(`UPDATE machines SET status = 'offline' WHERE id = ?`, [machine.id]);
+            
+            const io = globalIo || socketHandler.getIO();
+            if (io) io.emit('machine_status_change', { uuid: machine.uuid, status: 'offline' });
+
+            if (isBusinessHours) {
+                const msg = `🔌 MÁQUINA OFFLINE: ${machine.hostname} parou de responder às ${now.format('HH:mm')}. (Offline há ${machine.minutes_offline} min)`;
+                await createAlert(machine.id, 'OFFLINE', msg);
+            } else {
+                console.log(`🔕 Alerta de WhatsApp ignorado (Fora de horário): ${machine.hostname}`);
+            }
+        }
+    } catch (error) {
+        console.error('Erro ao checar status offline:', error);
+    }
+};
 
 exports.registerMachine = async (data) => {
     const {
@@ -88,65 +126,63 @@ exports.registerMachine = async (data) => {
         ram_total_gb, mem_slots_total, mem_slots_used, disk_total_gb,
         mac_address, machine_model, serial_number, machine_type,
         mb_manufacturer, mb_model, mb_version,
-        gpu_model, gpu_vram_mb, last_boot_time,last_restore_point,
+        gpu_model, gpu_vram_mb, last_boot_time, last_restore_point,
         network_interfaces, installed_software
     } = data;
 
-    if (!uuid || !hostname) {
-        throw new Error('Dados essenciais (UUID/Hostname) faltando.');
-    }
+    if (!uuid || !hostname) throw new Error('Dados essenciais (UUID/Hostname) faltando.');
 
     let connection;
     try {
         connection = await db.getConnection();
         await connection.beginTransaction();
 
-       await connection.execute(
-        `INSERT INTO machines (uuid, hostname, ip_address, default_gateway, subnet_mask, os_name, status) 
-         VALUES (?, ?, ?, ?, ?, ?, 'online') 
-         ON DUPLICATE KEY UPDATE 
-         hostname=?, ip_address=?, default_gateway=?, subnet_mask=?, os_name=?, last_seen=CURRENT_TIMESTAMP, status='online'`,
-        [
-            uuid, hostname, ip_address, default_gateway || null, subnet_mask || null, os_name, 
-            hostname, ip_address, default_gateway || null, subnet_mask || null, os_name 
-        ]
-    );
+        await connection.execute(
+            `INSERT INTO machines (uuid, hostname, ip_address, default_gateway, subnet_mask, os_name, status, last_seen) 
+             VALUES (?, ?, ?, ?, ?, ?, 'online', NOW()) 
+             ON DUPLICATE KEY UPDATE 
+             hostname=?, ip_address=?, default_gateway=?, subnet_mask=?, os_name=?, last_seen=NOW(), status='online'`,
+            [
+                uuid, hostname, ip_address, default_gateway || null, subnet_mask || null, os_name,
+                hostname, ip_address, default_gateway || null, subnet_mask || null, os_name
+            ]
+        );
 
         const [rows] = await connection.execute('SELECT id FROM machines WHERE uuid = ?', [uuid]);
         const machine_id = rows[0].id;
 
         const specsData = [
-        cpu_model || null, cpu_speed_mhz || null, cpu_cores_physical || null, cpu_cores_logical || null,
-        ram_total_gb || null, mem_slots_total || null, mem_slots_used || null, disk_total_gb || null,
-        mac_address || null, machine_model || null, serial_number || null, machine_type || null,
-        mb_manufacturer || null, mb_model || null, mb_version || null,
-        gpu_model || null, gpu_vram_mb || null, last_boot_time || null,
-        last_restore_point || null 
-    ];
+            cpu_model || null, cpu_speed_mhz || null, cpu_cores_physical || null, cpu_cores_logical || null,
+            ram_total_gb || null, mem_slots_total || null, mem_slots_used || null, disk_total_gb || null,
+            mac_address || null, machine_model || null, serial_number || null, machine_type || null,
+            mb_manufacturer || null, mb_model || null, mb_version || null,
+            gpu_model || null, gpu_vram_mb || null, last_boot_time || null,
+            last_restore_point || null
+        ];
 
-       const [specsRows] = await connection.execute('SELECT id FROM hardware_specs WHERE machine_id = ?', [machine_id]);
+        const [specsRows] = await connection.execute('SELECT id FROM hardware_specs WHERE machine_id = ?', [machine_id]);
 
         if (specsRows.length === 0) {
-        await connection.execute(
-            `INSERT INTO hardware_specs (
-                machine_id, cpu_model, cpu_speed_mhz, cpu_cores_physical, cpu_cores_logical,
-                ram_total_gb, mem_slots_total, mem_slots_used, disk_total_gb, mac_address,
-                machine_model, serial_number, machine_type, mb_manufacturer, mb_model, mb_version,
-                gpu_model, gpu_vram_mb, last_boot_time, last_restore_point
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [machine_id, ...specsData]
-        );
-    } else {
-        await connection.execute(
-            `UPDATE hardware_specs SET 
-                cpu_model=?, cpu_speed_mhz=?, cpu_cores_physical=?, cpu_cores_logical=?,
-                ram_total_gb=?, mem_slots_total=?, mem_slots_used=?, disk_total_gb=?, mac_address=?,
-                machine_model=?, serial_number=?, machine_type=?, mb_manufacturer=?, mb_model=?, mb_version=?,
-                gpu_model=?, gpu_vram_mb=?, last_boot_time=?, last_restore_point=?
-            WHERE machine_id = ?`,
-            [...specsData, machine_id]
-        );
-    }
+            await connection.execute(
+                `INSERT INTO hardware_specs (
+                    machine_id, cpu_model, cpu_speed_mhz, cpu_cores_physical, cpu_cores_logical,
+                    ram_total_gb, mem_slots_total, mem_slots_used, disk_total_gb, mac_address,
+                    machine_model, serial_number, machine_type, mb_manufacturer, mb_model, mb_version,
+                    gpu_model, gpu_vram_mb, last_boot_time, last_restore_point
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                [machine_id, ...specsData]
+            );
+        } else {
+            await connection.execute(
+                `UPDATE hardware_specs SET 
+                    cpu_model=?, cpu_speed_mhz=?, cpu_cores_physical=?, cpu_cores_logical=?,
+                    ram_total_gb=?, mem_slots_total=?, mem_slots_used=?, disk_total_gb=?, mac_address=?,
+                    machine_model=?, serial_number=?, machine_type=?, mb_manufacturer=?, mb_model=?, mb_version=?,
+                    gpu_model=?, gpu_vram_mb=?, last_boot_time=?, last_restore_point=?
+                WHERE machine_id = ?`,
+                [...specsData, machine_id]
+            );
+        }
 
         await connection.execute('DELETE FROM network_interfaces WHERE machine_id = ?', [machine_id]);
         if (network_interfaces?.length > 0) {
@@ -173,13 +209,7 @@ exports.registerMachine = async (data) => {
 
 exports.processTelemetry = async (data) => {
     try {
-        const { 
-            machine_uuid, 
-            cpu_usage_percent, 
-            ram_usage_percent, 
-            disk_free_percent, 
-            temperature_celsius 
-        } = data;
+        const { machine_uuid, cpu_usage_percent, ram_usage_percent, disk_free_percent, temperature_celsius } = data;
 
         if (!machine_uuid) return;
 
@@ -190,50 +220,38 @@ exports.processTelemetry = async (data) => {
 
         await db.execute(`
             UPDATE machines SET 
-                cpu_usage = ?, 
-                ram_usage = ?, 
-                disk_usage = ?, 
-                temperature = ?, 
-                last_seen = NOW(), 
-                status = 'online'
+                cpu_usage = ?, ram_usage = ?, disk_usage = ?, temperature = ?, 
+                last_seen = NOW(), status = 'online'
             WHERE uuid = ?
         `, [cpu, ram, diskFree, temp, machine_uuid]);
 
+        let machineId = null;
         try {
             const [rows] = await db.execute('SELECT id FROM machines WHERE uuid = ?', [machine_uuid]);
             if (rows.length > 0) {
-                const machineId = rows[0].id;
+                machineId = rows[0].id;
                 await db.execute(`
                     INSERT INTO telemetry_logs (machine_id, cpu_usage, ram_usage, disk_usage, temperature)
                     VALUES (?, ?, ?, ?, ?)
                 `, [machineId, cpu, ram, diskFree, temp]);
+                
+                await checkCpuHealth(machineId, cpu);
             }
         } catch (dbErr) {
-            console.error("Erro ao salvar log de telemetria (ignorado):", dbErr.message);
+            console.error("Erro ao salvar log:", dbErr.message);
         }
 
-        const socketData = {
-            uuid: machine_uuid,
-            cpu: cpu,
-            ram: ram,
-            disk: diskFree,
-            temp: temp,
-            last_seen: new Date()
-        };
-
+        const socketData = { uuid: machine_uuid, cpu, ram, disk: diskFree, temp, last_seen: new Date() };
         const io = globalIo || socketHandler.getIO(); 
         
         if (io) {
             io.emit('machine_update', socketData); 
             io.emit(`machine_${machine_uuid}`, socketData);
-            console.log(`📡 Socket emitido para: machine_${machine_uuid}`);
-        } else {
-            console.warn("⚠️ Socket.IO não disponível para enviar atualizações.");
         }
 
         return { message: "Telemetria processada" };
     } catch (error) {
-        console.error("Erro crítico no processTelemetry:", error);
+        console.error("Erro no processTelemetry:", error);
     }
 };
 
@@ -275,19 +293,13 @@ exports.getTopology = async () => {
     `);
 
     const topology = {};
-    
     machines.forEach(m => {
         const gw = m.default_gateway || 'Sem Gateway / Desconhecido';
         if (!topology[gw]) {
-            topology[gw] = {
-                gateway: gw,
-                subnet: m.subnet_mask || 'N/A',
-                machines: []
-            };
+            topology[gw] = { gateway: gw, subnet: m.subnet_mask || 'N/A', machines: [] };
         }
         topology[gw].machines.push(m);
     });
 
     return Object.values(topology);
 };
-

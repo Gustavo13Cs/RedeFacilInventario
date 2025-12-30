@@ -57,6 +57,12 @@ app.use('/api/financial', financialRoutes);
 const PORT = process.env.PORT || 3001;
 server.listen(PORT, '0.0.0.0', () => {
     console.log(`🔥 Servidor rodando na porta ${PORT}`);
+    
     whatsappService.start();
+    
+    setInterval(() => {
+        monitorService.checkOfflineMachines();
+    }, 60000);
+
     console.log(`💰 Módulo Financeiro ativo em: http://localhost:${PORT}/api/financial/report`);
 });

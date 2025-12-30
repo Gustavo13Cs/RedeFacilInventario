@@ -1,11 +1,41 @@
 const wppconnect = require('@wppconnect-team/wppconnect');
 const fs = require('fs');
+const path = require('path');
 
 let clientSession = null;
 let currentQRCode = null;
 let connectionStatus = 'DISCONNECTED'; 
 
+const limparArquivosDeTrava = () => {
+    const tokenFolder = path.resolve(__dirname, '../../tokens/rede-facil-bot');
+    
+    console.log('🧹 Verificando arquivos de trava antigos...');
+
+    if (fs.existsSync(tokenFolder)) {
+        const files = fs.readdirSync(tokenFolder);
+        
+        const travadores = ['SingletonLock', 'SingletonCookie', 'SingletonSocket'];
+
+        files.forEach(file => {
+            if (travadores.some(t => file.includes(t))) {
+                try {
+                    const filePath = path.join(tokenFolder, file);
+                    fs.unlinkSync(filePath);
+                    console.log(`🗑️ Removido arquivo de trava: ${file}`);
+                } catch (err) {
+                    console.error(`⚠️ Não foi possível remover ${file}:`, err.message);
+                }
+            }
+        });
+    } else {
+        console.log('📂 Pasta de tokens ainda não existe (Primeira execução).');
+    }
+};
+
 const start = async () => {
+
+    limparArquivosDeTrava();
+
     console.log('🚀 Iniciando serviço do WhatsApp...');
 
     try {
@@ -34,17 +64,6 @@ const start = async () => {
             clientSession = client;
             connectionStatus = 'CONNECTED';
             console.log('✅ WhatsApp Conectado!');
-
-            client.onMessage((message) => {
-                if (message.isGroupMsg) {
-                    console.log('\n🔔 MENSAGEM DE GRUPO RECEBIDA!');
-                    console.log(`📌 NOME DO GRUPO: ${message.chatId}`);
-                    console.log(`🆔 ID DO GRUPO (COPIE ESTE): ${message.from}`);
-                    console.log(`👤 QUEM MANDOU: ${message.notifyName}`);
-                    console.log(`📄 TEXTO: ${message.body}`);
-                    console.log('------------------------------------------------\n');
-                }
-            });
         });
     } catch (error) {
         console.error('❌ Erro fatal:', error);
@@ -56,8 +75,16 @@ const getStatus = () => {
 };
 
 const sendMessage = async (phoneOrGroupId, message) => {
-    if (!clientSession) return;
-    await clientSession.sendText(phoneOrGroupId, message);
+    if (!clientSession) {
+        console.log('❌ Erro Zap: Sessão não existe (Bot desconectado?)');
+        return;
+    }
+    try {
+        const result = await clientSession.sendText(phoneOrGroupId, message);
+        console.log('✅ ZAP ENVIADO COM SUCESSO! ID:', result.id); 
+    } catch (error) {
+        console.error('❌ ERRO AO ENVIAR ZAP:', error);
+    }
 };
 
 const listGroups = async () => {
