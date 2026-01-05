@@ -62,7 +62,7 @@ server.listen(PORT, '0.0.0.0', () => {
     
     setInterval(() => {
         monitorService.checkOfflineMachines();
-    }, 60000);
+    }, 5000);
 
     console.log(`💰 Módulo Financeiro ativo em: http://localhost:${PORT}/api/financial/report`);
 });

@@ -8,7 +8,7 @@ let globalIo;
 const NOTIFICATION_TARGET = '120363420551985100@g.us'
 const CPU_THRESHOLD = 95; // Consideramos "100%" qualquer coisa acima de 95% para garantir
 const CPU_TIME_WINDOW = 2; // Minutos
-const OFFLINE_THRESHOLD = 1; // Minutos sem sinal para considerar Offline
+const OFFLINE_THRESHOLD_SECONDS = 10;
 
 exports.setSocketIo = (ioInstance) => {
     globalIo = ioInstance;
@@ -22,7 +22,7 @@ const createAlert = async (machine_id, type, message) => {
     const io = socketHandler.getIO() || globalIo;
 
     const [existingAlerts] = await db.execute(
-        `SELECT id FROM alerts WHERE machine_id = ? AND alert_type = ? AND created_at > DATE_SUB(NOW(), INTERVAL 1 HOUR)`,
+        `SELECT id FROM alerts WHERE machine_id = ? AND alert_type = ? AND created_at > DATE_SUB(NOW(), INTERVAL 5 MINUTE)`,
         [machine_id, type]
     );
 
@@ -75,31 +75,21 @@ exports.checkOfflineMachines = async () => {
     try {
         const now = moment().utcOffset(-3); 
         
-        const day = now.day(); 
-        const hour = now.hours();
-        const minute = now.minutes();
-
-        const currentMinutes = (hour * 60) + minute;
-        
-        const startWork = (8 * 60) + 30;  
-        const endWork = (18 * 60) + 15;   
-
-        const isWeekDay = (day >= 1 && day <= 5); 
-        const isWorkTime = (currentMinutes >= startWork && currentMinutes <= endWork);
-        
-        const isBusinessHours = isWeekDay && isWorkTime;
-
-        console.log(`🕒 Hora Brasília: ${now.format('HH:mm')} | Horário Comercial: ${isBusinessHours ? 'SIM' : 'NÃO'}`);
+        const currentMinutes = (now.hours() * 60) + now.minutes();
+        const startWork = (8 * 60) + 30; 
+        const endWork = (18 * 60) + 15;  
+        const isWeekDay = (now.day() >= 1 && now.day() <= 5);
+        const isBusinessHours = isWeekDay && (currentMinutes >= startWork && currentMinutes <= endWork);
 
         const [offlineMachines] = await db.execute(`
-            SELECT id, uuid, hostname, last_seen, TIMESTAMPDIFF(MINUTE, last_seen, NOW()) as minutes_offline
+            SELECT id, uuid, hostname, last_seen, TIMESTAMPDIFF(SECOND, last_seen, NOW()) as seconds_offline
             FROM machines 
             WHERE status = 'online' 
-            AND last_seen < DATE_SUB(NOW(), INTERVAL ? MINUTE)
-        `, [OFFLINE_THRESHOLD]);
+            AND last_seen < DATE_SUB(NOW(), INTERVAL ? SECOND)
+        `, [OFFLINE_THRESHOLD_SECONDS]);
 
         for (const machine of offlineMachines) {
-            console.log(`⚠️ DETECTADO: ${machine.hostname} caiu há ${machine.minutes_offline} minutos.`);
+            console.log(`⚠️ DETECTADO: ${machine.hostname} caiu há ${machine.seconds_offline} segundos.`);
             
             await db.execute(`UPDATE machines SET status = 'offline' WHERE id = ?`, [machine.id]);
             
@@ -107,14 +97,12 @@ exports.checkOfflineMachines = async () => {
             if (io) io.emit('machine_status_change', { uuid: machine.uuid, status: 'offline' });
 
             if (isBusinessHours) {
-                const msg = `🔌 MÁQUINA OFFLINE: ${machine.hostname} parou de responder às ${now.format('HH:mm')}. (Offline há ${machine.minutes_offline} min)`;
+                const msg = `🔌 ${machine.hostname} parou de responder. (Offline há ${machine.seconds_offline} segs)`;
                 await createAlert(machine.id, 'OFFLINE', msg);
-            } else {
-                console.log(`🔕 Alerta de WhatsApp ignorado (Fora de horário): ${machine.hostname}`);
             }
         }
     } catch (error) {
-        console.error('Erro ao checar status offline:', error);
+        console.error('Erro checar offline:', error);
     }
 };
 
