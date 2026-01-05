@@ -158,7 +158,7 @@ const handleCommandOutput = (data) => {
 
     socket.on('new_telemetry', handleNewTelemetry);
     socket.on('command_output', handleCommandOutput);
-
+    
     return () => { 
         socket.off('new_telemetry', handleNewTelemetry);
         socket.off('command_output', handleCommandOutput); 
