@@ -11,11 +11,9 @@ export default function WhatsAppConfig() {
     const [qrCode, setQrCode] = useState(null);
     const [alerts, setAlerts] = useState([]); 
 
-    // ✅ FUNÇÃO 1: Busca apenas o Status do Bot (Conectado/Desconectado)
     const fetchStatus = async () => {
         try {
             const token = localStorage.getItem('token');
-            // AQUI ESTAVA O ERRO: Agora chama a rota certa!
             const res = await axios.get(`${API_URL}/whatsapp/status`, {
                 headers: { Authorization: `Bearer ${token}` }
             });
@@ -24,12 +22,10 @@ export default function WhatsAppConfig() {
             setQrCode(res.data.qrCode);
         } catch (error) {
             console.error("Erro ao buscar status do WhatsApp", error);
-            // Se der erro, assumimos desconectado para parar o loading infinito
             if (status === 'LOADING') setStatus('DISCONNECTED');
         }
     };
 
-    // ✅ FUNÇÃO 2: Busca o histórico de Alertas
     const fetchHistory = async () => {
         try {
             const token = localStorage.getItem('token');
@@ -37,7 +33,6 @@ export default function WhatsAppConfig() {
                 headers: { Authorization: `Bearer ${token}` }
             });
 
-            // Proteção para garantir que é uma lista
             if (Array.isArray(res.data)) {
                 setAlerts(res.data);
             } else {
@@ -49,7 +44,6 @@ export default function WhatsAppConfig() {
     };
 
     useEffect(() => {
-        // Chama as duas coisas ao iniciar
         fetchStatus();
         fetchHistory(); 
 

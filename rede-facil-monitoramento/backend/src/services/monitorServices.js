@@ -58,7 +58,6 @@ const resolveAlert = async (machine_id, type) => {
 
 async function checkCpuHealth(machineId, currentCpu) {
     if (currentCpu < CPU_THRESHOLD) return;
-
     const [logs] = await db.execute(`
         SELECT AVG(cpu_usage) as avg_cpu, COUNT(*) as count 
         FROM telemetry_logs 
@@ -66,7 +65,12 @@ async function checkCpuHealth(machineId, currentCpu) {
     `, [machineId, CPU_TIME_WINDOW]);
 
     if (logs[0].count > 5 && logs[0].avg_cpu >= CPU_THRESHOLD) {
-        const msg = `🔥 CPU CRÍTICA: A máquina está operando acima de ${CPU_THRESHOLD}% há mais de ${CPU_TIME_WINDOW} minutos!`;
+        
+        const [machineRows] = await db.execute('SELECT hostname FROM machines WHERE id = ?', [machineId]);
+        const machineName = machineRows.length > 0 ? machineRows[0].hostname : 'Máquina';
+
+        const msg = `🔥 CPU CRÍTICA: ${machineName} está operando acima de ${CPU_THRESHOLD}% há mais de ${CPU_TIME_WINDOW} minutos!`;
+        
         await createAlert(machineId, 'HIGH_CPU', msg);
     }
 }
@@ -89,7 +93,6 @@ exports.checkOfflineMachines = async () => {
         `, [OFFLINE_THRESHOLD_SECONDS]);
 
         for (const machine of offlineMachines) {
-            console.log(`⚠️ DETECTADO: ${machine.hostname} caiu há ${machine.seconds_offline} segundos.`);
             
             await db.execute(`UPDATE machines SET status = 'offline' WHERE id = ?`, [machine.id]);
             

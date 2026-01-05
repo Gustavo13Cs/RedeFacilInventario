@@ -9,7 +9,6 @@ let connectionStatus = 'DISCONNECTED';
 const limparArquivosDeTrava = () => {
     const tokenFolder = path.resolve(__dirname, '../../tokens/rede-facil-bot');
     
-    console.log('🧹 Verificando arquivos de trava antigos...');
 
     if (fs.existsSync(tokenFolder)) {
         const files = fs.readdirSync(tokenFolder);
