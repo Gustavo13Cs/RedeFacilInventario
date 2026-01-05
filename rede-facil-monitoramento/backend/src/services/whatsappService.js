@@ -64,6 +64,17 @@ const start = async () => {
             clientSession = client;
             connectionStatus = 'CONNECTED';
             console.log('✅ WhatsApp Conectado!');
+            client.onAnyMessage((message) => {
+                // Filtra apenas mensagens de GRUPO
+                if (message.isGroupMsg || (message.chatId && message.chatId.includes('@g.us'))) {
+                    console.log('\n🎯 ==================================================');
+                    console.log(`🗣️ NOME DO GRUPO: ${message.chatId}`); // Alguns wpp mostram nome, outros ID
+                    console.log(`🆔 ID CORRETO PARA COPIAR: ${message.chatId}`);
+                    console.log(`👤 QUEM FALOU: ${message.sender.pushname || message.notifyName}`);
+                    console.log(`📄 MENSAGEM: ${message.body}`);
+                    console.log('================================================== 🎯\n');
+                }
+            });
         });
     } catch (error) {
         console.error('❌ Erro fatal:', error);
