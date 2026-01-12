@@ -1,0 +1,12 @@
+{
+  "dependencies": {
+    "@wppconnect-team/wppconnect": "^1.37.8",
+    "bcryptjs": "^3.0.3",
+    "cors": "^2.8.5",
+    "jsonwebtoken": "^9.0.3",
+    "jspdf": "^3.0.4",
+    "jspdf-autotable": "^5.0.2",
+    "moment": "^2.30.1",
+    "systeminformation": "^5.27.11"
+  }
+}

@@ -1,0 +1,69 @@
+version: '3.8'
+
+services:
+  # --- Serviço 1: Banco de Dados ---
+  db:
+    image: mysql:8.0
+    container_name: redefacil_db
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_DATABASE: inventarioredefacil
+      MYSQL_USER: admin
+      MYSQL_PASSWORD: adminpassword
+    ports:
+      - "3308:3306" 
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql
+      - ./tokens:/app/tokens
+    networks:
+      - app_network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      timeout: 20s
+      retries: 10
+
+  # --- Serviço 2: API (Backend) ---
+  backend:
+    build: ./backend
+    container_name: redefacil_api
+    restart: always
+    ports:
+      - "3001:3000" 
+    environment:
+      - DB_HOST=db
+      - DB_USER=admin
+      - DB_PASS=adminpassword
+      - DB_NAME=inventarioredefacil
+      - PORT=3000
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
+    networks:
+      - app_network
+
+  # --- Serviço 3: Painel (Frontend) ---
+  frontend:
+    build: ./frontend
+    container_name: redefacil_dashboard
+    ports:
+      - "5174:5173" 
+    environment:
+      - VITE_API_URL=http://localhost:3001 
+    depends_on:
+      - backend
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    networks:
+      - app_networkt
+volumes:
+  mysql_data:
+
+networks:
+  app_network:
+    driver: bridge
