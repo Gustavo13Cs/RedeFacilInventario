@@ -342,11 +342,31 @@ const handleCommandOutput = (data) => {
                 <CardHeader className="p-0 mb-4"><CardTitle className="text-md font-semibold text-slate-700 flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-purple-500"></div>Uso de Memória (%)</CardTitle></CardHeader>
                 <div className="h-[200px] w-full"><ResponsiveContainer width="100%" height="100%"><LineChart data={telemetryData}><CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" /><XAxis dataKey="time" hide /><YAxis domain={[0, 100]} tick={{fontSize: 12}} axisLine={false} tickLine={false} /><Tooltip contentStyle={{ borderRadius: '8px' }} /><Line type="monotone" dataKey="ram" stroke="#a855f7" strokeWidth={3} dot={false} isAnimationActive={false} /></LineChart></ResponsiveContainer></div>
             </Card>
+            
+            {/* --- AQUI ESTÁ A CORREÇÃO DO GRÁFICO DE DISCO --- */}
             <Card className="p-1 shadow-sm border-slate-200 flex flex-col md:col-span-2 xl:col-span-1">
                 <CardHeader className="pb-0"><CardTitle className="text-sm font-semibold text-slate-700 flex items-center justify-between"><div className="flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-emerald-500"></div>Disco (C:)</div><Badge variant="outline" className="font-mono text-xs">{machine.disk_total_gb ? `${machine.disk_total_gb} GB` : 'N/A'}</Badge></CardTitle></CardHeader>
                 <div className="h-[220px] w-full relative flex items-center justify-center">
                     <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none"><span className="text-3xl font-bold text-slate-700">{currentDiskFree.toFixed(1)}%</span><span className="text-xs text-slate-400 uppercase font-semibold">Livre</span></div>
-                    <ResponsiveContainer width="100%" height="100%"><PieChart><Pie data={diskUsageData} cx="50%" cy="50%" innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value" stroke="none">{diskUsageData.map((entry, index) => (<Cell key={`cell-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />))}</Pie><Tooltip formatter={(value) => `${value.toFixed(1)}%`} contentStyle={{ borderRadius: '8px' }} /><Legend verticalAlign="bottom" height={36} iconType="circle" /></PieChart></ResponsiveContainer>
+                    <ResponsiveContainer width="100%" height="100%">
+                        <PieChart>
+                            <Pie 
+                                data={diskUsageData} 
+                                cx="50%" 
+                                cy="50%" 
+                                innerRadius={60} 
+                                outerRadius={80} 
+                                paddingAngle={5} 
+                                dataKey="value" 
+                                stroke="none"
+                                isAnimationActive={false} 
+                            >
+                                {diskUsageData.map((entry, index) => (<Cell key={`cell-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />))}
+                            </Pie>
+                            <Tooltip formatter={(value) => `${value.toFixed(1)}%`} contentStyle={{ borderRadius: '8px' }} />
+                            <Legend verticalAlign="bottom" height={36} iconType="circle" />
+                        </PieChart>
+                    </ResponsiveContainer>
                 </div>
             </Card>
         </div>
