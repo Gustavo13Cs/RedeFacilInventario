@@ -58,8 +58,6 @@ app.use('/api/financial', financialRoutes);
 
 const PORT = process.env.PORT || 3001;
 server.listen(PORT, '0.0.0.0', () => {
-    console.log(`🔥 Servidor rodando na porta ${PORT}`);
-    
     whatsappService.start();
     
     setInterval(() => {

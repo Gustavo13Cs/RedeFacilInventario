@@ -19,7 +19,6 @@ exports.listAlerts = async (resolved = 'false', limit = 55) => {
         const [alerts] = await db.execute(query);
         return alerts;
     } catch (error) {
-        console.error('❌ Erro no Service (listAlerts):', error.message);
         throw error;
     }
 };
@@ -32,7 +31,6 @@ exports.resolveAlert = async (id) => {
         );
         return result;
     } catch (error) {
-        console.error('❌ Erro no Service (resolveAlert):', error.message);
         throw error;
     }
 };

@@ -3,8 +3,15 @@ import axios from 'axios';
 import { io } from 'socket.io-client';
 import { API_URL } from '../config'; 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Smartphone, RefreshCw, AlertTriangle, CheckCircle, BellRing, Clock } from 'lucide-react';
+import { Smartphone, AlertTriangle, CheckCircle, BellRing, Clock } from 'lucide-react';
+
+const getSocketUrl = (url) => {
+    let cleanUrl = url.endsWith('/') ? url.slice(0, -1) : url;
+    if (cleanUrl.endsWith('/api')) {
+        cleanUrl = cleanUrl.slice(0, -4);
+    }
+    return cleanUrl;
+};
 
 export default function WhatsAppConfig() {
     const [status, setStatus] = useState('LOADING');
@@ -47,7 +54,15 @@ export default function WhatsAppConfig() {
         fetchStatus();
         fetchHistory(); 
 
-        const newSocket = io('http://localhost:3001'); 
+        const socketUrl = getSocketUrl(API_URL);
+
+        const newSocket = io(socketUrl, {
+            transports: ['websocket', 'polling']
+        }); 
+        
+        newSocket.on('connect_error', (err) => {
+            console.error("Erro de conexão Socket WhatsApp:", err);
+        });
         
         newSocket.on('new_alert', (alertData) => {
             console.log('🚨 Novo Alerta Socket:', alertData);
@@ -69,7 +84,6 @@ export default function WhatsAppConfig() {
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 
-                {/* CARD DA ESQUERDA: STATUS */}
                 <Card>
                     <CardHeader><CardTitle>Status do Bot</CardTitle></CardHeader>
                     <CardContent className="flex flex-col items-center justify-center min-h-[300px]">
@@ -92,8 +106,6 @@ export default function WhatsAppConfig() {
                         )}
                     </CardContent>
                 </Card>
-
-                {/* CARD DA DIREITA: ALERTAS */}
                 <Card className="border-l-4 border-l-red-500 bg-slate-50">
                     <CardHeader>
                         <CardTitle className="flex items-center gap-2 text-red-700">

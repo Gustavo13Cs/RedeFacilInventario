@@ -13,7 +13,6 @@ import axios from 'axios';
 import { generateExcel, generatePDF } from '@/utils/exportUtils';
 import { API_URL } from '../config';
 
-// --- SUB-COMPONENTE: MODAL DE CATEGORIAS ---
 const CategoryModal = ({ isOpen, onClose, onSave, onDelete, categories }) => {
     const [newCat, setNewCat] = useState('');
     if (!isOpen) return null;
@@ -57,21 +56,18 @@ const CategoryModal = ({ isOpen, onClose, onSave, onDelete, categories }) => {
 };
 
 export default function Inventory({ userRole }) {
-  // --- ESTADOS ---
   const [items, setItems] = useState([]);
   const [categories, setCategories] = useState([]); 
-  const [loadingExport, setLoadingExport] = useState(false); // Loading do PDF
+  const [loadingExport, setLoadingExport] = useState(false); 
   
-  // Paginação e Filtros
   const [pagination, setPagination] = useState({ page: 1, totalPages: 1, total: 0 });
   const [filters, setFilters] = useState({
       type: 'Todos',
       status: 'Todos',
       search: '',
-      location: '' // Novo filtro de localização
+      location: '' 
   });
 
-  // Debounce (atraso na busca para não travar enquanto digita)
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [debouncedLocation, setDebouncedLocation] = useState('');
 
@@ -81,7 +77,6 @@ export default function Inventory({ userRole }) {
   const [editingId, setEditingId] = useState(null);
   const [itemToDelete, setItemToDelete] = useState(null); 
 
-  // Formulário Completo
   const [formData, setFormData] = useState({
     type: '', name: '', model: '', serial_number: '', patrimony_code: '', brand: '', 
     status: 'disponivel', condition: 'novo', location: '', assigned_to: '', quantity: 1
@@ -94,9 +89,6 @@ export default function Inventory({ userRole }) {
     return { headers: { Authorization: `Bearer ${token}` } };
   };
 
-  // --- EFEITOS ---
-  
-  // 1. Debounce: Espera 500ms após parar de digitar para atualizar a busca
   useEffect(() => {
       const timer = setTimeout(() => {
           setDebouncedSearch(filters.search);
@@ -105,13 +97,10 @@ export default function Inventory({ userRole }) {
       return () => clearTimeout(timer);
   }, [filters.search, filters.location]);
 
-  // 2. Busca dados quando paginação ou filtros mudam
   useEffect(() => { fetchInventory(); }, [pagination.page, filters.type, filters.status, debouncedSearch, debouncedLocation]);
   
-  // 3. Busca categorias ao iniciar
   useEffect(() => { fetchCategories(); }, []);
 
-  // --- API ---
 
   const fetchCategories = async () => {
       try {
@@ -120,11 +109,21 @@ export default function Inventory({ userRole }) {
       } catch (e) { console.error("Erro categorias:", e); }
   };
 
+  const formatStatusForReport = (status) => {
+    switch(status) {
+        case 'disponivel': return 'Disponível';
+        case 'uso': return 'Em Uso'; 
+        case 'manutencao': return 'Manutenção';
+        case 'defeito': return 'Defeito/Falta';
+        default: return status || '-';
+    }
+  };
+
   const fetchInventory = async () => {
     try {
       const params = {
           page: pagination.page,
-          limit: 10, // Itens por página
+          limit: 10, 
           type: filters.type,
           status: filters.status,
           search: debouncedSearch,
@@ -133,7 +132,6 @@ export default function Inventory({ userRole }) {
 
       const res = await axios.get(INVENTORY_API, { ...getAuthHeaders(), params });
       
-      // Suporte para resposta paginada { data, meta } ou lista simples (legado)
       if (res.data.meta) {
           setItems(res.data.data);
           setPagination(prev => ({
@@ -147,7 +145,6 @@ export default function Inventory({ userRole }) {
     } catch (error) { console.error("Erro ao buscar inventário:", error); }
   };
 
-  // --- GERENCIAMENTO DE CATEGORIAS ---
   const handleAddCategory = async (name) => {
     try {
         await axios.post(`${INVENTORY_API}/settings/categories`, { name }, getAuthHeaders());
@@ -163,7 +160,6 @@ export default function Inventory({ userRole }) {
       } catch (error) { alert("Erro ao deletar"); }
   };
 
-  // --- FORMULÁRIO ---
   const handleInputChange = (e) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
@@ -214,7 +210,6 @@ export default function Inventory({ userRole }) {
     }
   };
 
-  // --- FILTROS E PAGINAÇÃO ---
   const handleFilterChange = (key, value) => {
       setFilters(prev => ({ ...prev, [key]: value }));
       setPagination(prev => ({ ...prev, page: 1 }));
@@ -226,11 +221,9 @@ export default function Inventory({ userRole }) {
       }
   };
 
-  // --- EXPORTAÇÃO PDF INTELIGENTE ---
   const handleExportPDF = async () => {
     try {
         setLoadingExport(true);
-        // 1. Busca TODOS os itens do banco com os filtros atuais (limit alto para ignorar paginação)
         const params = {
             page: 1,
             limit: 100000, 
@@ -243,23 +236,22 @@ export default function Inventory({ userRole }) {
         const res = await axios.get(INVENTORY_API, { ...getAuthHeaders(), params });
         const allData = res.data.meta ? res.data.data : res.data;
 
-        // 2. Formata para o PDF
         const tableColumns = ["Patrimônio", "Equipamento", "Tipo", "Serial", "Status", "Local"];
+        
         const tableRows = allData.map(item => [
             item.patrimony_code || '-', 
-            `${item.name} (${item.model})`, 
+            `${item.name} (${item.model || ''})`, 
             item.type, 
             item.serial || item.serial_number || '-',
-            item.status === 'disponivel' ? 'Disponível' : item.status === 'em_uso' ? 'Em Uso' : 'Defeito/Falta',
+            formatStatusForReport(item.status), 
             item.location || '-'
         ]);
 
-        // 3. Gera o arquivo
         generatePDF({
             title: "Relatório de Inventário Completo",
             details: [
-                `Gerado em: ${new Date().toLocaleDateString()}`, 
-                `Filtros: ${filters.type !== 'Todos' ? filters.type : 'Todos'} | Local: ${filters.location || 'Geral'}`,
+                `Gerado em: ${new Date().toLocaleDateString()} às ${new Date().toLocaleTimeString()}`, 
+                `Filtros: ${filters.type !== 'Todos' ? filters.type : 'Todos'} | Status: ${filters.status !== 'Todos' ? filters.status : 'Todos'}`,
                 `Total de Itens: ${allData.length}`
             ],
             columns: tableColumns, 
@@ -273,9 +265,8 @@ export default function Inventory({ userRole }) {
     } finally {
         setLoadingExport(false);
     }
-  };
+};
 
-  // Exportação Excel (Exporta página atual)
   const handleExportExcel = () => {
     generateExcel(items, "Inventário", `Inventario_Pagina_${pagination.page}`);
   };

@@ -1,15 +1,14 @@
 import React, { useEffect, useState } from 'react';
 import { 
-  LayoutDashboard, Server, Activity, Package, Users, 
-  Smartphone, DollarSign, Network, MessageCircle, 
-  Building2, Layers
+  LayoutDashboard, Package, Users, Smartphone, DollarSign, 
+  Network, MessageCircle, Layers
 } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+
+import { Routes, Route, Link, useLocation, Navigate, useNavigate } from 'react-router-dom';
+
 import io from 'socket.io-client';
 import axios from 'axios';
-
 import { API_URL } from './config'; 
 
 import FinancialDashboard from './components/FinancialDashboard'; 
@@ -22,6 +21,7 @@ import WhatsAppConfig from './pages/WhatsAppConfig';
 import NetworkMap from './pages/NetworkMap';
 import Login from './components/Login';
 import TopNavbar from './components/ui/TopNavbar'; 
+import DashboardHome from './components/DashboardHome'; 
 
 const getSocketUrl = (url) => {
   let cleanUrl = url.endsWith('/') ? url.slice(0, -1) : url;
@@ -41,8 +41,10 @@ function App() {
   const [stats, setStats] = useState({ total: 0, online: 0, critical: 0 });
   const [lastTelemetry, setLastTelemetry] = useState(null);
 
+  const location = useLocation();
+  const navigate = useNavigate();
+
   const [selectedMachine, setSelectedMachine] = useState(null);
-  const [activeTab, setActiveTab] = useState('dashboard');
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [currentUser, setCurrentUser] = useState('');
   const [userRole, setUserRole] = useState('');
@@ -67,7 +69,6 @@ function App() {
     );
   });
 
-  // Agrupamento
   const getMachinesBySector = () => {
     const grouped = filteredMachines.reduce((acc, machine) => {
       const sectorName = machine.sector ? machine.sector : 'Sem Setor';
@@ -103,9 +104,7 @@ function App() {
     try {
       const token = localStorage.getItem('token');
       if (!token) return;
-
       const url = getApiEndpoint('/machines');
-      
       const res = await axios.get(url, {
         headers: { Authorization: `Bearer ${token}` }
       });
@@ -130,8 +129,6 @@ function App() {
       setUserRole(role || 'suporte');
       fetchMachines(); 
     }
-
-    socket.on("connect", () => console.log("🟢 Conectado ao WebSocket"));
     
     socket.on("new_telemetry", (data) => {
       setLastTelemetry(data);
@@ -152,6 +149,7 @@ function App() {
     setUserRole(user.role);
     localStorage.setItem('user_role', user.role);
     setTimeout(() => fetchMachines(), 100);
+    navigate('/'); 
   };
 
   const handleLogout = () => {
@@ -163,10 +161,10 @@ function App() {
       
       setMachines([]); 
       setSelectedMachine(null);
-      setActiveTab('dashboard');
       setIsAuthenticated(false); 
       setUserRole('');
       setIsLoggingOut(false); 
+      navigate('/');
     }, 1500); 
   };
 
@@ -190,16 +188,22 @@ function App() {
 
   const getPageTitle = () => {
     if (selectedMachine) return 'Detalhes do Ativo';
-    switch(activeTab) {
-      case 'inventory': return 'Gestão de Inventário';
-      case 'sectors': return 'Gestão de Setores';
-      case 'chips': return 'Gestão de Telefonia';
-      case 'users': return 'Gestão de Usuários';
-      case 'whatsapp': return 'Configuração WhatsApp';
-      case 'financial': return 'Controle Patrimonial';
-      case 'network': return 'Mapa de Rede';
-      default: return 'Dashboard de Monitoramento';
-    }
+    const path = location.pathname;
+    
+    if (path.includes('/inventario')) return 'Gestão de Inventário';
+    if (path.includes('/setores')) return 'Gestão de Setores';
+    if (path.includes('/chips')) return 'Gestão de Telefonia';
+    if (path.includes('/usuarios')) return 'Gestão de Usuários';
+    if (path.includes('/whatsapp')) return 'Configuração WhatsApp';
+    if (path.includes('/patrimonio')) return 'Controle Patrimonial';
+    if (path.includes('/mapa')) return 'Mapa de Rede';
+    
+    return 'Dashboard de Monitoramento';
+  };
+
+  const getMenuClass = (path) => {
+    const isActive = location.pathname === path;
+    return `w-full flex items-center px-3 py-2.5 text-sm font-medium rounded-md transition-colors ${isActive && !selectedMachine ? 'bg-slate-800 text-white shadow-sm' : 'hover:bg-slate-800/50 hover:text-white'}`;
   };
 
   if (!isAuthenticated) {
@@ -219,42 +223,45 @@ function App() {
         
         <nav className="flex-1 py-6 px-3 space-y-1 overflow-y-auto">
           <p className="px-3 text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2 mt-2">Principal</p>
-          <button onClick={() => { setActiveTab('dashboard'); setSelectedMachine(null); }} className={`w-full flex items-center px-3 py-2.5 text-sm font-medium rounded-md transition-colors ${activeTab === 'dashboard' && !selectedMachine ? 'bg-slate-800 text-white shadow-sm' : 'hover:bg-slate-800/50 hover:text-white'}`}>
+          
+          <Link to="/" onClick={() => setSelectedMachine(null)} className={getMenuClass('/')}>
             <LayoutDashboard className="mr-3 h-5 w-5 text-blue-500" /> Visão Geral
-          </button>
-          <button onClick={() => { setActiveTab('inventory'); setSelectedMachine(null); }} className={`w-full flex items-center px-3 py-2.5 text-sm font-medium rounded-md transition-colors ${activeTab === 'inventory' ? 'bg-slate-800 text-white shadow-sm' : 'hover:bg-slate-800/50 hover:text-white'}`}>
+          </Link>
+          
+          <Link to="/inventario" onClick={() => setSelectedMachine(null)} className={getMenuClass('/inventario')}>
             <Package className="mr-3 h-5 w-5 text-emerald-500" /> Inventário
-          </button>
+          </Link>
 
           <p className="px-3 text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2 mt-6">Gestão</p>
           {userRole !== 'viewer' && (
-            <button onClick={() => { setActiveTab('sectors'); setSelectedMachine(null); }} className={`w-full flex items-center px-3 py-2.5 text-sm font-medium rounded-md transition-colors ${activeTab === 'sectors' ? 'bg-slate-800 text-white shadow-sm' : 'hover:bg-slate-800/50 hover:text-white'}`}>
+            <Link to="/setores" onClick={() => setSelectedMachine(null)} className={getMenuClass('/setores')}>
               <Layers className="mr-3 h-5 w-5 text-pink-500" /> Setores
-            </button>
+            </Link>
           )}
           {userRole !== 'viewer' && (
-            <button onClick={() => { setActiveTab('chips'); setSelectedMachine(null); }} className={`w-full flex items-center px-3 py-2.5 text-sm font-medium rounded-md transition-colors ${activeTab === 'chips' ? 'bg-slate-800 text-white shadow-sm' : 'hover:bg-slate-800/50 hover:text-white'}`}>
+            <Link to="/chips" onClick={() => setSelectedMachine(null)} className={getMenuClass('/chips')}>
               <Smartphone className="mr-3 h-5 w-5 text-orange-500" /> Chips / Telefonia
-            </button>
+            </Link>
           )}
           {userRole === 'admin' && (
-            <button onClick={() => { setActiveTab('financial'); setSelectedMachine(null); }} className={`w-full flex items-center px-3 py-2.5 text-sm font-medium rounded-md transition-colors ${activeTab === 'financial' ? 'bg-slate-800 text-white shadow-sm' : 'hover:bg-slate-800/50 hover:text-white'}`}>
+            <Link to="/patrimonio" onClick={() => setSelectedMachine(null)} className={getMenuClass('/patrimonio')}>
               <DollarSign className="mr-3 h-5 w-5 text-yellow-500" /> Patrimônio
-            </button>
+            </Link>
           )}
 
           <p className="px-3 text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2 mt-6">Ferramentas</p>
-          <button onClick={() => { setActiveTab('network'); setSelectedMachine(null); }} className={`w-full flex items-center px-3 py-2.5 text-sm font-medium rounded-md transition-colors ${activeTab === 'network' ? 'bg-slate-800 text-white shadow-sm' : 'hover:bg-slate-800/50 hover:text-white'}`}>
+          <Link to="/mapa" onClick={() => setSelectedMachine(null)} className={getMenuClass('/mapa')}>
             <Network className="mr-3 h-5 w-5 text-indigo-500" /> Mapa de Rede
-          </button>
+          </Link>
+          
           {userRole === 'admin' && (
             <>
-            <button onClick={() => { setActiveTab('whatsapp'); setSelectedMachine(null); }} className={`w-full flex items-center px-3 py-2.5 text-sm font-medium rounded-md transition-colors ${activeTab === 'whatsapp' ? 'bg-slate-800 text-white shadow-sm' : 'hover:bg-slate-800/50 hover:text-white'}`}>
+            <Link to="/whatsapp" onClick={() => setSelectedMachine(null)} className={getMenuClass('/whatsapp')}>
               <MessageCircle className="mr-3 h-5 w-5 text-green-500" /> Notificações
-            </button>
-            <button onClick={() => { setActiveTab('users'); setSelectedMachine(null); }} className={`w-full flex items-center px-3 py-2.5 text-sm font-medium rounded-md transition-colors ${activeTab === 'users' ? 'bg-slate-800 text-white shadow-sm' : 'hover:bg-slate-800/50 hover:text-white'}`}>
+            </Link>
+            <Link to="/usuarios" onClick={() => setSelectedMachine(null)} className={getMenuClass('/usuarios')}>
               <Users className="mr-3 h-5 w-5 text-purple-500" /> Usuários
-            </button>
+            </Link>
             </>
           )}
         </nav>
@@ -262,7 +269,7 @@ function App() {
 
       <main className="flex-1 flex flex-col overflow-hidden">
         
-        {activeTab === 'dashboard' && !selectedMachine ? (
+        {location.pathname === '/' && !selectedMachine ? (
           <TopNavbar 
             title={getPageTitle()}
             searchTerm={searchTerm}
@@ -277,6 +284,11 @@ function App() {
               {getPageTitle()}
             </h2>
             <div className="flex items-center gap-4">
+               {selectedMachine && (
+                  <button onClick={() => setSelectedMachine(null)} className="text-sm text-blue-600 hover:underline">
+                    Voltar
+                  </button>
+               )}
                <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200 px-3 py-1">
                  Sistema Online
                </Badge>
@@ -286,130 +298,43 @@ function App() {
 
         <div className="flex-1 overflow-auto p-8 space-y-6">
           
-          {activeTab === 'inventory' ? (
-              <Inventory userRole={userRole} />
-            ) : activeTab === 'sectors' ? (
-              <SectorManagement 
-                machines={machines} 
-                onUpdateMachine={handleLocalMachineUpdate} 
-              />
-            ) : activeTab === 'whatsapp' ? (
-              <WhatsAppConfig />
-            ) : activeTab === 'chips' ? (
-              <SimCardManagement userRole={userRole} />
-            ) : activeTab === 'financial' ? (
-                <FinancialDashboard />
-            ): activeTab === 'users' ?( 
-              <UserManagement />
-            ): activeTab === 'network' ? (
-            <NetworkMap />
-            ): selectedMachine ? (
-              <MachineDetails 
-                machine={selectedMachine} 
-                onBack={() => setSelectedMachine(null)}
-                socket={socket} 
-              />
-            ) : (
-            <>
-              {/* --- DASHBOARD PRINCIPAL --- */}
+          {selectedMachine ? (
+             <MachineDetails 
+               machine={selectedMachine} 
+               onBack={() => setSelectedMachine(null)}
+               socket={socket} 
+             />
+          ) : (
+            <Routes>
+              <Route path="/" element={
+                <DashboardHome 
+                  stats={stats}
+                  searchTerm={searchTerm}
+                  machinesBySector={machinesBySector}
+                  handleMachineClick={handleMachineClick}
+                  getStatusBadgeVariant={getStatusBadgeVariant}
+                  getStatusBadgeClass={getStatusBadgeClass}
+                />
+              } />
               
-              {!searchTerm && (
-                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 animate-in slide-in-from-top-4 duration-500">
-                  <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                      <CardTitle className="text-sm font-medium text-slate-600">Total de Máquinas</CardTitle>
-                      <Server className="h-4 w-4 text-slate-400" />
-                    </CardHeader>
-                    <CardContent>
-                      <div className="text-2xl font-bold text-slate-900">{stats.total}</div>
-                      <p className="text-xs text-slate-500">Registradas na base</p>
-                    </CardContent>
-                  </Card>
-                  
-                  <Card>
-                      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                          <CardTitle className="text-sm font-medium text-slate-600">Online Agora</CardTitle>
-                          <Activity className="h-4 w-4 text-emerald-500" />
-                      </CardHeader>
-                      <CardContent>
-                          <div className="text-2xl font-bold text-emerald-600">{stats.online}</div>
-                          <p className="text-xs text-emerald-600/80">Ativas em tempo real</p>
-                      </CardContent>
-                  </Card>
-                </div>
-              )}
+              <Route path="/inventario" element={<Inventory userRole={userRole} />} />
               
-              <div className="space-y-8">
-                {Object.keys(machinesBySector).length === 0 ? (
-                   <div className="flex flex-col items-center justify-center py-20 text-slate-400">
-                     <Server className="h-16 w-16 mb-4 opacity-20" />
-                     <p className="text-lg">Nenhuma máquina encontrada.</p>
-                     {searchTerm && <p className="text-sm">Tente buscar por outro termo.</p>}
-                   </div>
-                ) : (
-                  Object.entries(machinesBySector).map(([sector, sectorMachines]) => (
-                    <div key={sector} className="animate-in fade-in duration-500">
-                      <div className="flex items-center gap-2 mb-3">
-                         <div className="p-1.5 bg-blue-100 rounded-md">
-                           <Building2 className="w-5 h-5 text-blue-700" />
-                         </div>
-                         <h3 className="text-lg font-bold text-slate-700">{sector}</h3>
-                         <Badge variant="secondary" className="ml-2 bg-slate-100 text-slate-600">
-                           {sectorMachines.length} Ativos
-                         </Badge>
-                      </div>
-
-                      <Card className="border-slate-200 shadow-sm overflow-hidden">
-                        <CardContent className="p-0">
-                          <Table>
-                            <TableHeader>
-                              <TableRow className="bg-slate-50 hover:bg-slate-50">
-                                <TableHead className="w-[100px]">Status</TableHead>
-                                <TableHead>Hostname</TableHead>
-                                <TableHead>IP Address</TableHead>
-                                <TableHead>Sistema Operacional</TableHead>
-                                <TableHead>Hardware (CPU)</TableHead>
-                                <TableHead className="text-right">Memória</TableHead>
-                              </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                              {sectorMachines.map((machine) => (
-                                <TableRow 
-                                    key={machine.uuid} 
-                                    className="cursor-pointer hover:bg-blue-50/50 transition-colors"
-                                    onClick={() => handleMachineClick(machine)} 
-                                >
-                                  <TableCell>
-                                    <Badge 
-                                      variant={getStatusBadgeVariant(machine.status)} 
-                                      className={`${getStatusBadgeClass(machine.status)} font-bold border shadow-none`}
-                                    >
-                                      {machine.status === 'critical' ? 'CRÍTICO' : 
-                                       machine.status === 'warning' ? 'ALERTA' : 
-                                       machine.status === 'online' ? 'ONLINE' : 'OFFLINE'}
-                                    </Badge>
-                                  </TableCell>
-                                  <TableCell className="font-semibold text-slate-700">{machine.hostname}</TableCell>
-                                  <TableCell className="text-slate-500 font-mono text-xs">{machine.ip_address}</TableCell>
-                                  <TableCell className="text-slate-600">{machine.os_name}</TableCell>
-                                  <TableCell className="text-slate-500 text-xs max-w-[200px] truncate" title={machine.cpu_model}>
-                                    {machine.cpu_model}
-                                  </TableCell>
-                                  <TableCell className="text-right font-mono text-slate-600">
-                                    {machine.ram_total_gb ? `${machine.ram_total_gb} GB` : '-'}
-                                  </TableCell>
-                                </TableRow>
-                              ))}
-                            </TableBody>
-                          </Table>
-                        </CardContent>
-                      </Card>
-                    </div>
-                  ))
-                )}
-              </div>
-            </>
+              <Route path="/setores" element={
+                <SectorManagement 
+                  machines={machines} 
+                  onUpdateMachine={handleLocalMachineUpdate} 
+                />
+              } />
+              
+              <Route path="/whatsapp" element={<WhatsAppConfig />} />
+              <Route path="/chips" element={<SimCardManagement userRole={userRole} />} />
+              <Route path="/patrimonio" element={<FinancialDashboard />} />
+              <Route path="/usuarios" element={<UserManagement />} />
+              <Route path="/mapa" element={<NetworkMap />} />
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Routes>
           )}
+
         </div>
       </main>
     </div>
