@@ -27,7 +27,7 @@ import (
 )
 
 // --- CONFIGURAÇÕES DE AUTO-UPDATE ---
-const AGENT_VERSION = "3.6"
+const AGENT_VERSION = "3.7"
 const UPDATE_BASE_URL = "http://192.168.50.60:3001/updates"
 const EXECUTABLE_NAME = "AgenteRedeFacil.exe"
 
@@ -407,13 +407,29 @@ func collectStaticInfo() MachineInfo {
 
 	cpuModel := "N/A"
 	var cpuSpeed float64
+
 	if len(cInfos) > 0 {
 		cpuModel = cInfos[0].ModelName
 		cpuSpeed = cInfos[0].Mhz
 	}
 
+	if (cpuModel == "N/A" || cpuModel == "") && runtime.GOOS == "windows" {
+		wmicName := execWmic("cpu get name")
+		if wmicName != "N/A" && wmicName != "" {
+			cpuModel = wmicName
+		}
+		
+		if cpuSpeed == 0 {
+			wmicSpeed := execWmic("cpu get maxclockspeed")
+			if s, err := strconv.ParseFloat(wmicSpeed, 64); err == nil {
+				cpuSpeed = s
+			}
+		}
+	}
+
 	cpuCoresPhysical, _ := cpu.Counts(false)
 	cpuCoresLogical, _ := cpu.Counts(true)
+	
 	machineModel := execWmic("csproduct get name")
 	serialNumber := execWmic("bios get serialnumber")
 	if serialNumber == "N/A" || serialNumber == "" {
