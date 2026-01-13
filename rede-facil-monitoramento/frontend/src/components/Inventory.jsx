@@ -123,7 +123,7 @@ export default function Inventory({ userRole }) {
     try {
       const params = {
           page: pagination.page,
-          limit: 10, 
+          limit: 15, 
           type: filters.type,
           status: filters.status,
           search: debouncedSearch,

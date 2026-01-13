@@ -8,7 +8,7 @@ let globalIo;
 const NOTIFICATION_TARGET = '120363420551985100@g.us'
 const CPU_THRESHOLD = 95; // Consideramos "100%" qualquer coisa acima de 95% para garantir
 const CPU_TIME_WINDOW = 2; // Minutos
-const OFFLINE_THRESHOLD_SECONDS = 10;
+const OFFLINE_THRESHOLD_SECONDS = 70;
 
 exports.setSocketIo = (ioInstance) => {
     globalIo = ioInstance;
