@@ -12,6 +12,7 @@ import axios from 'axios';
 import { API_URL } from './config'; 
 
 // Componentes
+import PublicDetails from './pages/PublicDetails';
 import FinancialDashboard from './components/FinancialDashboard'; 
 import Inventory from './components/Inventory'; 
 import MachineDetails from './components/MachineDetails';
@@ -24,6 +25,7 @@ import Login from './components/Login';
 import TopNavbar from './components/ui/TopNavbar'; 
 import DashboardHome from './components/DashboardHome'; 
 import TagGenerator from './pages/TagGenerator'; 
+
 
 const getSocketUrl = (url) => {
   let cleanUrl = url.endsWith('/') ? url.slice(0, -1) : url;
@@ -45,6 +47,9 @@ function App() {
 
   const location = useLocation();
   const navigate = useNavigate();
+
+  // --- LÓGICA NOVA: Detecta se é a página de visualização pública ---
+  const isPublicView = location.pathname.startsWith('/view/');
 
   const [selectedMachine, setSelectedMachine] = useState(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -151,7 +156,13 @@ function App() {
     setUserRole(user.role);
     localStorage.setItem('user_role', user.role);
     setTimeout(() => fetchMachines(), 100);
-    navigate('/'); 
+    
+    // Se estava tentando acessar uma URL específica (como o QR Code), volta pra ela
+    if (location.state?.from) {
+        navigate(location.state.from);
+    } else {
+        navigate('/'); 
+    }
   };
 
   const handleLogout = () => {
@@ -216,7 +227,9 @@ function App() {
   return (
     <div className="flex h-screen w-full bg-slate-50">
       
-      <aside className="w-64 bg-[#0f172a] text-slate-300 flex flex-col shrink-0 transition-all shadow-xl z-20">
+      {/* --- LÓGICA NOVA: SÓ MOSTRA A SIDEBAR SE NÃO FOR VISUALIZAÇÃO PÚBLICA --- */}
+      {!isPublicView && (
+      <aside className="w-64 bg-[#0f172a] text-slate-300 flex flex-col shrink-0 transition-all shadow-xl z-20 hidden md:flex">
         <div className="h-16 flex items-center px-6 bg-[#0a0f1d]">
           <div className="font-bold text-white text-lg tracking-wider flex items-center gap-2">
             <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white shadow-lg shadow-blue-900/50">RF</div>
@@ -254,7 +267,6 @@ function App() {
 
           <p className="px-3 text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2 mt-6">Ferramentas</p>
           
-          {/* LINK NOVO AQUI */}
           <Link to="/etiquetas" onClick={() => setSelectedMachine(null)} className={getMenuClass('/etiquetas')}>
             <QrCode className="mr-3 h-5 w-5 text-indigo-500" /> Gerador Etiquetas
           </Link>
@@ -275,37 +287,44 @@ function App() {
           )}
         </nav>
       </aside>
+      )}
 
       <main className="flex-1 flex flex-col overflow-hidden">
         
-        {location.pathname === '/' && !selectedMachine ? (
-          <TopNavbar 
-            title={getPageTitle()}
-            searchTerm={searchTerm}
-            onSearchChange={setSearchTerm}
-            currentUser={currentUser}
-            onLogout={handleLogout}
-            isLoggingOut={isLoggingOut}
-          />
-        ) : (
-          <header className="h-16 bg-white border-b flex items-center justify-between px-8 shadow-sm shrink-0">
-            <h2 className="text-xl font-semibold text-slate-800">
-              {getPageTitle()}
-            </h2>
-            <div className="flex items-center gap-4">
-               {selectedMachine && (
-                  <button onClick={() => setSelectedMachine(null)} className="text-sm text-blue-600 hover:underline">
-                    Voltar
-                  </button>
-               )}
-               <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200 px-3 py-1">
-                 Sistema Online
-               </Badge>
-            </div>
-          </header>
+        {/* --- LÓGICA NOVA: SÓ MOSTRA O TOPO SE NÃO FOR PÚBLICO E NÃO ESTIVER SELECIONADO MÁQUINA --- */}
+        {!isPublicView && (
+            <>
+            {location.pathname === '/' && !selectedMachine ? (
+            <TopNavbar 
+                title={getPageTitle()}
+                searchTerm={searchTerm}
+                onSearchChange={setSearchTerm}
+                currentUser={currentUser}
+                onLogout={handleLogout}
+                isLoggingOut={isLoggingOut}
+            />
+            ) : (
+            <header className="h-16 bg-white border-b flex items-center justify-between px-8 shadow-sm shrink-0">
+                <h2 className="text-xl font-semibold text-slate-800">
+                {getPageTitle()}
+                </h2>
+                <div className="flex items-center gap-4">
+                {selectedMachine && (
+                    <button onClick={() => setSelectedMachine(null)} className="text-sm text-blue-600 hover:underline">
+                        Voltar
+                    </button>
+                )}
+                <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200 px-3 py-1">
+                    Sistema Online
+                </Badge>
+                </div>
+            </header>
+            )}
+            </>
         )}
 
-        <div className="flex-1 overflow-auto p-8 space-y-6">
+        {/* --- LÓGICA NOVA: REMOVE O PADDING SE FOR PÚBLICO --- */}
+        <div className={isPublicView ? "h-full w-full overflow-auto" : "flex-1 overflow-auto p-8 space-y-6"}>
           
           {selectedMachine ? (
              <MachineDetails 
@@ -334,6 +353,8 @@ function App() {
                   onUpdateMachine={handleLocalMachineUpdate} 
                 />
               } />
+
+              <Route path="/view/:type/:id" element={<PublicDetails />} />
               
               <Route path="/whatsapp" element={<WhatsAppConfig />} />
               <Route path="/chips" element={<SimCardManagement userRole={userRole} />} />

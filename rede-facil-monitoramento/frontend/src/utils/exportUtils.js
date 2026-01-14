@@ -128,19 +128,19 @@ export const generateTagsPDF = async (items, type = 'generic') => {
             title = "COMPUTADOR";
             subtitle = item.ip_address || "IP Dinâmico";
             footer = item.sector || "Sem Setor";
-            qrLink = `${baseUrl}/?search=${item.hostname}`;
+            qrLink = `${baseUrl}/view/machine/${item.uuid}`;
         } else if (type === 'chips') {
             code = item.name || item.id_number || "S/N"; 
             title = "CELULAR"; 
             subtitle = item.model || "Modelo Desconhecido";
             footer = item.employee_name || "ATIVO";
-            qrLink = `${baseUrl}/chips?search=${item.line_number}`;
+            qrLink = `${baseUrl}/view/device/${item.id}`;
         } else {
             code = item.patrimony_code || item.serial_number || "S/N";
             title = "PATRIMÔNIO";
             subtitle = item.name.length > 25 ? item.name.substring(0, 25) + '...' : item.name;
             footer = item.location || "Geral";
-            qrLink = `${baseUrl}/inventario?search=${code}`;
+            qrLink = `${baseUrl}/view/item/${item.id}`;
         }
 
         const x = marginX + (col * tagWidth);
