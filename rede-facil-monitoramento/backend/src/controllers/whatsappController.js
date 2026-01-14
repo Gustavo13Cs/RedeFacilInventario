@@ -19,3 +19,12 @@ exports.sendMessageTest = async (req, res) => {
     await whatsappService.sendMessage(target, message);
     res.json({ message: 'Enviado' });
 };
+
+exports.logout = async (req, res) => {
+    try {
+        const result = await whatsappService.logout();
+        res.json(result);
+    } catch (error) {
+        res.status(500).json({ error: 'Erro ao reiniciar sessão' });
+    }
+};

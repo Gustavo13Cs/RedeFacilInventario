@@ -3,7 +3,8 @@ import axios from 'axios';
 import { io } from 'socket.io-client';
 import { API_URL } from '../config'; 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Smartphone, AlertTriangle, CheckCircle, BellRing, Clock } from 'lucide-react';
+import { Button } from "@/components/ui/button"; // Adicionei o Button
+import { Smartphone, AlertTriangle, CheckCircle, BellRing, Clock, RefreshCcw, LogOut } from 'lucide-react'; // Novos ícones
 
 const getSocketUrl = (url) => {
     let cleanUrl = url.endsWith('/') ? url.slice(0, -1) : url;
@@ -17,8 +18,12 @@ export default function WhatsAppConfig() {
     const [status, setStatus] = useState('LOADING');
     const [qrCode, setQrCode] = useState(null);
     const [alerts, setAlerts] = useState([]); 
+    const [isResetting, setIsResetting] = useState(false); // Estado para o loading do botão
 
     const fetchStatus = async () => {
+        // Se estiver resetando, pausa a busca para não piscar a tela
+        if (isResetting) return;
+
         try {
             const token = localStorage.getItem('token');
             const res = await axios.get(`${API_URL}/whatsapp/status`, {
@@ -47,6 +52,34 @@ export default function WhatsAppConfig() {
             }
         } catch (error) {
             console.error("Erro ao buscar histórico de alertas", error);
+        }
+    };
+
+    // --- FUNÇÃO DO BOTÃO ---
+    const handleResetSession = async () => {
+        if (!window.confirm("Isso irá desconectar o WhatsApp atual e gerar um novo QR Code. Deseja continuar?")) return;
+        
+        setIsResetting(true);
+        setStatus('DISCONNECTED');
+        setQrCode(null);
+
+        try {
+            const token = localStorage.getItem('token');
+            // Chama a nova rota que criamos
+            await axios.post(`${API_URL}/whatsapp/logout`, {}, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            
+            // Espera 5 segundos antes de voltar a buscar o status (tempo pro backend reiniciar)
+            setTimeout(() => {
+                setIsResetting(false);
+                fetchStatus();
+            }, 5000);
+
+        } catch (error) {
+            console.error("Erro ao resetar sessão", error);
+            setIsResetting(false);
+            alert("Erro ao tentar reiniciar a sessão.");
         }
     };
 
@@ -85,18 +118,42 @@ export default function WhatsAppConfig() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 
                 <Card>
-                    <CardHeader><CardTitle>Status do Bot</CardTitle></CardHeader>
+                    <CardHeader className="flex flex-row items-center justify-between pb-2">
+                        <CardTitle>Status do Bot</CardTitle>
+                        {/* --- AQUI ESTÁ O BOTÃO NOVO --- */}
+                        <Button 
+                            variant="outline" 
+                            size="sm" 
+                            onClick={handleResetSession} 
+                            disabled={isResetting}
+                            className="text-slate-600 hover:text-red-600 hover:bg-red-50 border-slate-200"
+                        >
+                            {isResetting ? <RefreshCcw className="w-4 h-4 animate-spin mr-2" /> : <LogOut className="w-4 h-4 mr-2" />}
+                            {isResetting ? "Reiniciando..." : "Novo QR Code"}
+                        </Button>
+                    </CardHeader>
+                    
                     <CardContent className="flex flex-col items-center justify-center min-h-[300px]">
-                        {status === 'CONNECTED' ? (
-                            <div className="text-center">
+                        {isResetting ? (
+                             <div className="text-center animate-in fade-in">
+                                <RefreshCcw className="w-12 h-12 text-blue-500 animate-spin mx-auto mb-4" />
+                                <p className="text-slate-500">Reiniciando serviços...</p>
+                                <p className="text-xs text-slate-400 mt-2">Aguarde...</p>
+                             </div>
+                        ) : status === 'CONNECTED' ? (
+                            <div className="text-center animate-in zoom-in-50">
                                 <CheckCircle className="w-16 h-16 text-green-500 mx-auto mb-4" />
                                 <p className="text-lg font-medium text-green-700">Sistema Online</p>
                                 <p className="text-sm text-slate-500">Monitorando 24h</p>
                             </div>
                         ) : status === 'SCAN_QR' && qrCode ? (
-                            <div className="text-center">
-                                <img src={qrCode} alt="QR" className="w-48 h-48 mx-auto border-4 border-white shadow-lg" />
-                                <p className="mt-2 text-sm">Escaneie para conectar</p>
+                            <div className="text-center animate-in fade-in">
+                                <div className="p-2 bg-white border-2 border-slate-100 rounded-lg shadow-sm inline-block">
+                                    <img src={qrCode} alt="QR" className="w-48 h-48" />
+                                </div>
+                                <p className="mt-4 text-sm font-medium text-slate-600 flex items-center justify-center gap-2">
+                                    <Smartphone className="w-4 h-4" /> Abra o WhatsApp e escaneie
+                                </p>
                             </div>
                         ) : (
                             <div className="text-center">
@@ -106,6 +163,7 @@ export default function WhatsAppConfig() {
                         )}
                     </CardContent>
                 </Card>
+
                 <Card className="border-l-4 border-l-red-500 bg-slate-50">
                     <CardHeader>
                         <CardTitle className="flex items-center gap-2 text-red-700">
@@ -119,7 +177,7 @@ export default function WhatsAppConfig() {
                                 <p>Tudo tranquilo por aqui.</p>
                             </div>
                         ) : (
-                            <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2">
+                            <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
                                 {Array.isArray(alerts) && alerts.map((alert, index) => (
                                     <div key={index} className="bg-white p-4 rounded-md shadow-sm border border-red-100 flex flex-col gap-1">
                                         <div className="flex items-center gap-2 text-red-600 font-bold uppercase text-xs">

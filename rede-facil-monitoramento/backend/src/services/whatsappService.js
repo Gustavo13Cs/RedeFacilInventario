@@ -87,4 +87,36 @@ const listGroups = async () => {
     } catch (error) { return []; }
 };
 
-module.exports = { start, getStatus, sendMessage, listGroups };
+
+const logout = async () => {
+    console.log("🔄 Solicitando reinício de sessão...");
+    try {
+        if (clientSession) {
+            await clientSession.logout(); 
+            await clientSession.close();  
+        }
+    } catch (error) {
+        console.error("⚠️ Erro ao tentar fechar sessão antiga:", error.message);
+    }
+
+    clientSession = null;
+    currentQRCode = null;
+    connectionStatus = 'DISCONNECTED';
+
+    const tokenFolder = path.resolve(__dirname, '../../tokens/rede-facil-bot');
+    try {
+        if (fs.existsSync(tokenFolder)) {
+            fs.rmSync(tokenFolder, { recursive: true, force: true });
+            console.log("🗑️ Tokens antigos removidos.");
+        }
+    } catch (err) {
+        console.error("Erro ao limpar tokens:", err);
+    }
+    setTimeout(() => {
+        start();
+    }, 2000);
+    
+    return { message: "Sessão reiniciada. Aguarde o novo QR Code." };
+};
+
+module.exports = { start, getStatus, sendMessage, listGroups, logout };
