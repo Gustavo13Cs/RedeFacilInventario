@@ -19,6 +19,7 @@ const authMiddleware = require('./middleware/auth');
 const socketHandler = require('./socket/socketHandler'); 
 const monitorService = require('./services/monitorServices'); 
 const whatsappService = require('./services/whatsappService');
+const deviceRoutes = require('./routes/deviceRoutes');
 
 const app = express();
 const server = http.createServer(app);
@@ -48,6 +49,7 @@ app.use('/auth', authRoutes);
 
 app.use(authMiddleware); 
 
+app.use('/api/devices', deviceRoutes);
 app.use('/api/whatsapp', whatsappRoutes); 
 app.use('/api', maintenanceRoutes);
 app.use('/api/telemetry', telemetryRoutes); 

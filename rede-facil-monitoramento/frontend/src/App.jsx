@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { 
   LayoutDashboard, Package, Users, Smartphone, DollarSign, 
-  Network, MessageCircle, Layers
+  Network, MessageCircle, Layers, QrCode 
 } from 'lucide-react';
 import { Badge } from "@/components/ui/badge";
 
@@ -11,6 +11,7 @@ import io from 'socket.io-client';
 import axios from 'axios';
 import { API_URL } from './config'; 
 
+// Componentes
 import FinancialDashboard from './components/FinancialDashboard'; 
 import Inventory from './components/Inventory'; 
 import MachineDetails from './components/MachineDetails';
@@ -22,6 +23,7 @@ import NetworkMap from './pages/NetworkMap';
 import Login from './components/Login';
 import TopNavbar from './components/ui/TopNavbar'; 
 import DashboardHome from './components/DashboardHome'; 
+import TagGenerator from './pages/TagGenerator'; 
 
 const getSocketUrl = (url) => {
   let cleanUrl = url.endsWith('/') ? url.slice(0, -1) : url;
@@ -197,6 +199,7 @@ function App() {
     if (path.includes('/whatsapp')) return 'Configuração WhatsApp';
     if (path.includes('/patrimonio')) return 'Controle Patrimonial';
     if (path.includes('/mapa')) return 'Mapa de Rede';
+    if (path.includes('/etiquetas')) return 'Gerador de Etiquetas'; 
     
     return 'Dashboard de Monitoramento';
   };
@@ -250,6 +253,12 @@ function App() {
           )}
 
           <p className="px-3 text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2 mt-6">Ferramentas</p>
+          
+          {/* LINK NOVO AQUI */}
+          <Link to="/etiquetas" onClick={() => setSelectedMachine(null)} className={getMenuClass('/etiquetas')}>
+            <QrCode className="mr-3 h-5 w-5 text-indigo-500" /> Gerador Etiquetas
+          </Link>
+
           <Link to="/mapa" onClick={() => setSelectedMachine(null)} className={getMenuClass('/mapa')}>
             <Network className="mr-3 h-5 w-5 text-indigo-500" /> Mapa de Rede
           </Link>
@@ -331,6 +340,9 @@ function App() {
               <Route path="/patrimonio" element={<FinancialDashboard />} />
               <Route path="/usuarios" element={<UserManagement />} />
               <Route path="/mapa" element={<NetworkMap />} />
+              
+              <Route path="/etiquetas" element={<TagGenerator />} />
+              
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
           )}

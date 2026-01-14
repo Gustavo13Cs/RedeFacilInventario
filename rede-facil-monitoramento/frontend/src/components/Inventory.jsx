@@ -3,14 +3,15 @@ import { createPortal } from 'react-dom';
 import { 
     Plus, Edit2, Trash2, Box, Save, X, Filter, Search, 
     FileSpreadsheet, FileText, AlertTriangle, Layers, ChevronLeft, ChevronRight, 
-    MapPin, Settings2, Loader2
+    MapPin, Settings2, Loader2, 
 } from 'lucide-react';
+
+import { generateExcel, generatePDF } from '@/utils/exportUtils';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import axios from 'axios';
-import { generateExcel, generatePDF } from '@/utils/exportUtils';
 import { API_URL } from '../config';
 
 const CategoryModal = ({ isOpen, onClose, onSave, onDelete, categories }) => {
@@ -71,7 +72,7 @@ export default function Inventory({ userRole }) {
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [debouncedLocation, setDebouncedLocation] = useState('');
 
-  // Modais
+  const [loadingTags, setLoadingTags] = useState(false);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
   const [editingId, setEditingId] = useState(null);
@@ -101,6 +102,26 @@ export default function Inventory({ userRole }) {
   
   useEffect(() => { fetchCategories(); }, []);
 
+  const handleExportTags = async () => {
+      if (items.length === 0) {
+          alert("Não há itens listados para gerar etiquetas.");
+          return;
+      }
+      
+      if (items.length > 50 && !window.confirm(`Você vai gerar ${items.length} etiquetas. Isso pode demorar um pouco e gerar muitas páginas. Continuar?`)) {
+          return;
+      }
+
+      try {
+          setLoadingTags(true);
+          await generateTagsPDF(items);
+      } catch (error) {
+          console.error("Erro etiquetas:", error);
+          alert("Erro ao gerar etiquetas.");
+      } finally {
+          setLoadingTags(false);
+      }
+  };
 
   const fetchCategories = async () => {
       try {
@@ -299,6 +320,7 @@ export default function Inventory({ userRole }) {
             <Button variant="outline" onClick={handleExportExcel} className="gap-2 text-green-700 border-green-200 hover:bg-green-50">
                 <FileSpreadsheet className="h-4 w-4" /> Excel
             </Button>
+
             <Button variant="outline" onClick={handleExportPDF} disabled={loadingExport} className="gap-2 text-red-700 border-red-200 hover:bg-red-50">
                 {loadingExport ? <Loader2 className="h-4 w-4 animate-spin"/> : <FileText className="h-4 w-4" />}
                 {loadingExport ? "Gerando..." : "PDF Completo"}

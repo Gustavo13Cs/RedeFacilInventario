@@ -1,6 +1,7 @@
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import QRCode from 'qrcode';
 
 export const generateExcel = (data, sheetName, fileName) => {
     const formattedData = data.map(item => ({
@@ -102,4 +103,94 @@ export const generatePDF = ({ title, details = [], columns, rows, fileName }) =>
     }
 
     doc.save(`${fileName}.pdf`);
+};
+
+export const generateTagsPDF = async (items, type = 'generic') => {
+    const doc = new jsPDF();
+    
+    const tagWidth = 63.5;
+    const tagHeight = 33.9;
+    const marginX = 10;
+    const marginY = 10;
+    
+    let col = 0;
+    let row = 0;
+
+    const baseUrl = `${window.location.protocol}//${window.location.host}`;
+
+    for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        
+        let code, title, subtitle, footer, qrLink;
+
+        if (type === 'machines') {
+            code = item.hostname; 
+            title = "COMPUTADOR";
+            subtitle = item.ip_address || "IP Dinâmico";
+            footer = item.sector || "Sem Setor";
+            qrLink = `${baseUrl}/?search=${item.hostname}`;
+        } else if (type === 'chips') {
+            code = item.name || item.id_number || "S/N"; 
+            title = "CELULAR"; 
+            subtitle = item.model || "Modelo Desconhecido";
+            footer = item.employee_name || "ATIVO";
+            qrLink = `${baseUrl}/chips?search=${item.line_number}`;
+        } else {
+            code = item.patrimony_code || item.serial_number || "S/N";
+            title = "PATRIMÔNIO";
+            subtitle = item.name.length > 25 ? item.name.substring(0, 25) + '...' : item.name;
+            footer = item.location || "Geral";
+            qrLink = `${baseUrl}/inventario?search=${code}`;
+        }
+
+        const x = marginX + (col * tagWidth);
+        const y = marginY + (row * tagHeight);
+
+        doc.setDrawColor(200, 200, 200);
+        doc.setLineWidth(0.1);
+        doc.rect(x, y, tagWidth, tagHeight);
+
+        doc.setFillColor(30, 58, 138); 
+        doc.rect(x, y, tagWidth, 7, 'F');
+        
+        doc.setTextColor(255, 255, 255);
+        doc.setFontSize(8);
+        doc.setFont("helvetica", "bold");
+        doc.text("REDE FÁCIL", x + 2, y + 4.5);
+        doc.setFontSize(6);
+        doc.text(title, x + tagWidth - 2, y + 4.5, { align: 'right' });
+
+        doc.setTextColor(0, 0, 0);
+        
+        doc.setFontSize(10);
+        doc.setFont("helvetica", "bold");
+        doc.text(code, x + 2, y + 14);
+
+        doc.setFontSize(7);
+        doc.setFont("helvetica", "normal");
+        doc.text(subtitle, x + 2, y + 19);
+        
+        doc.setFontSize(6);
+        doc.setTextColor(100);
+        doc.text(footer, x + 2, y + 28);
+
+        try {
+            const qrDataUrl = await QRCode.toDataURL(qrLink, { margin: 0 });
+            doc.addImage(qrDataUrl, 'PNG', x + tagWidth - 22, y + 9, 20, 20);
+        } catch (err) {
+            console.error("Erro QR", err);
+        }
+
+        col++;
+        if (col >= 3) {
+            col = 0;
+            row++;
+            if (row >= 8) {
+                doc.addPage();
+                row = 0;
+            }
+        }
+    }
+
+    doc.save(`Etiquetas_${type.toUpperCase()}.pdf`);
 };
