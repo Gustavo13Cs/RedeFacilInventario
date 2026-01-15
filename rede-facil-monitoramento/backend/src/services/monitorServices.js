@@ -263,17 +263,6 @@ exports.processTelemetry = async (data) => {
     }
 };
 
-const nextCommand = global.pendingCommands[uuid];
-    if (nextCommand) {
-        delete global.pendingCommands[uuid]; 
-        return { 
-            message: 'Telemetria processada', 
-            command: nextCommand.command, 
-            payload: nextCommand.payload 
-        };
-    }
-
-    return { message: 'Telemetria processada' };
 
 
 exports.listMachines = async () => {

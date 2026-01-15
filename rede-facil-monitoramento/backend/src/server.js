@@ -5,6 +5,7 @@ const path = require('path');
 
 require('./config/db'); 
 
+const cleanupService = require('./services/cleanupService');
 const wallpaperRoutes = require('./routes/wallpaperRoutes');
 const maintenanceRoutes = require('./routes/maintenanceRoutes'); 
 const monitorRoutes = require('./routes/monitorRoutes');
@@ -67,19 +68,14 @@ const PORT = process.env.PORT || 3001;
 server.listen(PORT, '0.0.0.0', () => {
     whatsappService.start();
     
-    setInterval(() => {
-        monitorService.checkOfflineMachines();
-    }, 5000);
+    cleanupService.cleanOldWallpapers(uploadsPath, 24);
 
-
-cleanupService.cleanOldWallpapers(uploadsPath, 24);
-
-    // Configura a limpeza automática a cada 12 horas
     setInterval(() => {
         console.log("♻️ Iniciando rotina periódica de limpeza de uploads...");
         cleanupService.cleanOldWallpapers(uploadsPath, 24);
     }, 12 * 60 * 60 * 1000);
 
-    // Rotina de verificação de máquinas offline
     setInterval(() => { monitorService.checkOfflineMachines(); }, 5000);
+    
+    console.log(`Servidor rodando na porta ${PORT}`);
 });
