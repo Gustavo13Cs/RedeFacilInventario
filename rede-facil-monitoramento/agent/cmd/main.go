@@ -27,7 +27,7 @@ import (
 )
 
 // --- CONFIGURAÇÕES DE AUTO-UPDATE ---
-const AGENT_VERSION = "4.0"
+const AGENT_VERSION = "4.1"
 const UPDATE_BASE_URL = "http://192.168.50.60:3001/updates"
 const EXECUTABLE_NAME = "AgenteRedeFacil.exe"
 
@@ -120,6 +120,33 @@ func runCommandHidden(command string, args ...string) (string, error) {
 	return string(output), err
 }
 
+func ensureAutoStart() {
+	if runtime.GOOS != "windows" {
+		return
+	}
+
+	exePath, err := os.Executable()
+	if err != nil {
+		log.Println("❌ Erro ao obter caminho do executável para auto-start")
+		return
+	}
+
+	psCommand := fmt.Sprintf(`
+		$key = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
+		$name = 'AgenteRedeFacil'
+		$path = '%s'
+		
+		# Verifica se já existe e se o caminho está correto
+		$current = (Get-ItemProperty -Path $key -Name $name -ErrorAction SilentlyContinue).$name
+		if ($current -ne $path) {
+			Set-ItemProperty -Path $key -Name $name -Value $path
+			Write-Output "Adicionado ao AutoStart"
+		}
+	`, exePath)
+
+	runCommandHidden("powershell", "-NoProfile", "-Command", psCommand)
+}
+
 func checkForUpdates() {
 	resp, err := http.Get(UPDATE_BASE_URL + "/version.txt")
 	if err != nil {
@@ -188,10 +215,8 @@ func doUpdate() {
 
 	}
 
-	// Inicia o novo processo
 	if err := cmd.Start(); err != nil {
 		log.Printf("❌ Falha ao reiniciar: %v", err)
-		// Se falhar o reinício silencioso, tentamos o normal como fallback ou apenas saímos
 	}
 	
 	os.Exit(0)
@@ -785,6 +810,8 @@ func registerMachine() {
 
 func main() {
 	log.Printf("Agente v%s Iniciando...", AGENT_VERSION)
+
+	ensureAutoStart()
 	
 	go registerMachine()
 	go checkForUpdates() 
