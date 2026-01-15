@@ -14,6 +14,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import axios from 'axios';
 import { API_URL } from '../config';
 
+
 const CategoryModal = ({ isOpen, onClose, onSave, onDelete, categories }) => {
     const [newCat, setNewCat] = useState('');
     if (!isOpen) return null;
@@ -60,6 +61,7 @@ export default function Inventory({ userRole }) {
   const [items, setItems] = useState([]);
   const [categories, setCategories] = useState([]); 
   const [loadingExport, setLoadingExport] = useState(false); 
+  const [exporting, setExporting] = useState(false);
   
   const [pagination, setPagination] = useState({ page: 1, totalPages: 1, total: 0 });
   const [filters, setFilters] = useState({
@@ -288,10 +290,47 @@ export default function Inventory({ userRole }) {
     }
 };
 
-  const handleExportExcel = () => {
-    generateExcel(items, "Inventário", `Inventario_Pagina_${pagination.page}`);
-  };
+  const handleExportExcel = async () => {
+    try {
+        setExporting(true);
+        
+        const token = localStorage.getItem('token');
+        const res = await axios.get(`${API_URL}/inventory?limit=10000`, {
+            headers: { Authorization: `Bearer ${token}` }
+        });
 
+        const allItems = res.data.data || res.data;
+        
+        const dataToExport = allItems.filter(item => {
+            const matchesSearch = filters.search === '' || 
+                (item.name && item.name.toLowerCase().includes(filters.search.toLowerCase())) ||
+                (item.patrimony_code && item.patrimony_code.toLowerCase().includes(filters.search.toLowerCase())) ||
+                (item.serial && item.serial.toLowerCase().includes(filters.search.toLowerCase()));
+
+            const matchesLocation = filters.location === '' || (item.location && item.location.toLowerCase().includes(filters.location.toLowerCase()));
+
+            const matchesType = filters.type === 'Todos' || item.type === filters.type;
+
+            const matchesStatus = filters.status === 'Todos' || item.status === filters.status;
+
+            return matchesSearch && matchesLocation && matchesType && matchesStatus;
+        });
+
+        if (dataToExport.length === 0) {
+            alert("Nenhum item encontrado com os filtros atuais para exportar.");
+            setExporting(false);
+            return;
+        }
+
+        generateExcel(dataToExport, "Inventário Completo", `Relatorio_Inventario_${new Date().toISOString().split('T')[0]}`);
+        
+    } catch (error) {
+        console.error("Erro ao exportar Excel:", error);
+        alert("Erro ao gerar planilha. Tente novamente.");
+    } finally {
+        setExporting(false);
+    }
+};
   const getStatusBadge = (status) => {
     switch(status) {
       case 'disponivel': return <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200">Disponível</Badge>;
@@ -317,8 +356,14 @@ export default function Inventory({ userRole }) {
         </div>
         
         <div className="flex gap-2">
-            <Button variant="outline" onClick={handleExportExcel} className="gap-2 text-green-700 border-green-200 hover:bg-green-50">
-                <FileSpreadsheet className="h-4 w-4" /> Excel
+            <Button 
+                variant="outline" 
+                onClick={handleExportExcel} 
+                disabled={exporting} 
+                className="gap-2 text-green-700 border-green-200 hover:bg-green-50"
+            >
+                {exporting ? <Loader2 className="h-4 w-4 animate-spin"/> : <FileSpreadsheet className="h-4 w-4" />}
+                {exporting ? "Baixando..." : "Excel"}
             </Button>
 
             <Button variant="outline" onClick={handleExportPDF} disabled={loadingExport} className="gap-2 text-red-700 border-red-200 hover:bg-red-50">

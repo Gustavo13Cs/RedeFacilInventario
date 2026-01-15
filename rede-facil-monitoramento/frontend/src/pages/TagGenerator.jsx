@@ -176,7 +176,7 @@ export default function TagGenerator() {
                                         col3 = <Badge variant="outline">{item.sector || 'Sem Setor'}</Badge>;
                                     } else if (activeTab === 'inventory') {
                                         col1 = <span className="font-bold text-slate-700">{item.name}</span>;
-                                        col2 = <span className="font-mono text-xs text-slate-500">{item.patrimony_code || 'S/N'}</span>;
+                                        col2 = <span className="text-slate-600 font-medium">{item.brand} {item.model}</span>;
                                         col3 = <span className="text-slate-600">{item.location}</span>;
                                     } else {
                                         col1 = <span className="font-bold text-slate-800 text-base">{item.name}</span>; 

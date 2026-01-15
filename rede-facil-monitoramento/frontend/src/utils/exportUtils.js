@@ -4,29 +4,49 @@ import autoTable from 'jspdf-autotable';
 import QRCode from 'qrcode';
 
 export const generateExcel = (data, sheetName, fileName) => {
-    const formattedData = data.map(item => ({
-        "Patrimônio": item.patrimony_code || '',
-        "Nome": item.name,
-        "Modelo": item.model,
-        "Marca": item.brand,
-        "Tipo": item.type,
-        "Serial": item.serial || item.serial_number,
+    const rows = data.map(item => ({
+        "Patrimônio": item.patrimony_code || "S/N",
+        "Nome do Item": item.name,
+        "Marca": item.brand || '-',
+        "Modelo": item.model || '-',
+        "Serial": item.serial || item.serial_number || '-',
+        "Tipo": item.type || 'Geral',
         "Status": item.status === 'uso' ? 'Em Uso' : 
                   item.status === 'disponivel' ? 'Disponível' : 
-                  item.status === 'manutencao' ? 'Manutenção' : 'Defeito',
-        "Localização": item.location,
-        "Responsável": item.assigned_to
+                  item.status === 'manutencao' ? 'Manutenção' : 
+                  item.status === 'defeito' ? 'Defeito' : item.status,
+        "Localização": item.location || '-',
+        "Responsável": item.assigned_to || '-',
+        "Observações": item.notes || ''
     }));
 
-    const worksheet = XLSX.utils.json_to_sheet(formattedData);
     const workbook = XLSX.utils.book_new();
+    const title = [["REDE FÁCIL - RELATÓRIO DE INVENTÁRIO"]];
+    const dateInfo = [[`Gerado em: ${new Date().toLocaleString()}`]];
+    const emptyRow = [[]]; 
+
+    const worksheet = XLSX.utils.json_to_sheet(rows, { origin: 'A5' }); 
+
+    XLSX.utils.sheet_add_aoa(worksheet, title, { origin: "A1" });
+    XLSX.utils.sheet_add_aoa(worksheet, dateInfo, { origin: "A2" });
+    XLSX.utils.sheet_add_aoa(worksheet, emptyRow, { origin: "A3" });
 
     const wscols = [
-        {wch: 10}, {wch: 25}, {wch: 15}, {wch: 15}, {wch: 15}, {wch: 15}, {wch: 15}, {wch: 20}, {wch: 20}
+        { wch: 15 }, // Patrimônio
+        { wch: 30 }, // Nome
+        { wch: 15 }, // Marca
+        { wch: 20 }, // Modelo
+        { wch: 15 }, // Serial
+        { wch: 15 }, // Tipo
+        { wch: 15 }, // Status
+        { wch: 25 }, // Localização
+        { wch: 25 }, // Responsável
+        { wch: 40 }  // Obs
     ];
     worksheet['!cols'] = wscols;
 
     XLSX.utils.book_append_sheet(workbook, worksheet, sheetName);
+    
     XLSX.writeFile(workbook, `${fileName}.xlsx`);
 };
 
@@ -138,7 +158,9 @@ export const generateTagsPDF = async (items, type = 'generic') => {
         } else {
             code = item.patrimony_code || item.serial_number || "S/N";
             title = "PATRIMÔNIO";
-            subtitle = item.name.length > 25 ? item.name.substring(0, 25) + '...' : item.name;
+            const modelInfo = `${item.brand || ''} ${item.model || ''}`.trim();
+            const displayText = modelInfo || item.name || "Item sem nome";
+            subtitle = displayText.length > 30 ? displayText.substring(0, 30) + '...' : displayText;
             footer = item.location || "Geral";
             qrLink = `${baseUrl}/view/item/${item.id}`;
         }
