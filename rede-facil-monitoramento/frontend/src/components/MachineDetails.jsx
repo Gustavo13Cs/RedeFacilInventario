@@ -8,14 +8,14 @@ import {
   ArrowLeft, Cpu, HardDrive, Activity, Thermometer, Database, 
   AlertTriangle, CheckCircle, Wrench, Calendar, Plus, Save, X, User,
   CircuitBoard, MemoryStick, Monitor as MonitorIcon, Network, Layers, Search, AppWindow,
-  Terminal, Power, RefreshCw, Trash
+  Terminal, Power, RefreshCw, Trash,Image
 } from 'lucide-react'; 
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend} from 'recharts';
 import axios from 'axios'; 
 import { API_URL } from '../config';
+import { changeWallpaper } from '../services/wallpaperService';
 
 export default function MachineDetails({ machine: initialMachineData, onBack, socket }) {
-
   const [machine, setMachine] = useState(initialMachineData);
   const [loadingDetails, setLoadingDetails] = useState(true);
 
@@ -41,6 +41,9 @@ export default function MachineDetails({ machine: initialMachineData, onBack, so
 
   const [softwareSearch, setSoftwareSearch] = useState('');
 
+const [wallpaperUrl, setWallpaperUrl] = useState('');
+const [sendingWallpaper, setSendingWallpaper] = useState(false);
+const [wallpaperFile, setWallpaperFile] = useState(null);
 
     const [successModal, setSuccessModal] = useState({ 
         isOpen: false, 
@@ -103,6 +106,26 @@ export default function MachineDetails({ machine: initialMachineData, onBack, so
         console.error("Erro ao buscar logs:", error);
     }
   };
+
+  const handleSendWallpaper = async () => {
+    if (!wallpaperFile) return alert("Selecione uma imagem primeiro!");
+    
+    setSendingWallpaper(true);
+    try {
+        await changeWallpaper(machine.uuid, wallpaperFile);
+        setSuccessModal({
+            isOpen: true,
+            title: 'Wallpaper Enviado!',
+            message: 'A imagem foi enviada e será aplicada em instantes.'
+        });
+        setWallpaperFile(null); 
+    } catch (error) {
+        console.error(error);
+        alert("Erro ao enviar papel de parede.");
+    } finally {
+        setSendingWallpaper(false);
+    }
+};
 
   const handleSaveLog = async (e) => {
     e.preventDefault();
@@ -250,6 +273,32 @@ const handleCommandOutput = (data) => {
                     <span className="font-bold text-slate-700">LIMPEZA</span>
                 </button>
             </div>
+            
+            <div className="bg-slate-50 rounded-lg p-4 border border-slate-200 mt-6 mb-6">
+                <div className="flex items-center gap-2 mb-3">
+                    <Image className="h-5 w-5 text-purple-600" />
+                    <h3 className="font-bold text-slate-700">Trocar Papel de Parede</h3>
+                </div>
+                
+                    <div className="flex gap-3 items-end">
+                        <div className="w-full">
+                            <label className="text-xs font-semibold text-slate-500 mb-1 block">Selecione uma imagem (JPG/PNG)</label>
+                            <input 
+                                type="file" 
+                                accept="image/jpeg, image/png"
+                                onChange={(e) => setWallpaperFile(e.target.files[0])}
+                                className="w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-purple-50 file:text-purple-700 hover:file:bg-purple-100"
+                            />
+                        </div>
+                        <Button 
+                            onClick={handleSendWallpaper}
+                            disabled={!wallpaperFile || sendingWallpaper}
+                            className="bg-purple-600 hover:bg-purple-700 text-white min-w-[120px]"
+                        >
+                            {sendingWallpaper ? <RefreshCw className="h-4 w-4 animate-spin" /> : 'Aplicar'}
+                        </Button>
+                    </div>
+                </div>
 
             <div className="bg-slate-900 rounded-lg p-4 border border-slate-700 shadow-inner">
                 <div className="flex items-center justify-between mb-2">

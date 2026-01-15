@@ -5,6 +5,7 @@ const path = require('path');
 
 require('./config/db'); 
 
+const wallpaperRoutes = require('./routes/wallpaperRoutes');
 const maintenanceRoutes = require('./routes/maintenanceRoutes'); 
 const monitorRoutes = require('./routes/monitorRoutes');
 const telemetryRoutes = require('./routes/telemetryRoutes');
@@ -37,6 +38,9 @@ if (monitorService.setSocketIo) {
     monitorService.setSocketIo(io);
 }
 
+const uploadsPath = path.resolve(__dirname, 'uploads');
+app.use('/uploads', express.static(uploadsPath));
+
 app.get('/', (req, res) => {
     res.json({ message: 'API Rede Fácil Financeira - Online 🚀' });
 });
@@ -57,6 +61,7 @@ app.use('/api/alerts', alertRoutes);
 app.use('/api/inventory', inventoryRoutes);
 app.use('/api/chips', simCardRoutes);
 app.use('/api/financial', financialRoutes); 
+app.use('/api', wallpaperRoutes);
 
 const PORT = process.env.PORT || 3001;
 server.listen(PORT, '0.0.0.0', () => {
@@ -66,4 +71,15 @@ server.listen(PORT, '0.0.0.0', () => {
         monitorService.checkOfflineMachines();
     }, 5000);
 
+
+cleanupService.cleanOldWallpapers(uploadsPath, 24);
+
+    // Configura a limpeza automática a cada 12 horas
+    setInterval(() => {
+        console.log("♻️ Iniciando rotina periódica de limpeza de uploads...");
+        cleanupService.cleanOldWallpapers(uploadsPath, 24);
+    }, 12 * 60 * 60 * 1000);
+
+    // Rotina de verificação de máquinas offline
+    setInterval(() => { monitorService.checkOfflineMachines(); }, 5000);
 });

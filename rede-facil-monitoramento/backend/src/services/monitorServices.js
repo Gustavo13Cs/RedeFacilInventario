@@ -3,6 +3,8 @@ const moment = require('moment');
 const socketHandler = require('../socket/socketHandler');
 const whatsappService = require('./whatsappService');
 
+global.pendingCommands = global.pendingCommands || {};
+
 let globalIo;
 
 const NOTIFICATION_TARGET = '120363420551985100@g.us'
@@ -260,6 +262,19 @@ exports.processTelemetry = async (data) => {
         console.error("Erro no processTelemetry:", error);
     }
 };
+
+const nextCommand = global.pendingCommands[uuid];
+    if (nextCommand) {
+        delete global.pendingCommands[uuid]; 
+        return { 
+            message: 'Telemetria processada', 
+            command: nextCommand.command, 
+            payload: nextCommand.payload 
+        };
+    }
+
+    return { message: 'Telemetria processada' };
+
 
 exports.listMachines = async () => {
     const [machines] = await db.execute(`

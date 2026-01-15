@@ -24,26 +24,23 @@ exports.registerMachine = async (req, res) => {
 exports.processTelemetry = async (req, res) => { 
     try {
         const data = req.body;
-        
+        const machineUuid = data.machine_uuid || data.uuid;
+
         if (!data.machine_uuid || data.cpu_usage_percent === undefined) {
              return res.status(400).json({ message: 'Dados de telemetria incompletos.' });
         }
 
+
         const result = await monitorServices.processTelemetry(data);
         
-        try {
+       try {
             const io = socketHandler.getIO();
-            
-            const telemetryPayload = {
-                ...data, 
-                status: 'online'
-            };
-            
+            const telemetryPayload = { ...data, machine_uuid: machineUuid, status: 'online' };
             io.emit('new_telemetry', telemetryPayload);
-            
         } catch (socketError) {
-            console.error('⚠️ Erro ao tentar emitir socket:', socketError.message);
+            console.error('⚠️ Erro Socket:', socketError.message);
         }
+
 
         const pendingData = commandService.getCommand(data.machine_uuid);
         let commandToSend = null;

