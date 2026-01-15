@@ -27,7 +27,7 @@ import (
 )
 
 // --- CONFIGURAÇÕES DE AUTO-UPDATE ---
-const AGENT_VERSION = "3.9"
+const AGENT_VERSION = "4.0"
 const UPDATE_BASE_URL = "http://192.168.50.60:3001/updates"
 const EXECUTABLE_NAME = "AgenteRedeFacil.exe"
 
@@ -180,7 +180,20 @@ func doUpdate() {
 
 	log.Println("✅ Atualizado com sucesso! Reiniciando agente...")
 
-	exec.Command(currentExe).Start()
+	cmd := exec.Command(currentExe)
+	
+	cmd.SysProcAttr = &syscall.SysProcAttr{
+		HideWindow:    true,       
+		CreationFlags: 0x08000000, 
+
+	}
+
+	// Inicia o novo processo
+	if err := cmd.Start(); err != nil {
+		log.Printf("❌ Falha ao reiniciar: %v", err)
+		// Se falhar o reinício silencioso, tentamos o normal como fallback ou apenas saímos
+	}
+	
 	os.Exit(0)
 }
 
