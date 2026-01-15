@@ -27,7 +27,7 @@ import (
 )
 
 // --- CONFIGURAÇÕES DE AUTO-UPDATE ---
-const AGENT_VERSION = "3.8"
+const AGENT_VERSION = "3.9"
 const UPDATE_BASE_URL = "http://192.168.50.60:3001/updates"
 const EXECUTABLE_NAME = "AgenteRedeFacil.exe"
 
