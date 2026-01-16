@@ -48,6 +48,7 @@ app.get('/', (req, res) => {
 
 
 app.use('/updates', express.static(path.join(__dirname, '../updates')));
+app.use('/api/credentials', require('./routes/credentialRoutes'));
 app.use('/api', monitorRoutes); 
 app.use('/auth', authRoutes);  
 

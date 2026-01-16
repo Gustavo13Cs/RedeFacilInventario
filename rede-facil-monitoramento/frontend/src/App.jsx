@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { 
   LayoutDashboard, Package, Users, Smartphone, DollarSign, 
-  Network, MessageCircle, Layers, QrCode 
+  Network, MessageCircle, Layers, QrCode ,Lock
 } from 'lucide-react';
 import { Badge } from "@/components/ui/badge";
 
@@ -12,6 +12,7 @@ import axios from 'axios';
 import { API_URL } from './config'; 
 
 // Componentes
+import CredentialVault from './components/CredentialVault';
 import PublicDetails from './pages/PublicDetails';
 import FinancialDashboard from './components/FinancialDashboard'; 
 import Inventory from './components/Inventory'; 
@@ -48,7 +49,6 @@ function App() {
   const location = useLocation();
   const navigate = useNavigate();
 
-  // --- LÓGICA NOVA: Detecta se é a página de visualização pública ---
   const isPublicView = location.pathname.startsWith('/view/');
 
   const [selectedMachine, setSelectedMachine] = useState(null);
@@ -157,7 +157,6 @@ function App() {
     localStorage.setItem('user_role', user.role);
     setTimeout(() => fetchMachines(), 100);
     
-    // Se estava tentando acessar uma URL específica (como o QR Code), volta pra ela
     if (location.state?.from) {
         navigate(location.state.from);
     } else {
@@ -211,6 +210,7 @@ function App() {
     if (path.includes('/patrimonio')) return 'Controle Patrimonial';
     if (path.includes('/mapa')) return 'Mapa de Rede';
     if (path.includes('/etiquetas')) return 'Gerador de Etiquetas'; 
+    if (path.includes('/seguranca/cofre')) return 'Cofre de Senhas & Acessos';
     
     return 'Dashboard de Monitoramento';
   };
@@ -227,7 +227,6 @@ function App() {
   return (
     <div className="flex h-screen w-full bg-slate-50">
       
-      {/* --- LÓGICA NOVA: SÓ MOSTRA A SIDEBAR SE NÃO FOR VISUALIZAÇÃO PÚBLICA --- */}
       {!isPublicView && (
       <aside className="w-64 bg-[#0f172a] text-slate-300 flex flex-col shrink-0 transition-all shadow-xl z-20 hidden md:flex">
         <div className="h-16 flex items-center px-6 bg-[#0a0f1d]">
@@ -264,6 +263,15 @@ function App() {
               <DollarSign className="mr-3 h-5 w-5 text-yellow-500" /> Patrimônio
             </Link>
           )}
+          {userRole === 'admin' && (
+            <>
+              <p className="px-3 text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2 mt-6">Segurança</p>
+              
+              <Link to="/seguranca/cofre" onClick={() => setSelectedMachine(null)} className={getMenuClass('/seguranca/cofre')}>
+                <Lock className="mr-3 h-5 w-5 text-red-500" /> Cofre Digital
+              </Link>
+            </>
+          )}
 
           <p className="px-3 text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2 mt-6">Ferramentas</p>
           
@@ -291,7 +299,6 @@ function App() {
 
       <main className="flex-1 flex flex-col overflow-hidden">
         
-        {/* --- LÓGICA NOVA: SÓ MOSTRA O TOPO SE NÃO FOR PÚBLICO E NÃO ESTIVER SELECIONADO MÁQUINA --- */}
         {!isPublicView && (
             <>
             {location.pathname === '/' && !selectedMachine ? (
@@ -323,7 +330,6 @@ function App() {
             </>
         )}
 
-        {/* --- LÓGICA NOVA: REMOVE O PADDING SE FOR PÚBLICO --- */}
         <div className={isPublicView ? "h-full w-full overflow-auto" : "flex-1 overflow-auto p-8 space-y-6"}>
           
           {selectedMachine ? (
@@ -361,8 +367,8 @@ function App() {
               <Route path="/patrimonio" element={<FinancialDashboard />} />
               <Route path="/usuarios" element={<UserManagement />} />
               <Route path="/mapa" element={<NetworkMap />} />
-              
               <Route path="/etiquetas" element={<TagGenerator />} />
+              <Route path="/seguranca/cofre" element={<CredentialVault />} />
               
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
