@@ -9,7 +9,7 @@ exports.setWallpaper = async (req, res) => {
             return res.status(400).json({ error: 'Nenhuma imagem enviada ou formato inválido.' });
         }
 
-        const serverIp = "192.168.50.20"; 
+        const serverIp = "192.168.50.60"; 
         const imageUrl = `http://${serverIp}:3001/uploads/${req.file.filename}`;
 
         const machine_id = await getMachineId(uuid);

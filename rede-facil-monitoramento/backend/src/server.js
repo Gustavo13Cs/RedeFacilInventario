@@ -54,6 +54,7 @@ app.use('/auth', authRoutes);
 
 app.use(authMiddleware); 
 
+app.use('/api', wallpaperRoutes)
 app.use('/api/devices', deviceRoutes);
 app.use('/api/whatsapp', whatsappRoutes); 
 app.use('/api', maintenanceRoutes);
@@ -72,7 +73,7 @@ server.listen(PORT, '0.0.0.0', () => {
 
     setInterval(() => {
         console.log("♻️ Iniciando rotina periódica de limpeza de uploads...");
-        cleanupService.cleanOldWallpapers(uploadsPath, 24);
+        cleanupService.cleanOldWallpapers(uploadsPath, 1);
     }, 12 * 60 * 60 * 1000);
 
     setInterval(() => { monitorService.checkOfflineMachines(); }, 5000);
