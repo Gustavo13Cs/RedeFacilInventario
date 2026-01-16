@@ -15,6 +15,8 @@ import axios from 'axios';
 import { API_URL } from '../config';
 import { changeWallpaper } from '../services/wallpaperService';
 
+
+
 export default function MachineDetails({ machine: initialMachineData, onBack, socket }) {
   const [machine, setMachine] = useState(initialMachineData);
   const [loadingDetails, setLoadingDetails] = useState(true);
@@ -113,12 +115,20 @@ const [wallpaperFile, setWallpaperFile] = useState(null);
     setSendingWallpaper(true);
     try {
         await changeWallpaper(machine.uuid, wallpaperFile);
+        
         setSuccessModal({
             isOpen: true,
             title: 'Wallpaper Enviado!',
-            message: 'A imagem foi enviada e será aplicada em instantes.'
+            message: 'A imagem foi enviada e será aplicada assim que o Agente processar.'
         });
-        setWallpaperFile(null); 
+
+        setWallpaperFile(null);
+
+        // Segurança: Se o Agente não responder em 30 segundos, fecha o modal sozinho
+        setTimeout(() => {
+            setSuccessModal(prev => ({ ...prev, isOpen: false }));
+        }, 30000);
+
     } catch (error) {
         console.error(error);
         alert("Erro ao enviar papel de parede.");
@@ -146,6 +156,21 @@ const [wallpaperFile, setWallpaperFile] = useState(null);
         alert("Erro ao registrar manutenção.");
     }
   };
+
+useEffect(() => {
+
+    socket.on('command_output', (data) => {
+        
+        if (data.machine_uuid === machine.uuid) {
+           
+            setSuccessModal(prev => ({ ...prev, isOpen: false }));
+            console.log("🖼️ Wallpaper aplicado com sucesso no PC!");
+        }
+    });
+
+    return () => socket.off('command_output');
+}, [machine.uuid]);
+
 
   useEffect(() => {
     if (!socket) return;
