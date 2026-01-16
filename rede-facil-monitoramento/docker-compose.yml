@@ -37,6 +37,7 @@ services:
       - DB_PASS=adminpassword
       - DB_NAME=inventarioredefacil
       - PORT=3000
+      - ENCRYPTION_KEY=d0c83f5d2b7e9a1c4f6b8e0d3a5c7f9e2b4d6a8c0e1f3b5d7a9c2e4f6b8d0a1c
     depends_on:
       db:
         condition: service_healthy

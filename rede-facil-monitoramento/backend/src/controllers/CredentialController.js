@@ -1,83 +1,54 @@
-const pool = require('../config/db'); 
-const { encrypt, decrypt } = require('../utils/crypto');
-
+const CredentialService = require('../services/credentialService'); 
 
 exports.index = async (req, res) => {
     try {
-        const result = await pool.query(`
-            SELECT id, category, name_identifier, login_user, related_asset_id, notes 
-            FROM credentials 
-            ORDER BY id DESC
-        `);
-        res.json(result.rows);
+        const credentials = await CredentialService.listCredentials();
+        res.json(credentials);
     } catch (err) {
-        console.error(err);
-        res.status(500).json({ error: "Erro ao buscar credenciais" });
+        console.error("Erro ao buscar credenciais:", err);
+        res.status(500).json({ error: "Erro interno ao buscar credenciais" });
     }
 };
 
 exports.store = async (req, res) => {
-    let { category, name_identifier, login_user, password, related_asset_id, notes } = req.body;
+    const { category, name_identifier, password } = req.body;
 
     if (!password || !name_identifier) {
         return res.status(400).json({ error: "Dados incompletos" });
     }
 
-    if (related_asset_id === "" || related_asset_id === "undefined") {
-        related_asset_id = null;
-    }
-
     try {
-        const { iv, encryptedData } = encrypt(password);
-
-        const result = await pool.query(
-            `INSERT INTO credentials 
-            (category, name_identifier, login_user, encrypted_password, iv, related_asset_id, notes) 
-            VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,
-            [category, name_identifier, login_user, encryptedData, iv, related_asset_id, notes]
-        );
-
-        res.status(201).json({ message: "Salvo com segurança", id: result.rows[0].id });
+        const id = await CredentialService.createCredential(req.body);
+        res.status(201).json({ message: "Salvo com segurança", id });
     } catch (err) {
-        console.error("Erro detalhado no BACKEND:", err); 
-        res.status(500).json({ error: "Erro ao salvar credencial. Verifique o terminal do servidor." });
+        console.error("Erro no Controller:", err);
+        res.status(500).json({ error: "Erro ao salvar credencial." });
     }
 };
+
 exports.reveal = async (req, res) => {
     const { id } = req.params;
-
     try {
-        const result = await pool.query(
-            "SELECT encrypted_password, iv FROM credentials WHERE id = $1", 
-            [id]
-        );
-
-        if (result.rows.length === 0) return res.status(404).json({ error: "Não encontrado" });
-
-        const cred = result.rows[0];
-
-        const decryptedPassword = decrypt({
-            iv: cred.iv,
-            encryptedData: cred.encrypted_password
-        });
+        const password = await CredentialService.revealPassword(id);
+        
+        if (!password) return res.status(404).json({ error: "Credencial não encontrada" });
 
         console.log(`[AUDIT] Usuário Admin visualizou a senha do ID ${id}`);
-
-        res.json({ password: decryptedPassword });
+        res.json({ password });
 
     } catch (err) {
-        console.error(err);
+        console.error("Erro decrypt:", err);
         res.status(500).json({ error: "Erro ao descriptografar" });
     }
 };
 
-
 exports.delete = async (req, res) => {
     const { id } = req.params;
     try {
-        await pool.query("DELETE FROM credentials WHERE id = $1", [id]);
+        await CredentialService.deleteCredential(id);
         res.json({ message: "Deletado com sucesso" });
     } catch (err) {
+        console.error(err);
         res.status(500).json({ error: "Erro ao deletar" });
     }
 };
