@@ -1,9 +1,9 @@
-require('dotenv').config({ path: '../.env' })
+const path = require('path');
 const express = require('express');
 const cors = require('cors');
 const http = require('http');
-const path = require('path');
 
+require('dotenv').config({ path: path.join(__dirname, '../.env') });
 require('./config/db'); 
 
 const cleanupService = require('./services/cleanupService');

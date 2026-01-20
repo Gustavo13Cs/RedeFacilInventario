@@ -14,6 +14,7 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import axios from 'axios'; 
 import { API_URL } from '../config';
 import { changeWallpaper } from '../services/wallpaperService';
+import NetworkChart from './ui/NetworkChart';
 
 
 
@@ -37,15 +38,18 @@ export default function MachineDetails({ machine: initialMachineData, onBack, so
   const [currentSmartStatus, setCurrentSmartStatus] = useState('N/A');
   const [terminalOutput, setTerminalOutput] = useState([]);
 
+  const [networkHistory, setNetworkHistory] = useState([]);
+  const [loadingNetwork, setLoadingNetwork] = useState(true);
+
   const [logs, setLogs] = useState([]);
   const [isLogModalOpen, setIsLogModalOpen] = useState(false);
   const [newLog, setNewLog] = useState({ description: '', log_date: '' });
 
   const [softwareSearch, setSoftwareSearch] = useState('');
 
-const [wallpaperUrl, setWallpaperUrl] = useState('');
-const [sendingWallpaper, setSendingWallpaper] = useState(false);
-const [wallpaperFile, setWallpaperFile] = useState(null);
+    const [wallpaperUrl, setWallpaperUrl] = useState('');
+    const [sendingWallpaper, setSendingWallpaper] = useState(false);
+    const [wallpaperFile, setWallpaperFile] = useState(null);
 
     const [successModal, setSuccessModal] = useState({ 
         isOpen: false, 
@@ -56,7 +60,27 @@ const [wallpaperFile, setWallpaperFile] = useState(null);
   const PIE_COLORS = ['#10b981', '#1e293b'];
 
 
-  useEffect(() => {
+useEffect(() => {
+    const fetchNetworkHistory = async () => {
+        try {
+            const token = localStorage.getItem('token');
+            const res = await axios.get(`${API_URL}/telemetry/network/${initialMachineData.uuid}`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            setNetworkHistory(res.data);
+            setLoadingNetwork(false);
+        } catch (error) {
+            console.error("Erro ao buscar histórico de rede:", error);
+            setLoadingNetwork(false);
+        }
+    };
+
+    if (activeTab === 'monitoring') {
+        fetchNetworkHistory();
+    }
+}, [initialMachineData.uuid, activeTab]); 
+
+useEffect(() => {
     const fetchFullDetails = async () => {
         try {
             const token = localStorage.getItem('token');
@@ -95,7 +119,7 @@ const [wallpaperFile, setWallpaperFile] = useState(null);
         fetchFullDetails();
         fetchMaintenanceLogs();
     }
-  }, [initialMachineData.uuid]);
+},[initialMachineData.uuid]);
 
   const fetchMaintenanceLogs = async () => {
     try {
@@ -172,7 +196,7 @@ useEffect(() => {
 }, [machine.uuid]);
 
 
-  useEffect(() => {
+useEffect(() => {
     if (!socket) return;
 
     setTelemetryData(prev => {
@@ -209,26 +233,40 @@ useEffect(() => {
     };
 
     
-const handleCommandOutput = (data) => {
+    const handleCommandOutput = (data) => {
+            if (data.machine_uuid === machine.uuid) {
+                const timestamp = new Date().toLocaleTimeString();
+
+                const newLog = {
+                    time: timestamp,
+                    text: data.output || data.error || "Comando executado (sem retorno visual).",
+                    isError: !!data.error
+                };
+
+                setTerminalOutput(prev => [newLog, ...prev]);
+        }
+    };
+
+    const handleNetworkUpdate = (data) => {
         if (data.machine_uuid === machine.uuid) {
-            const timestamp = new Date().toLocaleTimeString();
-
-            const newLog = {
-                time: timestamp,
-                text: data.output || data.error || "Comando executado (sem retorno visual).",
-                isError: !!data.error
-            };
-
-            setTerminalOutput(prev => [newLog, ...prev]);
+            setNetworkHistory(prev => {
+                const newPoint = {
+                    ...data,
+                    created_at: data.created_at || new Date().toISOString()
+                };
+                return [...prev, newPoint].slice(-50);
+            });
         }
     };
 
     socket.on('new_telemetry', handleNewTelemetry);
     socket.on('command_output', handleCommandOutput);
+    socket.on('network_update', handleNetworkUpdate);
     
     return () => { 
         socket.off('new_telemetry', handleNewTelemetry);
         socket.off('command_output', handleCommandOutput); 
+        socket.off('network_update', handleNetworkUpdate);
     };
 }, [machine.uuid, socket]);
 
@@ -443,6 +481,14 @@ const handleCommandOutput = (data) => {
                     </ResponsiveContainer>
                 </div>
             </Card>
+        </div>
+
+
+        <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
+
+            <div className="md:col-span-2 xl:col-span-3">
+                <NetworkChart data={networkHistory} loading={loadingNetwork} />
+            </div>
         </div>
     </div>
   );

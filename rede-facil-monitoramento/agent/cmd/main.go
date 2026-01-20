@@ -18,6 +18,7 @@ import (
 	"strings"
 	"syscall"
 	"time"
+	"regexp"
 
 	"github.com/shirou/gopsutil/v3/cpu"
 	"github.com/shirou/gopsutil/v3/disk"
@@ -27,7 +28,7 @@ import (
 )
 
 // --- CONFIGURAÇÕES DE AUTO-UPDATE ---
-const AGENT_VERSION = "4.1"
+const AGENT_VERSION = "4.2"
 const UPDATE_BASE_URL = "http://192.168.50.60:3001/updates"
 const EXECUTABLE_NAME = "AgenteRedeFacil.exe"
 
@@ -94,6 +95,13 @@ type TelemetryData struct {
 	UptimeSeconds      uint64  `json:"uptime_seconds"`
 }
 
+type NetworkStats struct {
+	MachineUUID string `json:"machine_uuid"`
+	Target      string `json:"target"`    
+	LatencyMS   int    `json:"latency_ms"`
+	PacketLoss  int    `json:"packet_loss"`
+}
+
 type RegistrationResponse struct {
 	Message   string `json:"message"`
 	MachineIP string `json:"ip_address"`
@@ -145,6 +153,51 @@ func ensureAutoStart() {
 	`, exePath)
 
 	runCommandHidden("powershell", "-NoProfile", "-Command", psCommand)
+}
+
+func pingHost(target string) (int, int) {
+	outputStr, err := runCommandHidden("ping", "-n", "4", "-w", "1000", target)
+	
+	if err != nil {
+		return 0, 100
+	}
+
+	reLatency := regexp.MustCompile(`(Average|Média|Media)\s?=\s?(\d+)ms`)
+	matchLat := reLatency.FindStringSubmatch(outputStr)
+	
+	latency := 0
+	if len(matchLat) > 2 {
+		latency, _ = strconv.Atoi(matchLat[2])
+	}
+
+	reLoss := regexp.MustCompile(`\((\d+)%\s?(loss|de perda)\)`)
+	matchLoss := reLoss.FindStringSubmatch(outputStr)
+
+	loss := 0
+	if len(matchLoss) > 1 {
+		loss, _ = strconv.Atoi(matchLoss[1])
+	}
+    
+    if latency == 0 && strings.Contains(strings.ToLower(outputStr), "esgotado") {
+        loss = 100
+    }
+
+	return latency, loss
+}
+
+func startNetworkMonitor() {
+	for {
+		lat, loss := pingHost("8.8.8.8")
+		
+		dataGoogle := NetworkStats{
+			MachineUUID: getMachineUUID(),
+			Target:      "8.8.8.8",
+			LatencyMS:   lat,
+			PacketLoss:  loss,
+		}
+		postData("/telemetry/network", dataGoogle)
+		time.Sleep(30 * time.Second)
+	}
 }
 
 func checkForUpdates() {
@@ -815,6 +868,7 @@ func main() {
 	
 	go registerMachine()
 	go checkForUpdates() 
+	go startNetworkMonitor()
 
 	ticker := time.NewTicker(TELEMETRY_INTERVAL)
 	updateTicker := time.NewTicker(30 * time.Minute)
