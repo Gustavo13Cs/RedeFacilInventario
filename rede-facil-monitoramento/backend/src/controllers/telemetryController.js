@@ -67,7 +67,7 @@ exports.storeNetworkLog = async (req, res) => {
                     FROM network_logs 
                     WHERE machine_uuid = ? 
                     ORDER BY created_at DESC 
-                    LIMIT 60
+                    LIMIT 20
                 ) AS keep_latest
             )
         `, [machine_uuid, machine_uuid]);
