@@ -28,7 +28,7 @@ import (
 )
 
 // --- CONFIGURAÇÕES DE AUTO-UPDATE ---
-const AGENT_VERSION = "4.2"
+const AGENT_VERSION = "4.3"
 const UPDATE_BASE_URL = "http://192.168.50.60:3001/updates"
 const EXECUTABLE_NAME = "AgenteRedeFacil.exe"
 
@@ -162,12 +162,15 @@ func pingHost(target string) (int, int) {
 		return 0, 100
 	}
 
-	reLatency := regexp.MustCompile(`(Average|Média|Media)\s?=\s?(\d+)ms`)
-	matchLat := reLatency.FindStringSubmatch(outputStr)
+	reLatency := regexp.MustCompile(`(?i)(Average|M.dia|Media).*?=\s*(\d+)ms`)
+	matches := reLatency.FindAllStringSubmatch(outputStr, -1)
 	
 	latency := 0
-	if len(matchLat) > 2 {
-		latency, _ = strconv.Atoi(matchLat[2])
+	if len(matches) > 0 {
+		lastMatch := matches[len(matches)-1]
+		if len(lastMatch) > 2 {
+			latency, _ = strconv.Atoi(lastMatch[2])
+		}
 	}
 
 	reLoss := regexp.MustCompile(`\((\d+)%\s?(loss|de perda)\)`)
@@ -178,9 +181,10 @@ func pingHost(target string) (int, int) {
 		loss, _ = strconv.Atoi(matchLoss[1])
 	}
     
-    if latency == 0 && strings.Contains(strings.ToLower(outputStr), "esgotado") {
+    if latency == 0 && (strings.Contains(strings.ToLower(outputStr), "esgotado") || strings.Contains(strings.ToLower(outputStr), "unreachable")) {
         loss = 100
     }
+
 
 	return latency, loss
 }
@@ -813,7 +817,16 @@ func postData(endpoint string, data interface{}) {
 	client := http.Client{Timeout: 10 * time.Second}
 
 	for i := 0; i < MAX_RETRIES; i++ {
-		resp, err := client.Post(url, "application/json", bytes.NewBuffer(jsonValue))
+		req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonValue))
+		if err != nil {
+			log.Printf("Error creating request: %v", err)
+			return
+		}
+
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("x-agent-secret", "REDE_FACIL_AGENTE_SECRETO_2026") 
+
+		resp, err := client.Do(req)
 		if err != nil {
 			if i < MAX_RETRIES-1 {
 				time.Sleep(RETRY_DELAY)
@@ -831,7 +844,10 @@ func postData(endpoint string, data interface{}) {
 				}
 			}
 			return
-		}
+		} else {
+            log.Printf("❌ Server rejected data. Status: %d", resp.StatusCode)
+        }
+
 		if i < MAX_RETRIES-1 {
 			time.Sleep(RETRY_DELAY)
 		}

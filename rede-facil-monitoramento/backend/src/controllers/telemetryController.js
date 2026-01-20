@@ -1,7 +1,7 @@
 const monitorService = require('../services/monitorServices');
 const socketHandler = require('../socket/socketHandler'); 
 const commandService = require('../services/commandService');
-const pool = require('../config/db');
+const { db } = require('../config/db'); 
 
 exports.receiveTelemetry = async (req, res) => {
     try {
@@ -13,12 +13,12 @@ exports.receiveTelemetry = async (req, res) => {
 
         try {
             const io = socketHandler.getIO();
-            
-            io.emit('new_telemetry', { 
-                ...data, 
-                machine_uuid: data.machine_uuid || data.uuid 
-            }); 
-            
+            if (io) {
+                io.emit('new_telemetry', { 
+                    ...data, 
+                    machine_uuid: data.machine_uuid || data.uuid 
+                }); 
+            }
         } catch (e) { console.error("Erro socket:", e.message); }
 
         const pendingCommand = commandService.getCommand(data.machine_uuid || data.uuid);
@@ -49,16 +49,30 @@ exports.storeNetworkLog = async (req, res) => {
     try {
         try {
             const io = socketHandler.getIO();
-            io.emit('network_update', req.body);
+            if (io) io.emit('network_update', req.body);
         } catch (e) { console.error("Erro socket network:", e.message); }
 
-        await pool.query(
+        await db.execute(
             `INSERT INTO network_logs (machine_uuid, target, latency_ms, packet_loss) 
-             VALUES ($1, $2, $3, $4)`,
+             VALUES (?, ?, ?, ?)`,
             [machine_uuid, target, latency_ms, packet_loss]
         );
 
-        res.json({ status: 'saved' });
+        await db.execute(`
+            DELETE FROM network_logs 
+            WHERE machine_uuid = ? 
+            AND id NOT IN (
+                SELECT id FROM (
+                    SELECT id 
+                    FROM network_logs 
+                    WHERE machine_uuid = ? 
+                    ORDER BY created_at DESC 
+                    LIMIT 60
+                ) AS keep_latest
+            )
+        `, [machine_uuid, machine_uuid]);
+
+        res.json({ status: 'saved_and_cleaned' });
     } catch (error) {
         console.error("Erro ao salvar log de rede:", error.message);
         res.status(500).json({ error: 'Erro interno' });
@@ -68,15 +82,16 @@ exports.storeNetworkLog = async (req, res) => {
 exports.getNetworkHistory = async (req, res) => {
     const { uuid } = req.params;
     try {
-        const result = await pool.query(
+        const [rows] = await db.execute(
             `SELECT created_at, latency_ms, packet_loss, target 
              FROM network_logs 
-             WHERE machine_uuid = $1 
+             WHERE machine_uuid = ? 
              ORDER BY created_at DESC 
-             LIMIT 50`,
+             LIMIT 100`,
             [uuid]
         );
-        res.json(result.rows.reverse());
+        
+        res.json(rows.reverse());
     } catch (error) {
         console.error("Erro ao buscar histórico:", error.message);
         res.status(500).json({ error: 'Erro ao buscar dados' });

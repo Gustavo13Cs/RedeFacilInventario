@@ -50,6 +50,7 @@ app.get('/', (req, res) => {
 
 app.use('/updates', express.static(path.join(__dirname, '../updates')));
 app.use('/api/credentials', require('./routes/credentialRoutes'));
+app.use('/api/telemetry', telemetryRoutes); 
 app.use('/api', monitorRoutes); 
 app.use('/auth', authRoutes);  
 
@@ -60,7 +61,6 @@ app.use('/api', wallpaperRoutes)
 app.use('/api/devices', deviceRoutes);
 app.use('/api/whatsapp', whatsappRoutes); 
 app.use('/api', maintenanceRoutes);
-app.use('/api/telemetry', telemetryRoutes); 
 app.use('/api/alerts', alertRoutes);
 app.use('/api/inventory', inventoryRoutes);
 app.use('/api/chips', simCardRoutes);

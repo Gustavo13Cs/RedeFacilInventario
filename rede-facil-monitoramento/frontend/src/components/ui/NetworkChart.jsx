@@ -2,7 +2,7 @@ import React from 'react';
 import { 
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend 
 } from 'recharts';
-import { Wifi, AlertCircle } from 'lucide-react';
+import { Wifi } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 
 const NetworkChart = ({ data, loading }) => {
@@ -26,10 +26,13 @@ const NetworkChart = ({ data, loading }) => {
       );
   }
 
-  const formattedData = data.map(item => ({
-      ...item,
-      time: new Date(item.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})
-  }));
+  // Filtra zeros (falhas de leitura) para evitar que a linha despenque
+  const formattedData = data
+      .filter(item => item.latency_ms > 0) 
+      .map(item => ({
+          ...item,
+          time: new Date(item.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})
+      }));
 
   return (
     <Card className="shadow-sm border-slate-200">
@@ -59,24 +62,28 @@ const NetworkChart = ({ data, loading }) => {
                     tick={{fontSize: 10, fill: '#64748b'}} 
                     axisLine={false}
                     tickLine={false}
+                    minTickGap={30}
                 />
+                
+                {/* EIXO ESQUERDO (Latência) - FORÇADO A COMEÇAR DO ZERO */}
                 <YAxis 
                     yAxisId="left"
                     tick={{fontSize: 10, fill: '#64748b'}} 
                     axisLine={false}
                     tickLine={false}
                     width={30}
+                    // A MÁGICA É AQUI: [0, 'auto'] obriga o gráfico a ter chão no 0
+                    domain={[0, 'auto']} 
                 />
+                
+                {/* EIXO DIREITO (Perda) - FIXO 0 a 100% */}
                 <YAxis 
                     yAxisId="right"
                     orientation="right"
                     domain={[0, 100]}
-                    tick={{fontSize: 10, fill: '#ef4444'}} 
-                    axisLine={false}
-                    tickLine={false}
-                    width={30}
                     hide={true} 
                 />
+                
                 <Tooltip 
                     contentStyle={{backgroundColor: '#fff', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '12px'}}
                     itemStyle={{padding: 0}}
@@ -87,11 +94,11 @@ const NetworkChart = ({ data, loading }) => {
                     type="monotone" 
                     dataKey="latency_ms" 
                     stroke="#3b82f6" 
-                    strokeWidth={2} 
+                    strokeWidth={3} 
                     dot={false} 
-                    activeDot={{ r: 4 }} 
+                    activeDot={{ r: 5 }} 
                     name="Latência (ms)"
-                    isAnimationActive={false} 
+                    isAnimationActive={true} 
                 />
                 <Line 
                     yAxisId="right"
