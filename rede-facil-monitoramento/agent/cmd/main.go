@@ -19,6 +19,7 @@ import (
 	"syscall"
 	"time"
 	"regexp"
+	"unsafe"
 
 	"github.com/shirou/gopsutil/v3/cpu"
 	"github.com/shirou/gopsutil/v3/disk"
@@ -28,7 +29,7 @@ import (
 )
 
 // --- CONFIGURAÇÕES DE AUTO-UPDATE ---
-const AGENT_VERSION = "4.3"
+const AGENT_VERSION = "4.4"
 const UPDATE_BASE_URL = "http://192.168.50.60:3001/updates"
 const EXECUTABLE_NAME = "AgenteRedeFacil.exe"
 
@@ -41,6 +42,17 @@ const MAX_RETRIES = 3
 const RETRY_DELAY = 10 * time.Second
 
 var GlobalMachineIP string
+var ShutdownCancelled bool = false
+
+var (
+	user32           = syscall.NewLazyDLL("user32.dll")
+	getLastInputInfo = user32.NewProc("GetLastInputInfo")
+)
+
+type LASTINPUTINFO struct {
+	cbSize uint32
+	dwTime uint32
+}
 
 type NetworkInterface struct {
 	InterfaceName string `json:"interface_name"`
@@ -97,7 +109,7 @@ type TelemetryData struct {
 
 type NetworkStats struct {
 	MachineUUID string `json:"machine_uuid"`
-	Target      string `json:"target"`    
+	Target      string `json:"target"`
 	LatencyMS   int    `json:"latency_ms"`
 	PacketLoss  int    `json:"packet_loss"`
 }
@@ -118,11 +130,50 @@ type CommandResult struct {
 	Error  string `json:"error"`
 }
 
+func shutdownPC() {
+	log.Println("🌙 Inatividade detectada. Desligando PC...")
+	cmd := exec.Command("shutdown", "/s", "/t", "60", "/f", "/c", "Desligamento automático por inatividade.")
+	cmd.Run()
+}
+
+func checkAutoShutdown() {
+	now := time.Now()
+
+	if now.Hour() == 6 && ShutdownCancelled {
+		ShutdownCancelled = false
+		log.Println("🔄 Resetando trava de desligamento automático para o novo dia.")
+	}
+	if ShutdownCancelled {
+		return
+	}
+
+	ehHorarioDesligamento := (now.Hour() == 19 && now.Minute() >= 30) || now.Hour() > 19 || now.Hour() < 6
+	if ehHorarioDesligamento {
+		idleSeconds := getIdleTime()
+		if idleSeconds > 1800 {
+			shutdownPC()
+		}
+	}
+}
+
+func getIdleTime() uint32 {
+	var lii LASTINPUTINFO
+	lii.cbSize = uint32(unsafe.Sizeof(lii))
+	getLastInputInfo.Call(uintptr(unsafe.Pointer(&lii)))
+
+	// GetTickCount retorna o tempo desde o boot em ms
+	kernel32 := syscall.NewLazyDLL("kernel32.dll")
+	getTickCount := kernel32.NewProc("GetTickCount")
+	t, _, _ := getTickCount.Call()
+
+	return (uint32(t) - lii.dwTime) / 1000
+}
+
 func runCommandHidden(command string, args ...string) (string, error) {
 	cmd := exec.Command(command, args...)
 	cmd.SysProcAttr = &syscall.SysProcAttr{
 		HideWindow:    true,
-		CreationFlags: 0x08000000, 
+		CreationFlags: 0x08000000,
 	}
 	output, err := cmd.Output()
 	return string(output), err
@@ -157,14 +208,14 @@ func ensureAutoStart() {
 
 func pingHost(target string) (int, int) {
 	outputStr, err := runCommandHidden("ping", "-n", "4", "-w", "1000", target)
-	
+
 	if err != nil {
 		return 0, 100
 	}
 
 	reLatency := regexp.MustCompile(`(?i)(Average|M.dia|Media).*?=\s*(\d+)ms`)
 	matches := reLatency.FindAllStringSubmatch(outputStr, -1)
-	
+
 	latency := 0
 	if len(matches) > 0 {
 		lastMatch := matches[len(matches)-1]
@@ -180,11 +231,10 @@ func pingHost(target string) (int, int) {
 	if len(matchLoss) > 1 {
 		loss, _ = strconv.Atoi(matchLoss[1])
 	}
-    
-    if latency == 0 && (strings.Contains(strings.ToLower(outputStr), "esgotado") || strings.Contains(strings.ToLower(outputStr), "unreachable")) {
-        loss = 100
-    }
 
+	if latency == 0 && (strings.Contains(strings.ToLower(outputStr), "esgotado") || strings.Contains(strings.ToLower(outputStr), "unreachable")) {
+		loss = 100
+	}
 
 	return latency, loss
 }
@@ -192,7 +242,7 @@ func pingHost(target string) (int, int) {
 func startNetworkMonitor() {
 	for {
 		lat, loss := pingHost("8.8.8.8")
-		
+
 		dataGoogle := NetworkStats{
 			MachineUUID: getMachineUUID(),
 			Target:      "8.8.8.8",
@@ -207,7 +257,7 @@ func startNetworkMonitor() {
 func checkForUpdates() {
 	resp, err := http.Get(UPDATE_BASE_URL + "/version.txt")
 	if err != nil {
-		return 
+		return
 	}
 	defer resp.Body.Close()
 
@@ -215,7 +265,7 @@ func checkForUpdates() {
 	if err != nil {
 		return
 	}
-	
+
 	serverVersion := strings.TrimSpace(string(body))
 	if serverVersion == "" {
 		return
@@ -248,9 +298,9 @@ func doUpdate() {
 
 	currentExe, _ := os.Executable()
 	oldExe := currentExe + ".old"
-	
+
 	os.Remove(oldExe)
-	
+
 	if err := os.Rename(currentExe, oldExe); err != nil {
 		log.Printf("❌ Erro ao renomear atual: %v", err)
 		return
@@ -258,24 +308,23 @@ func doUpdate() {
 
 	if err := os.Rename(newExeName, currentExe); err != nil {
 		log.Printf("❌ Erro ao aplicar novo exe: %v", err)
-		os.Rename(oldExe, currentExe) 
+		os.Rename(oldExe, currentExe)
 		return
 	}
 
 	log.Println("✅ Atualizado com sucesso! Reiniciando agente...")
 
 	cmd := exec.Command(currentExe)
-	
-	cmd.SysProcAttr = &syscall.SysProcAttr{
-		HideWindow:    true,       
-		CreationFlags: 0x08000000, 
 
+	cmd.SysProcAttr = &syscall.SysProcAttr{
+		HideWindow:    true,
+		CreationFlags: 0x08000000,
 	}
 
 	if err := cmd.Start(); err != nil {
 		log.Printf("❌ Falha ao reiniciar: %v", err)
 	}
-	
+
 	os.Exit(0)
 }
 
@@ -513,7 +562,7 @@ func collectStaticInfo() MachineInfo {
 		if wmicName != "N/A" && wmicName != "" {
 			cpuModel = wmicName
 		}
-		
+
 		if cpuSpeed == 0 {
 			wmicSpeed := execWmic("cpu get maxclockspeed")
 			if s, err := strconv.ParseFloat(wmicSpeed, 64); err == nil {
@@ -524,7 +573,7 @@ func collectStaticInfo() MachineInfo {
 
 	cpuCoresPhysical, _ := cpu.Counts(false)
 	cpuCoresLogical, _ := cpu.Counts(true)
-	
+
 	machineModel := execWmic("csproduct get name")
 	serialNumber := execWmic("bios get serialnumber")
 	if serialNumber == "N/A" || serialNumber == "" {
@@ -690,7 +739,7 @@ func handleRemoteCommand(command string, payload string) {
 	if command == "" {
 		return
 	}
-	
+
 	log.Printf("⚠️ COMANDO RECEBIDO: %s", command)
 
 	switch command {
@@ -706,11 +755,12 @@ func handleRemoteCommand(command string, payload string) {
 		if runtime.GOOS == "windows" {
 			runCommandHidden("cmd", "/C", "del /q /f /s %TEMP%\\*")
 		}
-
+	case "cancel_shutdown":
+		ShutdownCancelled = true
+		log.Println("🚫 Desligamento automático CANCELADO para hoje pelo usuário.")
+		sendCommandResult("Desligamento automático suspenso até amanhã às 06:00.", "")
 	case "set_wallpaper":
 		if runtime.GOOS == "windows" {
-			log.Printf("🖼️ Baixando e aplicando papel de parede: %s", payload)
-
 			psScript := fmt.Sprintf(`
 				$url = "%s"
 				$path = "$env:TEMP\wallpaper_agente.jpg"
@@ -824,7 +874,7 @@ func postData(endpoint string, data interface{}) {
 		}
 
 		req.Header.Set("Content-Type", "application/json")
-		req.Header.Set("x-agent-secret", "REDE_FACIL_AGENTE_SECRETO_2026") 
+		req.Header.Set("x-agent-secret", "REDE_FACIL_AGENTE_SECRETO_2026")
 
 		resp, err := client.Do(req)
 		if err != nil {
@@ -845,8 +895,8 @@ func postData(endpoint string, data interface{}) {
 			}
 			return
 		} else {
-            log.Printf("❌ Server rejected data. Status: %d", resp.StatusCode)
-        }
+			log.Printf("❌ Server rejected data. Status: %d", resp.StatusCode)
+		}
 
 		if i < MAX_RETRIES-1 {
 			time.Sleep(RETRY_DELAY)
@@ -881,14 +931,23 @@ func main() {
 	log.Printf("Agente v%s Iniciando...", AGENT_VERSION)
 
 	ensureAutoStart()
-	
+
 	go registerMachine()
-	go checkForUpdates() 
+	go checkForUpdates()
 	go startNetworkMonitor()
 
+	go func() {
+		shutdownTicker := time.NewTicker(30 * time.Second)
+		for range shutdownTicker.C {
+			log.Println("🔍 Verificando inatividade...")
+			checkAutoShutdown()
+		}
+	}()
+
 	ticker := time.NewTicker(TELEMETRY_INTERVAL)
+
 	updateTicker := time.NewTicker(30 * time.Minute)
-	restoreTicker := time.NewTicker(1 * time.Hour) 
+	restoreTicker := time.NewTicker(1 * time.Hour)
 
 	for {
 		select {

@@ -8,7 +8,7 @@ import {
   ArrowLeft, Cpu, HardDrive, Activity, Thermometer, Database, 
   AlertTriangle, CheckCircle, Wrench, Calendar, Plus, Save, X, User,
   CircuitBoard, MemoryStick, Monitor as MonitorIcon, Network, Layers, Search, AppWindow,
-  Terminal, Power, RefreshCw, Trash,Image
+  Terminal, Power, RefreshCw, Trash,Image, Clock
 } from 'lucide-react'; 
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend} from 'recharts';
 import axios from 'axios'; 
@@ -324,6 +324,17 @@ useEffect(() => {
                     <div className="bg-orange-100 p-4 rounded-full mb-3"><Trash className="h-8 w-8 text-orange-600" /></div>
                     <span className="font-bold text-slate-700">LIMPEZA</span>
                 </button>
+                <button 
+                    onClick={() => requestCommand('cancel_shutdown', 'EVITAR OFF', 'Impede o desligamento automático hoje')} 
+                    className="relative overflow-hidden flex flex-col items-center justify-center p-6 bg-white border-2 border-slate-100 rounded-xl hover:border-purple-500 hover:bg-purple-50 transition-all group duration-300"
+                >
+                    <div className="bg-purple-100 p-4 rounded-full mb-3">
+                        {/* Ícone de Relógio ou Escudo */}
+                        <Clock className="h-8 w-8 text-purple-600" /> 
+                    </div>
+                    <span className="font-bold text-slate-700">EVITAR OFF</span>
+                    <span className="text-[10px] text-slate-400 mt-1 uppercase font-semibold">Válido p/ hoje</span>
+                </button>     
             </div>
             
             <div className="bg-slate-50 rounded-lg p-4 border border-slate-200 mt-6 mb-6">
@@ -331,8 +342,6 @@ useEffect(() => {
                     <Image className="h-5 w-5 text-purple-600" />
                     <h3 className="font-bold text-slate-700">Trocar Papel de Parede</h3>
                 </div>
-                
-                    {/* ✅ RESPONSIVO: Flex-col no mobile */}
                     <div className="flex flex-col sm:flex-row gap-3 items-end">
                         <div className="w-full">
                             <label className="text-xs font-semibold text-slate-500 mb-1 block">Selecione uma imagem (JPG/PNG)</label>
@@ -343,7 +352,6 @@ useEffect(() => {
                                 className="w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-purple-50 file:text-purple-700 hover:file:bg-purple-100"
                             />
                         </div>
-                        {/* ✅ RESPONSIVO: Botão full width mobile */}
                         <Button 
                             onClick={handleSendWallpaper}
                             disabled={!wallpaperFile || sendingWallpaper}
