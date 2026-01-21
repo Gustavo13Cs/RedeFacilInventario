@@ -36,7 +36,6 @@ export default function PublicDetails() {
                 const list = res.data.data || res.data;
                 
                 let found = null;
-                // Ajuste para comparar IDs numéricos ou strings (UUID)
                 const compareId = isNaN(id) ? id : Number(id);
 
                 if (type === 'machine') {
@@ -77,7 +76,6 @@ export default function PublicDetails() {
         </div>
     );
 
-    // Seleciona qual template exibir
     if (type === 'machine') return <MachineView data={data} />;
     if (type === 'device') return <DeviceView data={data} />;
     return <ItemView data={data} />;

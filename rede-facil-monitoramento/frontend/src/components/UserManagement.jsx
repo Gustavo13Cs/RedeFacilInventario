@@ -73,62 +73,63 @@ export default function UserManagement() {
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
         
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
             <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
                 <Users className="h-6 w-6 text-blue-600" /> Gestão de Acessos
             </h2>
-            <p className="text-slate-500">Gerencie quem pode acessar o sistema da Rede Fácil.</p>
+            <p className="text-slate-500 text-sm">Gerencie quem pode acessar o sistema da Rede Fácil.</p>
         </div>
-        <Button onClick={() => setIsFormOpen(true)} className="bg-blue-600 hover:bg-blue-700 text-white shadow-md gap-2">
+        <Button onClick={() => setIsFormOpen(true)} className="w-full md:w-auto bg-blue-600 hover:bg-blue-700 text-white shadow-md gap-2">
             <Plus className="h-4 w-4" /> Novo Usuário
         </Button>
       </div>
 
       <Card className="border-slate-200 shadow-sm">
         <CardContent className="p-0">
-          <Table>
-            <TableHeader>
-              <TableRow className="bg-slate-50">
-                <TableHead>Nome</TableHead>
-                <TableHead>E-mail</TableHead>
-                <TableHead>Cargo</TableHead>
-                <TableHead>Data Criação</TableHead>
-                <TableHead className="text-right">Ações</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {users.map((user) => (
-                <TableRow key={user.id}>
-                  <TableCell className="font-medium text-slate-900">{user.name}</TableCell>
-                  <TableCell className="text-slate-600">{user.email}</TableCell>
-                  <TableCell>
-                    <Badge variant={user.role === 'admin' ? 'default' : 'secondary'} className="uppercase text-[10px]">
-                        {user.role}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-slate-500 text-xs">
-                    {new Date(user.created_at).toLocaleDateString()}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <Button variant="ghost" size="icon" onClick={() => requestDelete(user)} className="text-red-500 hover:bg-red-50 hover:text-red-70">
-                        <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </TableCell>
+          <div className="overflow-x-auto w-full">
+            <Table className="min-w-[800px]">
+                <TableHeader>
+                <TableRow className="bg-slate-50">
+                    <TableHead className="whitespace-nowrap">Nome</TableHead>
+                    <TableHead className="whitespace-nowrap">E-mail</TableHead>
+                    <TableHead>Cargo</TableHead>
+                    <TableHead className="whitespace-nowrap">Data Criação</TableHead>
+                    <TableHead className="text-right">Ações</TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+                </TableHeader>
+                <TableBody>
+                {users.map((user) => (
+                    <TableRow key={user.id}>
+                    <TableCell className="font-medium text-slate-900 whitespace-nowrap">{user.name}</TableCell>
+                    <TableCell className="text-slate-600 whitespace-nowrap">{user.email}</TableCell>
+                    <TableCell>
+                        <Badge variant={user.role === 'admin' ? 'default' : 'secondary'} className="uppercase text-[10px]">
+                            {user.role}
+                        </Badge>
+                    </TableCell>
+                    <TableCell className="text-slate-500 text-xs whitespace-nowrap">
+                        {new Date(user.created_at).toLocaleDateString()}
+                    </TableCell>
+                    <TableCell className="text-right">
+                        <Button variant="ghost" size="icon" onClick={() => requestDelete(user)} className="text-red-500 hover:bg-red-50 hover:text-red-700">
+                            <Trash2 className="h-4 w-4" />
+                        </Button>
+                    </TableCell>
+                    </TableRow>
+                ))}
+                </TableBody>
+            </Table>
+          </div>
         </CardContent>
       </Card>
 
-      {/* MODAIS (Criação, Exclusão, Sucesso, Erro) */}
       
       {isFormOpen && createPortal(
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center">
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4"> 
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={closeForm} />
-          <Card className="relative z-10 w-full max-w-md animate-in zoom-in-95 bg-white border-none shadow-2xl">
-            <CardHeader className="border-b border-slate-100 bg-white rounded-t-lg flex flex-row justify-between items-center">
+          <Card className="relative z-10 w-full max-w-md animate-in zoom-in-95 bg-white border-none shadow-2xl max-h-[90vh] overflow-y-auto">
+            <CardHeader className="border-b border-slate-100 bg-white sticky top-0 z-20 flex flex-row justify-between items-center">
                 <CardTitle>Novo Usuário</CardTitle>
                 <button onClick={closeForm}><X className="h-5 w-5 text-slate-400" /></button>
             </CardHeader>
@@ -160,9 +161,9 @@ export default function UserManagement() {
                             <option value="viewer">Visualizador (Apenas Máquinas)</option>
                         </select>
                     </div>
-                    <div className="flex justify-end gap-3 pt-4 border-t border-slate-100 mt-4">
-                        <Button type="button" variant="outline" onClick={closeForm}>Cancelar</Button>
-                        <Button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white"><Save className="mr-2 h-4 w-4" /> Criar Usuário</Button>
+                    <div className="flex flex-col-reverse sm:flex-row justify-end gap-3 pt-4 border-t border-slate-100 mt-4">
+                        <Button type="button" variant="outline" onClick={closeForm} className="w-full sm:w-auto">Cancelar</Button>
+                        <Button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white w-full sm:w-auto"><Save className="mr-2 h-4 w-4" /> Criar Usuário</Button>
                     </div>
                 </form>
             </CardContent>
@@ -172,7 +173,7 @@ export default function UserManagement() {
       )}
       
       {userToDelete && createPortal(
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center">
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity" onClick={() => setUserToDelete(null)} />
           <Card className="relative z-10 w-full max-w-sm bg-white shadow-2xl animate-in zoom-in-95 duration-200 border-none p-0 overflow-hidden">
             <div className="p-6 flex flex-col items-center text-center">
@@ -190,7 +191,7 @@ export default function UserManagement() {
       )}
 
       {showSuccessModal && createPortal(
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center">
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity" onClick={() => setShowSuccessModal(false)} />
           <Card className="relative z-10 w-full max-w-sm bg-white shadow-2xl animate-in zoom-in-95 duration-200 border-none p-0 overflow-hidden">
             <div className="p-6 flex flex-col items-center text-center">
@@ -205,7 +206,7 @@ export default function UserManagement() {
       )}
 
       {errorModal && createPortal(
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center">
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity" onClick={() => setErrorModal(null)} />
           <Card className="relative z-10 w-full max-w-sm bg-white shadow-2xl animate-in zoom-in-95 duration-200 border-none p-0 overflow-hidden">
             <div className="p-6 flex flex-col items-center text-center">

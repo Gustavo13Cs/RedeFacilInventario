@@ -215,11 +215,10 @@ export default function SimCardManagement({ userRole }) {
       return <Badge variant="secondary" className="bg-slate-100 text-slate-600">Normal</Badge>;
   };
 
-
   const renderGeneralTab = () => (
     <Card className="border-slate-200 shadow-sm mt-6">
         <div className="p-4 border-b bg-slate-50/50 flex flex-col md:flex-row gap-4">
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
                 <Filter className="h-4 w-4 text-slate-500" />
                 <select className="bg-white border rounded text-sm p-1 outline-none" value={filterCarrier} onChange={e => setFilterCarrier(e.target.value)}>
                     <option value="Todas">Todas Op.</option><option>Vivo</option><option>Tim</option><option>Claro</option>
@@ -234,36 +233,46 @@ export default function SimCardManagement({ userRole }) {
             </div>
         </div>
         <CardContent className="p-0">
-            <Table>
-                <TableHeader>
-                    <TableRow className="bg-slate-50"><TableHead>Número</TableHead><TableHead>Operadora</TableHead><TableHead>WhatsApp</TableHead><TableHead>Status</TableHead><TableHead>Aparelho</TableHead><TableHead>Responsável</TableHead><TableHead className="text-right">Ações</TableHead></TableRow>
-                </TableHeader>
-                <TableBody>
-                    {filteredChips.map(chip => (
-                        <TableRow key={chip.id}>
-                            <TableCell className="font-mono font-medium">{chip.phone_number}</TableCell>
-                            <TableCell>{chip.carrier}</TableCell>
-                            <TableCell>{getWhatsappBadge(chip.whatsapp_type)}</TableCell>
-                            <TableCell>{getStatusBadge(chip.status)}</TableCell>
-                            <TableCell className="text-slate-600 flex items-center gap-2">
-                                {chip.device_name ? <><Smartphone className="h-3 w-3"/> {chip.device_name}</> : '-'}
-                            </TableCell>
-                            <TableCell className="text-slate-600">
-                                {chip.employee_name ? <><User className="h-3 w-3 inline mr-1"/> {chip.employee_name}</> : '-'}
-                            </TableCell>
-                            <TableCell className="text-right">
-                                {userRole === 'admin' && (
-                                    <div className="flex justify-end gap-2">
-                                        <Button variant="ghost" size="sm" onClick={() => handleOpenModal('general', chip)}><Edit2 className="h-4 w-4 text-blue-600"/></Button>
-                                        <Button variant="ghost" size="sm" onClick={() => requestDelete(chip.id, 'general')}><Trash2 className="h-4 w-4 text-red-600"/></Button>
-                                    </div>
-                                )}
-                            </TableCell>
+            <div className="overflow-x-auto w-full">
+                <Table className="min-w-[800px]">
+                    <TableHeader>
+                        <TableRow className="bg-slate-50">
+                            <TableHead className="whitespace-nowrap">Número</TableHead>
+                            <TableHead>Operadora</TableHead>
+                            <TableHead>WhatsApp</TableHead>
+                            <TableHead>Status</TableHead>
+                            <TableHead className="whitespace-nowrap">Aparelho</TableHead>
+                            <TableHead className="whitespace-nowrap">Responsável</TableHead>
+                            <TableHead className="text-right">Ações</TableHead>
                         </TableRow>
-                    ))}
-                    {filteredChips.length === 0 && <TableRow><TableCell colSpan={7} className="text-center py-8 text-slate-400">Nenhum registro encontrado.</TableCell></TableRow>}
-                </TableBody>
-            </Table>
+                    </TableHeader>
+                    <TableBody>
+                        {filteredChips.map(chip => (
+                            <TableRow key={chip.id}>
+                                <TableCell className="font-mono font-medium whitespace-nowrap">{chip.phone_number}</TableCell>
+                                <TableCell>{chip.carrier}</TableCell>
+                                <TableCell>{getWhatsappBadge(chip.whatsapp_type)}</TableCell>
+                                <TableCell>{getStatusBadge(chip.status)}</TableCell>
+                                <TableCell className="text-slate-600 flex items-center gap-2 whitespace-nowrap">
+                                    {chip.device_name ? <><Smartphone className="h-3 w-3"/> {chip.device_name}</> : '-'}
+                                </TableCell>
+                                <TableCell className="text-slate-600 whitespace-nowrap">
+                                    {chip.employee_name ? <><User className="h-3 w-3 inline mr-1"/> {chip.employee_name}</> : '-'}
+                                </TableCell>
+                                <TableCell className="text-right">
+                                    {userRole === 'admin' && (
+                                        <div className="flex justify-end gap-2">
+                                            <Button variant="ghost" size="sm" onClick={() => handleOpenModal('general', chip)}><Edit2 className="h-4 w-4 text-blue-600"/></Button>
+                                            <Button variant="ghost" size="sm" onClick={() => requestDelete(chip.id, 'general')}><Trash2 className="h-4 w-4 text-red-600"/></Button>
+                                        </div>
+                                    )}
+                                </TableCell>
+                            </TableRow>
+                        ))}
+                        {filteredChips.length === 0 && <TableRow><TableCell colSpan={7} className="text-center py-8 text-slate-400">Nenhum registro encontrado.</TableCell></TableRow>}
+                    </TableBody>
+                </Table>
+            </div>
         </CardContent>
     </Card>
   );
@@ -271,7 +280,7 @@ export default function SimCardManagement({ userRole }) {
   const renderDevicesTab = () => (
     <Card className="border-slate-200 shadow-sm mt-6">
         <div className="p-4 border-b bg-slate-50/50 flex flex-col md:flex-row gap-4">
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
                 <Filter className="h-4 w-4 text-slate-500" />
                 <span className="text-sm font-medium text-slate-600">Status:</span>
                 <select className="bg-white border rounded text-sm p-1 outline-none" value={filterDeviceStatus} onChange={e => setFilterDeviceStatus(e.target.value)}>
@@ -287,32 +296,34 @@ export default function SimCardManagement({ userRole }) {
             </div>
         </div>
         <CardContent className="p-0">
-            <Table>
-                <TableHeader><TableRow className="bg-slate-50"><TableHead>Identificação</TableHead><TableHead>Modelo</TableHead><TableHead>Status</TableHead><TableHead className="text-right">Ações</TableHead></TableRow></TableHeader>
-                <TableBody>
-                    {filteredDevices.map(dev => (
-                        <TableRow key={dev.id}>
-                            <TableCell className="font-bold flex items-center gap-2"><Smartphone className="h-4 w-4 text-slate-400"/> {dev.name}</TableCell>
-                            <TableCell>{dev.model}</TableCell>
-                            <TableCell>{getStatusBadge(dev.status)}</TableCell>
-                            <TableCell className="text-right">
-                                <div className="flex justify-end gap-2">
-                                    <Button variant="outline" size="sm" onClick={() => handleViewLogs(dev)} className="h-8 text-slate-600 border-slate-300 gap-1 text-xs">
-                                        <Search className="h-3 w-3"/> Histórico
-                                    </Button>
-                                    {userRole === 'admin' && (
-                                        <>
-                                            <Button variant="ghost" size="sm" onClick={() => handleOpenModal('devices', dev)}><Edit2 className="h-4 w-4 text-blue-600"/></Button>
-                                            <Button variant="ghost" size="sm" onClick={() => requestDelete(dev.id, 'devices')}><Trash2 className="h-4 w-4 text-red-600"/></Button>
-                                        </>
-                                    )}
-                                </div>
-                            </TableCell>
-                        </TableRow>
-                    ))}
-                    {filteredDevices.length === 0 && <TableRow><TableCell colSpan={4} className="text-center py-8 text-slate-400">Nenhum aparelho encontrado.</TableCell></TableRow>}
-                </TableBody>
-            </Table>
+            <div className="overflow-x-auto w-full">
+                <Table className="min-w-[600px]">
+                    <TableHeader><TableRow className="bg-slate-50"><TableHead>Identificação</TableHead><TableHead>Modelo</TableHead><TableHead>Status</TableHead><TableHead className="text-right">Ações</TableHead></TableRow></TableHeader>
+                    <TableBody>
+                        {filteredDevices.map(dev => (
+                            <TableRow key={dev.id}>
+                                <TableCell className="font-bold flex items-center gap-2 whitespace-nowrap"><Smartphone className="h-4 w-4 text-slate-400"/> {dev.name}</TableCell>
+                                <TableCell className="whitespace-nowrap">{dev.model}</TableCell>
+                                <TableCell>{getStatusBadge(dev.status)}</TableCell>
+                                <TableCell className="text-right">
+                                    <div className="flex justify-end gap-2">
+                                        <Button variant="outline" size="sm" onClick={() => handleViewLogs(dev)} className="h-8 text-slate-600 border-slate-300 gap-1 text-xs whitespace-nowrap">
+                                            <Search className="h-3 w-3"/> Histórico
+                                        </Button>
+                                        {userRole === 'admin' && (
+                                            <>
+                                                <Button variant="ghost" size="sm" onClick={() => handleOpenModal('devices', dev)}><Edit2 className="h-4 w-4 text-blue-600"/></Button>
+                                                <Button variant="ghost" size="sm" onClick={() => requestDelete(dev.id, 'devices')}><Trash2 className="h-4 w-4 text-red-600"/></Button>
+                                            </>
+                                        )}
+                                    </div>
+                                </TableCell>
+                            </TableRow>
+                        ))}
+                        {filteredDevices.length === 0 && <TableRow><TableCell colSpan={4} className="text-center py-8 text-slate-400">Nenhum aparelho encontrado.</TableCell></TableRow>}
+                    </TableBody>
+                </Table>
+            </div>
         </CardContent>
     </Card>
   );
@@ -326,20 +337,22 @@ export default function SimCardManagement({ userRole }) {
             </div>
         </div>
         <CardContent className="p-0">
-            <Table>
-                <TableHeader><TableRow className="bg-slate-50"><TableHead>Nome</TableHead><TableHead>Departamento</TableHead><TableHead className="text-right">Ações</TableHead></TableRow></TableHeader>
-                <TableBody>
-                    {filteredEmployees.map(emp => (
-                        <TableRow key={emp.id}>
-                            <TableCell className="font-medium flex items-center gap-2"><User className="h-4 w-4 text-slate-400"/> {emp.name}</TableCell>
-                            <TableCell><Badge variant="secondary">{emp.department}</Badge></TableCell>
-                            <TableCell className="text-right">
-                                {userRole === 'admin' && <div className="flex justify-end gap-2"><Button variant="ghost" size="sm" onClick={() => handleOpenModal('people', emp)}><Edit2 className="h-4 w-4 text-blue-600"/></Button><Button variant="ghost" size="sm" onClick={() => requestDelete(emp.id, 'people')}><Trash2 className="h-4 w-4 text-red-600"/></Button></div>}
-                            </TableCell>
-                        </TableRow>
-                    ))}
-                </TableBody>
-            </Table>
+            <div className="overflow-x-auto w-full">
+                <Table className="min-w-[500px]">
+                    <TableHeader><TableRow className="bg-slate-50"><TableHead>Nome</TableHead><TableHead>Departamento</TableHead><TableHead className="text-right">Ações</TableHead></TableRow></TableHeader>
+                    <TableBody>
+                        {filteredEmployees.map(emp => (
+                            <TableRow key={emp.id}>
+                                <TableCell className="font-medium flex items-center gap-2 whitespace-nowrap"><User className="h-4 w-4 text-slate-400"/> {emp.name}</TableCell>
+                                <TableCell><Badge variant="secondary">{emp.department}</Badge></TableCell>
+                                <TableCell className="text-right">
+                                    {userRole === 'admin' && <div className="flex justify-end gap-2"><Button variant="ghost" size="sm" onClick={() => handleOpenModal('people', emp)}><Edit2 className="h-4 w-4 text-blue-600"/></Button><Button variant="ghost" size="sm" onClick={() => requestDelete(emp.id, 'people')}><Trash2 className="h-4 w-4 text-red-600"/></Button></div>}
+                                </TableCell>
+                            </TableRow>
+                        ))}
+                    </TableBody>
+                </Table>
+            </div>
         </CardContent>
     </Card>
   );
@@ -348,7 +361,7 @@ export default function SimCardManagement({ userRole }) {
     <div className="space-y-6 animate-in fade-in duration-500">
       
       <div className="flex flex-col md:flex-row justify-between items-center gap-4">
-        <div className="flex bg-slate-100 p-1 rounded-lg">
+        <div className="flex bg-slate-100 p-1 rounded-lg w-full md:w-auto overflow-x-auto whitespace-nowrap">
             <button onClick={() => setActiveTab('general')} className={`flex items-center px-4 py-2 text-sm font-medium rounded-md transition-all ${activeTab === 'general' ? 'bg-white shadow text-blue-700' : 'text-slate-500 hover:text-slate-700'}`}>
                 <Paperclip className="w-4 h-4 mr-2"/> Gestão de Vínculos
             </button>
@@ -361,7 +374,7 @@ export default function SimCardManagement({ userRole }) {
         </div>
         
         {userRole === 'admin' && (
-            <Button onClick={() => handleOpenModal(activeTab)} className="bg-blue-600 hover:bg-blue-700 text-white gap-2 shadow-md">
+            <Button onClick={() => handleOpenModal(activeTab)} className="w-full md:w-auto bg-blue-600 hover:bg-blue-700 text-white gap-2 shadow-md">
                 <Plus className="h-4 w-4" /> 
                 {activeTab === 'general' ? 'Novo Vínculo' : activeTab === 'devices' ? 'Cadastrar Celular' : 'Cadastrar Pessoa'}
             </Button>
@@ -374,15 +387,15 @@ export default function SimCardManagement({ userRole }) {
 
       {/* MODAL DE CADASTRO */}
       {isModalOpen && createPortal(
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm">
-            <Card className="w-full max-w-md bg-white shadow-2xl p-6">
-                <div className="flex justify-between mb-4">
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"> {/* ✅ p-4 */}
+            <Card className="w-full max-w-md bg-white shadow-2xl p-6 max-h-[90vh] overflow-y-auto"> {/* ✅ max-h e overflow */}
+                <div className="flex justify-between mb-4 sticky top-0 bg-white z-10 pb-2 border-b">
                     <CardTitle className="text-lg text-slate-800">
                         {activeTab === 'general' ? 'Configurar Vínculo' : activeTab === 'devices' ? 'Gerenciar Celular' : 'Gerenciar Colaborador'}
                     </CardTitle>
                     <button onClick={() => setIsModalOpen(false)}><X className="h-5 w-5 text-slate-400 hover:text-slate-600"/></button>
                 </div>
-                <form onSubmit={handleSave} className="space-y-4">
+                <form onSubmit={handleSave} className="space-y-4 pt-2">
                     {activeTab === 'devices' && (
                         <>
                             <div><label className="text-sm font-bold">ID (Ex: Celular 101)</label><input className="w-full border p-2 rounded" value={formData.name || ''} onChange={e => setFormData({...formData, name: e.target.value})} required /></div>
@@ -406,7 +419,8 @@ export default function SimCardManagement({ userRole }) {
                     {activeTab === 'general' && (
                         <>
                             <div><label className="text-xs font-bold text-slate-500">NÚMERO</label><input className="w-full border p-2 rounded font-mono" value={formData.phone_number || ''} onChange={e => setFormData({...formData, phone_number: e.target.value})} required /></div>
-                            <div className="grid grid-cols-2 gap-4">
+                            
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                 <div><label className="text-xs font-bold text-slate-500">OPERADORA</label><select className="w-full border p-2 rounded bg-white" value={formData.carrier || 'Vivo'} onChange={e => setFormData({...formData, carrier: e.target.value})}><option>Vivo</option><option>Tim</option><option>Claro</option></select></div>
                                 <div><label className="text-xs font-bold text-slate-500">STATUS DO CHIP</label><select className="w-full border p-2 rounded bg-white" value={formData.status || 'livre'} onChange={e => setFormData({...formData, status: e.target.value})}><option value="livre">Livre</option><option value="uso">Em Uso</option><option value="banido">Banido</option></select></div>
                             </div>
@@ -442,7 +456,10 @@ export default function SimCardManagement({ userRole }) {
                             </div>
                         </>
                     )}
-                    <div className="flex justify-end gap-2 mt-4"><Button variant="outline" onClick={() => setIsModalOpen(false)}>Cancelar</Button><Button type="submit">Salvar</Button></div>
+                    <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 mt-4 pt-2 border-t">
+                        <Button variant="outline" onClick={() => setIsModalOpen(false)}>Cancelar</Button>
+                        <Button type="submit">Salvar</Button>
+                    </div>
                 </form>
             </Card>
         </div>, document.body
@@ -450,8 +467,8 @@ export default function SimCardManagement({ userRole }) {
 
       {/* MODAL DE LOGS (HISTÓRICO) */}
       {isLogModalOpen && createPortal(
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm">
-            <Card className="w-full max-w-lg bg-white shadow-2xl h-[500px] flex flex-col">
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+            <Card className="w-full max-w-lg bg-white shadow-2xl h-[500px] flex flex-col max-h-[90vh]">
                 <CardHeader className="border-b bg-slate-50 rounded-t-lg flex flex-row justify-between items-center py-4">
                     <div>
                         <CardTitle className="text-lg text-slate-800 flex items-center gap-2"><Smartphone className="h-5 w-5 text-blue-600"/> Histórico do Aparelho</CardTitle>
@@ -483,7 +500,7 @@ export default function SimCardManagement({ userRole }) {
       )}
 
       {deleteData && createPortal(
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm">
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
           <Card className="w-full max-w-sm bg-white shadow-xl p-6 text-center">
               <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mb-4 mx-auto"><AlertTriangle className="h-6 w-6 text-red-600" /></div>
               <h3 className="text-lg font-bold mb-2">Excluir?</h3>

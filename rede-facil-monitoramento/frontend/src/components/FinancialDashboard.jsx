@@ -89,9 +89,7 @@ export default function FinancialDashboard() {
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
-        
-        {/* CARDS DE TOTALIZAÇÃO */}
-        <div className="grid gap-4 md:grid-cols-3">
+        <div className="grid gap-4 grid-cols-1 md:grid-cols-3">
             <Card className="bg-emerald-50 border-emerald-200 shadow-sm">
                 <CardHeader className="pb-2"><CardTitle className="text-emerald-700 text-sm font-bold flex items-center gap-2"><DollarSign className="h-4 w-4"/> Valor Patrimonial Total</CardTitle></CardHeader>
                 <CardContent>
@@ -119,77 +117,80 @@ export default function FinancialDashboard() {
             </Card>
         </div>
 
-        {/* TABELA DE PRECIFICAÇÃO */}
         <Card className="shadow-md border-slate-200">
-            <CardHeader className="bg-slate-50 border-b flex flex-row justify-between items-center py-4">
+            <CardHeader className="bg-slate-50 border-b flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 py-4">
                 <div>
                     <CardTitle className="text-lg text-slate-800">Catálogo de Ativos e Preços</CardTitle>
                     <p className="text-sm text-slate-500">Gerencie o valor unitário dos seus equipamentos.</p>
                 </div>
-                <Button variant="outline" size="sm" onClick={fetchData} className="gap-2"><RefreshCw className="h-4 w-4"/> Atualizar Lista</Button>
+                <Button variant="outline" size="sm" onClick={fetchData} className="gap-2 w-full sm:w-auto">
+                    <RefreshCw className="h-4 w-4"/> Atualizar Lista
+                </Button>
             </CardHeader>
             <CardContent className="p-0">
-                <Table>
-                    <TableHeader>
-                        <TableRow className="bg-slate-50/50">
-                            <TableHead>Modelo / Descrição</TableHead>
-                            <TableHead>Categoria</TableHead>
-                            <TableHead className="text-center">Qtd</TableHead>
-                            <TableHead className="text-right">Valor Unit. (R$)</TableHead>
-                            <TableHead className="text-right">Total</TableHead>
-                            <TableHead className="w-[100px]"></TableHead>
-                        </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                        {data.assets.length === 0 ? (
-                            <TableRow><TableCell colSpan={6} className="text-center py-10 text-slate-400">Nenhum ativo encontrado no banco de dados.</TableCell></TableRow>
-                        ) : (
-                            data.assets.map((asset, idx) => (
-                                <TableRow key={idx} className={`hover:bg-slate-50 transition-colors ${asset.unit_price === 0 ? "bg-red-50/30" : ""}`}>
-                                    <TableCell className="font-medium text-slate-700">
-                                        {asset.model || "Desconhecido"}
-                                        {asset.unit_price === 0 && <Badge variant="destructive" className="ml-2 text-[10px] h-5 px-1.5">Sem Preço</Badge>}
-                                    </TableCell>
-                                    <TableCell>
-                                        <Badge variant="outline" className="text-slate-500 font-normal">{asset.type}</Badge>
-                                        {asset.source && asset.source.includes('Agente') && <span className="text-[9px] text-blue-400 ml-1 block">via Agente</span>}
-                                    </TableCell>
-                                    <TableCell className="text-center font-bold text-slate-700">{asset.quantity}</TableCell>
-                                    <TableCell className="text-right">
-                                        {editingModel === asset.model ? (
-                                            <input 
-                                                type="number" 
-                                                className="w-24 p-1.5 text-sm border border-blue-400 rounded text-right outline-none focus:ring-2 focus:ring-blue-200" 
-                                                value={tempPrice} 
-                                                onChange={e => setTempPrice(e.target.value)}
-                                                autoFocus
-                                            />
-                                        ) : (
-                                            <span className={asset.unit_price > 0 ? "text-slate-700 font-mono" : "text-slate-400 italic"}>
-                                                {formatCurrency(asset.unit_price)}
-                                            </span>
-                                        )}
-                                    </TableCell>
-                                    <TableCell className="text-right font-bold text-emerald-700 font-mono">
-                                        {asset.unit_price > 0 ? formatCurrency(asset.total_value) : '-'}
-                                    </TableCell>
-                                    <TableCell>
-                                        {editingModel === asset.model ? (
-                                            <div className="flex gap-1 justify-end">
-                                                <Button size="icon" onClick={() => handleSavePrice(asset)} className="h-8 w-8 bg-emerald-600 hover:bg-emerald-700 text-white"><Save className="h-4 w-4"/></Button>
-                                                <Button size="icon" variant="ghost" onClick={() => setEditingModel(null)} className="h-8 w-8 text-slate-500"><X className="h-4 w-4"/></Button>
-                                            </div>
-                                        ) : (
-                                            <Button variant="ghost" size="sm" onClick={() => handleEditClick(asset)} className="text-blue-600 hover:text-blue-800 hover:bg-blue-50 text-xs">
-                                                Editar
-                                            </Button>
-                                        )}
-                                    </TableCell>
-                                </TableRow>
-                            ))
-                        )}
-                    </TableBody>
-                </Table>
+                <div className="overflow-x-auto w-full">
+                    <Table className="min-w-[800px]">
+                        <TableHeader>
+                            <TableRow className="bg-slate-50/50">
+                                <TableHead className="whitespace-nowrap">Modelo / Descrição</TableHead>
+                                <TableHead>Categoria</TableHead>
+                                <TableHead className="text-center">Qtd</TableHead>
+                                <TableHead className="text-right whitespace-nowrap">Valor Unit. (R$)</TableHead>
+                                <TableHead className="text-right whitespace-nowrap">Total</TableHead>
+                                <TableHead className="w-[100px]"></TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {data.assets.length === 0 ? (
+                                <TableRow><TableCell colSpan={6} className="text-center py-10 text-slate-400">Nenhum ativo encontrado no banco de dados.</TableCell></TableRow>
+                            ) : (
+                                data.assets.map((asset, idx) => (
+                                    <TableRow key={idx} className={`hover:bg-slate-50 transition-colors ${asset.unit_price === 0 ? "bg-red-50/30" : ""}`}>
+                                        <TableCell className="font-medium text-slate-700 whitespace-nowrap">
+                                            {asset.model || "Desconhecido"}
+                                            {asset.unit_price === 0 && <Badge variant="destructive" className="ml-2 text-[10px] h-5 px-1.5">Sem Preço</Badge>}
+                                        </TableCell>
+                                        <TableCell>
+                                            <Badge variant="outline" className="text-slate-500 font-normal">{asset.type}</Badge>
+                                            {asset.source && asset.source.includes('Agente') && <span className="text-[9px] text-blue-400 ml-1 block">via Agente</span>}
+                                        </TableCell>
+                                        <TableCell className="text-center font-bold text-slate-700">{asset.quantity}</TableCell>
+                                        <TableCell className="text-right whitespace-nowrap">
+                                            {editingModel === asset.model ? (
+                                                <input 
+                                                    type="number" 
+                                                    className="w-24 p-1.5 text-sm border border-blue-400 rounded text-right outline-none focus:ring-2 focus:ring-blue-200" 
+                                                    value={tempPrice} 
+                                                    onChange={e => setTempPrice(e.target.value)}
+                                                    autoFocus
+                                                />
+                                            ) : (
+                                                <span className={asset.unit_price > 0 ? "text-slate-700 font-mono" : "text-slate-400 italic"}>
+                                                    {formatCurrency(asset.unit_price)}
+                                                </span>
+                                            )}
+                                        </TableCell>
+                                        <TableCell className="text-right font-bold text-emerald-700 font-mono whitespace-nowrap">
+                                            {asset.unit_price > 0 ? formatCurrency(asset.total_value) : '-'}
+                                        </TableCell>
+                                        <TableCell>
+                                            {editingModel === asset.model ? (
+                                                <div className="flex gap-1 justify-end">
+                                                    <Button size="icon" onClick={() => handleSavePrice(asset)} className="h-8 w-8 bg-emerald-600 hover:bg-emerald-700 text-white"><Save className="h-4 w-4"/></Button>
+                                                    <Button size="icon" variant="ghost" onClick={() => setEditingModel(null)} className="h-8 w-8 text-slate-500"><X className="h-4 w-4"/></Button>
+                                                </div>
+                                            ) : (
+                                                <Button variant="ghost" size="sm" onClick={() => handleEditClick(asset)} className="text-blue-600 hover:text-blue-800 hover:bg-blue-50 text-xs">
+                                                    Editar
+                                                </Button>
+                                            )}
+                                        </TableCell>
+                                    </TableRow>
+                                ))
+                            )}
+                        </TableBody>
+                    </Table>
+                </div>
             </CardContent>
         </Card>
     </div>

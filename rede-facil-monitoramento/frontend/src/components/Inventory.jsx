@@ -14,13 +14,12 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import axios from 'axios';
 import { API_URL } from '../config';
 
-
 const CategoryModal = ({ isOpen, onClose, onSave, onDelete, categories }) => {
     const [newCat, setNewCat] = useState('');
     if (!isOpen) return null;
   
     return createPortal(
-      <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm">
+      <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"> 
         <Card className="w-full max-w-sm bg-white shadow-xl p-6 animate-in zoom-in-95">
           <div className="flex justify-between items-center mb-4">
             <CardTitle className="text-lg">Gerenciar Tipos</CardTitle>
@@ -167,7 +166,8 @@ export default function Inventory({ userRole }) {
       }
     } catch (error) { console.error("Erro ao buscar inventário:", error); }
   };
-
+  
+  
   const handleAddCategory = async (name) => {
     try {
         await axios.post(`${INVENTORY_API}/settings/categories`, { name }, getAuthHeaders());
@@ -331,6 +331,7 @@ export default function Inventory({ userRole }) {
         setExporting(false);
     }
 };
+
   const getStatusBadge = (status) => {
     switch(status) {
       case 'disponivel': return <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200">Disponível</Badge>;
@@ -344,8 +345,7 @@ export default function Inventory({ userRole }) {
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
       
-      {/* HEADER */}
-      <div className="flex flex-col md:flex-row justify-between items-center gap-4">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
             <h1 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
                 <Box className="h-6 w-6 text-blue-600"/> Gestão de Patrimônio
@@ -355,34 +355,32 @@ export default function Inventory({ userRole }) {
             </p>
         </div>
         
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2 w-full md:w-auto">
             <Button 
                 variant="outline" 
                 onClick={handleExportExcel} 
                 disabled={exporting} 
-                className="gap-2 text-green-700 border-green-200 hover:bg-green-50"
+                className="flex-1 md:flex-none gap-2 text-green-700 border-green-200 hover:bg-green-50"
             >
                 {exporting ? <Loader2 className="h-4 w-4 animate-spin"/> : <FileSpreadsheet className="h-4 w-4" />}
                 {exporting ? "Baixando..." : "Excel"}
             </Button>
 
-            <Button variant="outline" onClick={handleExportPDF} disabled={loadingExport} className="gap-2 text-red-700 border-red-200 hover:bg-red-50">
+            <Button variant="outline" onClick={handleExportPDF} disabled={loadingExport} className="flex-1 md:flex-none gap-2 text-red-700 border-red-200 hover:bg-red-50">
                 {loadingExport ? <Loader2 className="h-4 w-4 animate-spin"/> : <FileText className="h-4 w-4" />}
                 {loadingExport ? "Gerando..." : "PDF Completo"}
             </Button>
             {userRole === 'admin' && (
-                <Button onClick={() => setIsFormOpen(true)} className="bg-blue-600 hover:bg-blue-700 text-white gap-2 shadow-md">
+                <Button onClick={() => setIsFormOpen(true)} className="flex-1 md:flex-none bg-blue-600 hover:bg-blue-700 text-white gap-2 shadow-md">
                     <Plus className="h-4 w-4" /> Novo Item
                 </Button>
             )}
         </div>
       </div>
 
-      {/* ÁREA DE FILTROS ROBUSTA */}
       <Card className="border-slate-200 shadow-sm bg-slate-50">
-        <div className="p-4 grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="p-4 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4"> 
             
-            {/* Busca Geral */}
             <div className="relative md:col-span-1">
                 <Search className="absolute left-2 top-2.5 h-4 w-4 text-slate-400" />
                 <input 
@@ -393,7 +391,6 @@ export default function Inventory({ userRole }) {
                 />
             </div>
 
-            {/* Filtro Localização (NOVO) */}
             <div className="relative md:col-span-1">
                 <MapPin className="absolute left-2 top-2.5 h-4 w-4 text-slate-400" />
                 <input 
@@ -404,7 +401,6 @@ export default function Inventory({ userRole }) {
                 />
             </div>
 
-            {/* Filtro Tipo (Dinâmico) */}
             <div className="flex items-center gap-2">
                 <Filter className="h-4 w-4 text-slate-500" />
                 <select 
@@ -417,7 +413,6 @@ export default function Inventory({ userRole }) {
                 </select>
             </div>
 
-            {/* Filtro Status */}
             <div className="flex items-center gap-2">
                 <span className="text-sm font-medium text-slate-600">Status:</span>
                 <select 
@@ -435,56 +430,56 @@ export default function Inventory({ userRole }) {
         </div>
       </Card>
 
-      {/* TABELA DE ITENS */}
       <Card className="border-slate-200 shadow-sm overflow-hidden">
-        <Table>
-            <TableHeader>
-                <TableRow className="bg-slate-100">
-                    <TableHead>Patrimônio</TableHead>
-                    <TableHead>Equipamento</TableHead>
-                    <TableHead>Tipo</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Localização</TableHead>
-                    <TableHead className="text-right">Ações</TableHead>
-                </TableRow>
-            </TableHeader>
-            <TableBody>
-                {items.map((item) => (
-                    <TableRow key={item.id} className="hover:bg-slate-50 transition-colors">
-                        <TableCell className="font-mono font-medium text-slate-700">{item.patrimony_code || '-'}</TableCell>
-                        <TableCell>
-                            <div className="font-medium text-slate-800">{item.name}</div>
-                            <div className="text-xs text-slate-500 flex gap-1">
-                                {item.brand} {item.model} 
-                                {item.serial && <span className="font-mono ml-1 text-slate-400">({item.serial})</span>}
-                            </div>
-                        </TableCell>
-                        <TableCell><Badge variant="outline" className="font-normal text-slate-600">{item.type}</Badge></TableCell>
-                        <TableCell>{getStatusBadge(item.status)}</TableCell>
-                        <TableCell className="text-slate-600 text-sm">
-                            <div className="flex items-center gap-1">
-                                {item.location && <MapPin className="h-3 w-3 text-slate-400"/>}
-                                {item.location || '-'}
-                            </div>
-                        </TableCell>
-                        <TableCell className="text-right">
-                            {userRole === 'admin' ? (
-                                <div className="flex justify-end gap-2">
-                                    <Button variant="ghost" size="sm" onClick={() => startEdit(item)} className="h-8 w-8 p-0 text-blue-600 hover:bg-blue-50"><Edit2 className="h-4 w-4" /></Button>
-                                    <Button variant="ghost" size="sm" onClick={() => requestDelete(item.id)} className="h-8 w-8 p-0 text-red-600 hover:bg-red-50"><Trash2 className="h-4 w-4" /></Button>
-                                </div>
-                            ) : (<span className="text-xs text-slate-400 italic">Visualizar</span>)}
-                        </TableCell>
+        <div className="overflow-x-auto w-full">
+            <Table className="min-w-[800px]"> 
+                <TableHeader>
+                    <TableRow className="bg-slate-100">
+                        <TableHead className="whitespace-nowrap">Patrimônio</TableHead>
+                        <TableHead className="min-w-[200px]">Equipamento</TableHead>
+                        <TableHead>Tipo</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead className="whitespace-nowrap">Localização</TableHead>
+                        <TableHead className="text-right">Ações</TableHead>
                     </TableRow>
-                ))}
-                {items.length === 0 && (
-                    <TableRow><TableCell colSpan={6} className="text-center py-12 text-slate-400"><p>Nenhum item encontrado.</p></TableCell></TableRow>
-                )}
-            </TableBody>
-        </Table>
+                </TableHeader>
+                <TableBody>
+                    {items.map((item) => (
+                        <TableRow key={item.id} className="hover:bg-slate-50 transition-colors">
+                            <TableCell className="font-mono font-medium text-slate-700 whitespace-nowrap">{item.patrimony_code || '-'}</TableCell>
+                            <TableCell>
+                                <div className="font-medium text-slate-800">{item.name}</div>
+                                <div className="text-xs text-slate-500 flex gap-1 whitespace-nowrap">
+                                    {item.brand} {item.model} 
+                                    {item.serial && <span className="font-mono ml-1 text-slate-400">({item.serial})</span>}
+                                </div>
+                            </TableCell>
+                            <TableCell><Badge variant="outline" className="font-normal text-slate-600 whitespace-nowrap">{item.type}</Badge></TableCell>
+                            <TableCell>{getStatusBadge(item.status)}</TableCell>
+                            <TableCell className="text-slate-600 text-sm whitespace-nowrap">
+                                <div className="flex items-center gap-1">
+                                    {item.location && <MapPin className="h-3 w-3 text-slate-400"/>}
+                                    {item.location || '-'}
+                                </div>
+                            </TableCell>
+                            <TableCell className="text-right whitespace-nowrap">
+                                {userRole === 'admin' ? (
+                                    <div className="flex justify-end gap-2">
+                                        <Button variant="ghost" size="sm" onClick={() => startEdit(item)} className="h-8 w-8 p-0 text-blue-600 hover:bg-blue-50"><Edit2 className="h-4 w-4" /></Button>
+                                        <Button variant="ghost" size="sm" onClick={() => requestDelete(item.id)} className="h-8 w-8 p-0 text-red-600 hover:bg-red-50"><Trash2 className="h-4 w-4" /></Button>
+                                    </div>
+                                ) : (<span className="text-xs text-slate-400 italic">Visualizar</span>)}
+                            </TableCell>
+                        </TableRow>
+                    ))}
+                    {items.length === 0 && (
+                        <TableRow><TableCell colSpan={6} className="text-center py-12 text-slate-400"><p>Nenhum item encontrado.</p></TableCell></TableRow>
+                    )}
+                </TableBody>
+            </Table>
+        </div>
 
-        {/* RODAPÉ COM PAGINAÇÃO */}
-        <div className="p-4 border-t bg-slate-50 flex items-center justify-between">
+        <div className="p-4 border-t bg-slate-50 flex flex-col sm:flex-row items-center justify-between gap-4">
             <span className="text-sm text-slate-500">
                 Página <b>{pagination.page}</b> de <b>{pagination.totalPages}</b>
             </span>
@@ -507,9 +502,8 @@ export default function Inventory({ userRole }) {
         </div>
       </Card>
 
-      {/* --- MODAL DE CADASTRO/EDIÇÃO --- */}
       {isFormOpen && createPortal(
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center">
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4"> 
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={closeForm} />
           
           <Card className="relative z-10 w-full max-w-2xl bg-white shadow-2xl max-h-[90vh] overflow-y-auto animate-in zoom-in-95">
@@ -520,7 +514,6 @@ export default function Inventory({ userRole }) {
             <CardContent className="pt-6 bg-white">
                 <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     
-                    {/* Campo de Quantidade (Só se for novo) */}
                     {!editingId && (
                       <div className="md:col-span-2 p-3 bg-blue-50 rounded-lg border border-blue-100 flex items-center gap-4">
                         <div className="flex-1">
@@ -541,7 +534,6 @@ export default function Inventory({ userRole }) {
                             className="w-full border p-2 rounded outline-none focus:border-blue-500" />
                     </div>
 
-                    {/* Seleção de Tipo Dinâmico */}
                     <div>
                         <label className="text-sm font-bold text-slate-700 flex justify-between items-center">
                             Tipo *
@@ -587,9 +579,9 @@ export default function Inventory({ userRole }) {
                         </select>
                     </div>
 
-                    <div className="md:col-span-2 pt-4 flex justify-end gap-3 border-t mt-2">
-                      <Button type="button" variant="outline" onClick={closeForm}>Cancelar</Button>
-                      <Button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white min-w-[120px]">
+                    <div className="md:col-span-2 pt-4 flex flex-col-reverse md:flex-row justify-end gap-3 border-t mt-2"> {/* ✅ Botões empilhados no mobile */}
+                      <Button type="button" variant="outline" onClick={closeForm} className="w-full md:w-auto">Cancelar</Button>
+                      <Button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white w-full md:w-auto min-w-[120px]">
                         <Save className="mr-2 h-4 w-4" /> {editingId ? 'Salvar Alterações' : 'Criar Item'}
                       </Button>
                     </div>
@@ -600,18 +592,8 @@ export default function Inventory({ userRole }) {
         document.body
       )}
 
-      {/* MODAL DE CATEGORIAS */}
-      <CategoryModal 
-        isOpen={isCategoryModalOpen} 
-        onClose={() => setIsCategoryModalOpen(false)} 
-        onSave={handleAddCategory}
-        onDelete={handleDeleteCategory}
-        categories={categories}
-      />
-
-      {/* MODAL DE CONFIRMAÇÃO DE EXCLUSÃO */}
-      {itemToDelete && createPortal(
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center">
+       {itemToDelete && createPortal(
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity" onClick={() => setItemToDelete(null)} />
           <Card className="relative z-10 w-full max-w-sm bg-white shadow-2xl animate-in zoom-in-95 border-none p-0 overflow-hidden">
             <div className="p-6 flex flex-col items-center text-center">

@@ -16,8 +16,6 @@ import { API_URL } from '../config';
 import { changeWallpaper } from '../services/wallpaperService';
 import NetworkChart from './ui/NetworkChart';
 
-
-
 export default function MachineDetails({ machine: initialMachineData, onBack, socket }) {
   const [machine, setMachine] = useState(initialMachineData);
   const [loadingDetails, setLoadingDetails] = useState(true);
@@ -59,8 +57,8 @@ export default function MachineDetails({ machine: initialMachineData, onBack, so
 
   const PIE_COLORS = ['#10b981', '#1e293b'];
 
-
-useEffect(() => {
+  // ... (useEffect hooks permanecem inalterados) ...
+  useEffect(() => {
     const fetchNetworkHistory = async () => {
         try {
             const token = localStorage.getItem('token');
@@ -148,7 +146,6 @@ useEffect(() => {
 
         setWallpaperFile(null);
 
-        // Segurança: Se o Agente não responder em 30 segundos, fecha o modal sozinho
         setTimeout(() => {
             setSuccessModal(prev => ({ ...prev, isOpen: false }));
         }, 30000);
@@ -182,16 +179,12 @@ useEffect(() => {
   };
 
 useEffect(() => {
-
     socket.on('command_output', (data) => {
-        
         if (data.machine_uuid === machine.uuid) {
-           
             setSuccessModal(prev => ({ ...prev, isOpen: false }));
             console.log("🖼️ Wallpaper aplicado com sucesso no PC!");
         }
     });
-
     return () => socket.off('command_output');
 }, [machine.uuid]);
 
@@ -232,17 +225,14 @@ useEffect(() => {
         }
     };
 
-    
     const handleCommandOutput = (data) => {
             if (data.machine_uuid === machine.uuid) {
                 const timestamp = new Date().toLocaleTimeString();
-
                 const newLog = {
                     time: timestamp,
                     text: data.output || data.error || "Comando executado (sem retorno visual).",
                     isError: !!data.error
                 };
-
                 setTerminalOutput(prev => [newLog, ...prev]);
         }
     };
@@ -274,6 +264,7 @@ useEffect(() => {
     { name: 'Livre', value: currentDiskFree },
     { name: 'Usado', value: 100 - currentDiskFree }
   ];
+  
   const requestCommand = (commandType, commandLabel, description) => {
     setConfirmModal({
         isOpen: true,
@@ -321,7 +312,7 @@ useEffect(() => {
             <CardTitle className="text-lg font-bold text-slate-800">Controle Remoto</CardTitle>
             <p className="text-sm text-slate-500">Execução de comandos administrativos.</p>
         </CardHeader>
-        <CardContent className="p-8">
+        <CardContent className="p-4 md:p-8">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
                <button onClick={() => requestCommand('restart', 'REINICIAR', 'Reiniciar sistema')} className="relative overflow-hidden flex flex-col items-center justify-center p-6 bg-white border-2 border-slate-100 rounded-xl hover:border-blue-500 hover:bg-blue-50 transition-all group duration-300">
                     <div className="bg-blue-100 p-4 rounded-full mb-3"><RefreshCw className="h-8 w-8 text-blue-600" /></div>
@@ -343,7 +334,8 @@ useEffect(() => {
                     <h3 className="font-bold text-slate-700">Trocar Papel de Parede</h3>
                 </div>
                 
-                    <div className="flex gap-3 items-end">
+                    {/* ✅ RESPONSIVO: Flex-col no mobile */}
+                    <div className="flex flex-col sm:flex-row gap-3 items-end">
                         <div className="w-full">
                             <label className="text-xs font-semibold text-slate-500 mb-1 block">Selecione uma imagem (JPG/PNG)</label>
                             <input 
@@ -353,10 +345,11 @@ useEffect(() => {
                                 className="w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-purple-50 file:text-purple-700 hover:file:bg-purple-100"
                             />
                         </div>
+                        {/* ✅ RESPONSIVO: Botão full width mobile */}
                         <Button 
                             onClick={handleSendWallpaper}
                             disabled={!wallpaperFile || sendingWallpaper}
-                            className="bg-purple-600 hover:bg-purple-700 text-white min-w-[120px]"
+                            className="bg-purple-600 hover:bg-purple-700 text-white w-full sm:min-w-[120px] sm:w-auto"
                         >
                             {sendingWallpaper ? <RefreshCw className="h-4 w-4 animate-spin" /> : 'Aplicar'}
                         </Button>
@@ -378,16 +371,17 @@ useEffect(() => {
                     className="w-full h-32 bg-slate-800 text-emerald-400 font-mono text-sm p-3 rounded border border-slate-700 outline-none focus:border-emerald-500 resize-none placeholder:text-slate-600"
                     spellCheck="false"
                 />
-                <div className="flex justify-end mt-3">
+                <div className="flex flex-col sm:flex-row justify-end mt-3 gap-2">
                     <Button 
                         disabled={!customScript.trim()}
                         onClick={() => requestCommand('custom_script', 'EXECUTAR SCRIPT', 'O script será executado no terminal da máquina.')}
-                        className="bg-emerald-600 hover:bg-emerald-700 text-white font-mono text-xs"
+                        className="bg-emerald-600 hover:bg-emerald-700 text-white font-mono text-xs w-full sm:w-auto order-1 sm:order-2"
                     >
                         <Terminal className="mr-2 h-4 w-4" /> Run Script
                     </Button>
-                    
-                    <div className="mt-4 bg-black rounded-lg p-4 border border-slate-700 h-64 overflow-y-auto font-mono text-xs">
+                </div>
+                
+                <div className="mt-4 bg-black rounded-lg p-4 border border-slate-700 h-64 overflow-y-auto font-mono text-xs">
                         <div className="text-slate-500 mb-2 border-b border-slate-800 pb-1">console output ~</div>
 
                         {terminalOutput.length === 0 ? (
@@ -405,11 +399,10 @@ useEffect(() => {
                             ))
                         )}
                     </div>
-                </div>
             </div>
             
             <div className="mt-6 p-4 bg-yellow-50 border border-yellow-200 rounded-md text-sm text-yellow-800 flex items-center gap-2">
-                <AlertTriangle className="h-5 w-5 text-yellow-600" />
+                <AlertTriangle className="h-5 w-5 text-yellow-600 flex-shrink-0" />
                 <p><strong>Nota de Segurança:</strong> Os comandos são enviados em tempo real e executados com privilégios elevados.</p>
             </div>
         </CardContent>
@@ -418,6 +411,7 @@ useEffect(() => {
 
   const renderMonitoringTab = () => (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+        {/* ✅ RESPONSIVO: Cards de KPI se ajustam a mobile (1-2 colunas) */}
         <div className="grid gap-4 grid-cols-2 md:grid-cols-3 lg:grid-cols-5">
             <Card className="border-l-4 border-l-blue-500 shadow-sm">
                 <CardHeader className="p-4 pb-2"><CardTitle className="text-xs font-bold text-slate-500 uppercase flex items-center gap-2"><Activity className="h-3 w-3" /> Sistema</CardTitle></CardHeader>
@@ -445,7 +439,8 @@ useEffect(() => {
             </Card>
         </div>
 
-        <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
+        {/* ✅ RESPONSIVO: Gráficos viram 1 coluna no mobile */}
+        <div className="grid gap-6 grid-cols-1 md:grid-cols-2 xl:grid-cols-3">
             <Card className="p-4">
                 <CardHeader className="p-0 mb-4"><CardTitle className="text-md font-semibold text-slate-700 flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-blue-500"></div>Uso de CPU (%)</CardTitle></CardHeader>
                 <div className="h-[200px] w-full"><ResponsiveContainer width="100%" height="100%"><LineChart data={telemetryData}><CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" /><XAxis dataKey="time" hide /><YAxis domain={[0, 100]} tick={{fontSize: 12}} axisLine={false} tickLine={false} /><Tooltip contentStyle={{ borderRadius: '8px' }} /><Line type="monotone" dataKey="cpu" stroke="#3b82f6" strokeWidth={3} dot={false} isAnimationActive={false} /></LineChart></ResponsiveContainer></div>
@@ -455,7 +450,6 @@ useEffect(() => {
                 <div className="h-[200px] w-full"><ResponsiveContainer width="100%" height="100%"><LineChart data={telemetryData}><CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" /><XAxis dataKey="time" hide /><YAxis domain={[0, 100]} tick={{fontSize: 12}} axisLine={false} tickLine={false} /><Tooltip contentStyle={{ borderRadius: '8px' }} /><Line type="monotone" dataKey="ram" stroke="#a855f7" strokeWidth={3} dot={false} isAnimationActive={false} /></LineChart></ResponsiveContainer></div>
             </Card>
             
-            {/* --- AQUI ESTÁ A CORREÇÃO DO GRÁFICO DE DISCO --- */}
             <Card className="p-1 shadow-sm border-slate-200 flex flex-col md:col-span-2 xl:col-span-1">
                 <CardHeader className="pb-0"><CardTitle className="text-sm font-semibold text-slate-700 flex items-center justify-between"><div className="flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-emerald-500"></div>Disco (C:)</div><Badge variant="outline" className="font-mono text-xs">{machine.disk_total_gb ? `${machine.disk_total_gb} GB` : 'N/A'}</Badge></CardTitle></CardHeader>
                 <div className="h-[220px] w-full relative flex items-center justify-center">
@@ -483,9 +477,7 @@ useEffect(() => {
             </Card>
         </div>
 
-
-        <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
-
+        <div className="grid gap-6 grid-cols-1 md:grid-cols-2 xl:grid-cols-3">
             <div className="md:col-span-2 xl:col-span-3">
                 <NetworkChart data={networkHistory} loading={loadingNetwork} />
             </div>
@@ -494,16 +486,17 @@ useEffect(() => {
   );
 
   const renderHardwareTab = () => (
-    <div className="grid gap-6 md:grid-cols-2 animate-in fade-in slide-in-from-bottom-4 duration-500">
+    // ✅ RESPONSIVO: grid-cols-1 no mobile
+    <div className="grid gap-6 grid-cols-1 md:grid-cols-2 animate-in fade-in slide-in-from-bottom-4 duration-500">
         <Card className="border-slate-200">
             <CardHeader className="bg-slate-50 border-b flex flex-row items-center gap-3"><CircuitBoard className="h-5 w-5 text-blue-600"/><CardTitle className="text-base text-slate-800">Placa-mãe & BIOS</CardTitle></CardHeader>
             <CardContent className="p-4 space-y-4">
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div><p className="text-xs text-slate-500 font-bold uppercase">Fabricante</p><p className="text-sm text-slate-700">{machine.mb_manufacturer || 'N/A'}</p></div>
                     <div><p className="text-xs text-slate-500 font-bold uppercase">Modelo</p><p className="text-sm text-slate-700">{machine.mb_model || 'N/A'}</p></div>
                     <div><p className="text-xs text-slate-500 font-bold uppercase">Versão</p><p className="text-sm text-slate-700">{machine.mb_version || 'N/A'}</p></div>
                     <div><p className="text-xs text-slate-500 font-bold uppercase">Serial</p><p className="text-sm font-mono text-slate-600 bg-slate-100 w-fit px-2 py-0.5 rounded">{machine.serial_number || 'N/A'}</p></div>
-                    <div className="col-span-2 mt-2 pt-2 border-t border-slate-100">
+                    <div className="sm:col-span-2 mt-2 pt-2 border-t border-slate-100">
                         <p className="text-xs text-slate-500 font-bold uppercase flex items-center gap-1">
                             <Activity className="w-3 h-3 text-emerald-500" /> Último Ponto de Restauração
                         </p>
@@ -540,21 +533,24 @@ useEffect(() => {
         <Card className="border-slate-200 md:col-span-2">
             <CardHeader className="bg-slate-50 border-b flex flex-row items-center gap-3"><Network className="h-5 w-5 text-emerald-600"/><CardTitle className="text-base text-slate-800">Rede</CardTitle></CardHeader>
             <CardContent className="p-0">
-                <Table>
-                    <TableHeader><TableRow><TableHead>Interface</TableHead><TableHead>MAC</TableHead><TableHead>Status</TableHead><TableHead>Velocidade</TableHead></TableRow></TableHeader>
-                    <TableBody>
-                        {machine.network_interfaces && machine.network_interfaces.length > 0 ? (
-                             machine.network_interfaces.map((nic, idx) => (
-                                <TableRow key={idx}>
-                                    <TableCell className="font-medium text-xs">{nic.interface_name}</TableCell>
-                                    <TableCell className="font-mono text-xs text-slate-500">{nic.mac_address}</TableCell>
-                                    <TableCell><Badge variant={nic.is_up ? "default" : "secondary"} className={nic.is_up ? "bg-emerald-500" : ""}>{nic.is_up ? "Ativa" : "Inativa"}</Badge></TableCell>
-                                    <TableCell className="text-xs text-slate-500">{nic.speed_mbps > 0 ? `${nic.speed_mbps} Mbps` : 'N/A'}</TableCell>
-                                </TableRow>
-                             ))
-                        ) : (<TableRow><TableCell colSpan={4} className="text-center text-slate-400">Nenhuma interface de rede encontrada.</TableCell></TableRow>)}
-                    </TableBody>
-                </Table>
+                {/* ✅ RESPONSIVO: Tabela com scroll */}
+                <div className="overflow-x-auto">
+                    <Table className="min-w-[500px]">
+                        <TableHeader><TableRow><TableHead>Interface</TableHead><TableHead>MAC</TableHead><TableHead>Status</TableHead><TableHead>Velocidade</TableHead></TableRow></TableHeader>
+                        <TableBody>
+                            {machine.network_interfaces && machine.network_interfaces.length > 0 ? (
+                                machine.network_interfaces.map((nic, idx) => (
+                                    <TableRow key={idx}>
+                                        <TableCell className="font-medium text-xs">{nic.interface_name}</TableCell>
+                                        <TableCell className="font-mono text-xs text-slate-500">{nic.mac_address}</TableCell>
+                                        <TableCell><Badge variant={nic.is_up ? "default" : "secondary"} className={nic.is_up ? "bg-emerald-500" : ""}>{nic.is_up ? "Ativa" : "Inativa"}</Badge></TableCell>
+                                        <TableCell className="text-xs text-slate-500">{nic.speed_mbps > 0 ? `${nic.speed_mbps} Mbps` : 'N/A'}</TableCell>
+                                    </TableRow>
+                                ))
+                            ) : (<TableRow><TableCell colSpan={4} className="text-center text-slate-400">Nenhuma interface de rede encontrada.</TableCell></TableRow>)}
+                        </TableBody>
+                    </Table>
+                </div>
             </CardContent>
         </Card>
     </div>
@@ -566,7 +562,7 @@ useEffect(() => {
 
   const renderSoftwareTab = () => (
     <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
-        <div className="flex justify-between items-center">
+        <div className="flex flex-col sm:flex-row justify-between items-center gap-3">
             <div className="relative w-full max-w-sm">
                 <Search className="absolute left-2 top-2.5 h-4 w-4 text-slate-400" />
                 <input type="text" placeholder="Buscar software..." className="w-full pl-8 p-2 border rounded-md text-sm outline-none focus:ring-2 focus:ring-blue-500" value={softwareSearch} onChange={(e) => setSoftwareSearch(e.target.value)} />
@@ -575,7 +571,7 @@ useEffect(() => {
         </div>
         <Card className="border-slate-200 overflow-hidden">
             <div className="max-h-[500px] overflow-auto">
-                <Table>
+                <Table className="min-w-[600px]">
                     <TableHeader className="bg-slate-50 sticky top-0 z-10"><TableRow><TableHead className="w-[60%]">Nome</TableHead><TableHead>Versão</TableHead><TableHead>Instalação</TableHead></TableRow></TableHeader>
                     <TableBody>
                         {filteredSoftware.length > 0 ? (
@@ -596,9 +592,9 @@ useEffect(() => {
 
   const renderLogsTab = () => (
     <Card className="border-slate-200 shadow-sm animate-in fade-in slide-in-from-bottom-4 duration-500">
-        <CardHeader className="bg-white border-b border-slate-100 flex flex-row items-center justify-between">
+        <CardHeader className="bg-white border-b border-slate-100 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
             <div className="flex items-center gap-3"><div className="w-10 h-10 rounded-lg bg-orange-100 flex items-center justify-center"><Wrench className="h-5 w-5 text-orange-600" /></div><div><CardTitle className="text-lg font-bold text-slate-800">Histórico de Manutenções</CardTitle><p className="text-sm text-slate-500">Logbook de serviços realizados.</p></div></div>
-            <Button onClick={() => setIsLogModalOpen(true)} className="bg-orange-600 hover:bg-orange-700 text-white gap-2 shadow-sm"><Plus className="h-4 w-4" /> Registrar</Button>
+            <Button onClick={() => setIsLogModalOpen(true)} className="bg-orange-600 hover:bg-orange-700 text-white gap-2 shadow-sm w-full sm:w-auto"><Plus className="h-4 w-4" /> Registrar</Button>
         </CardHeader>
         <CardContent className="p-0">
             {logs.length === 0 ? (
@@ -606,13 +602,14 @@ useEffect(() => {
             ) : (
                 <div className="divide-y divide-slate-100">
                     {logs.map((log) => (
-                        <div key={log.id} className="p-4 flex flex-col md:flex-row gap-4 hover:bg-slate-50 transition-colors">
+                        // ✅ RESPONSIVO: Flex-col no mobile
+                        <div key={log.id} className="p-4 flex flex-col md:flex-row gap-2 md:gap-4 hover:bg-slate-50 transition-colors">
                             <div className="flex items-start gap-3 min-w-[180px]">
                                 <div className="mt-1"><Calendar className="h-4 w-4 text-slate-400" /></div>
                                 <div><p className="text-sm font-bold text-slate-700">{new Date(log.log_date).toLocaleDateString()}</p><p className="text-xs text-slate-500">{new Date(log.log_date).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</p></div>
                             </div>
                             <div className="flex-1"><p className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">{log.description}</p></div>
-                            <div className="flex items-center gap-2 min-w-[150px] justify-end"><Badge variant="outline" className="flex items-center gap-1 text-slate-600 bg-white border-slate-200"><User className="h-3 w-3" />{log.technician_name || 'Técnico Excluído'}</Badge></div>
+                            <div className="flex items-center gap-2 md:min-w-[150px] justify-start md:justify-end mt-2 md:mt-0"><Badge variant="outline" className="flex items-center gap-1 text-slate-600 bg-white border-slate-200"><User className="h-3 w-3" />{log.technician_name || 'Técnico Excluído'}</Badge></div>
                         </div>
                     ))}
                 </div>
@@ -623,25 +620,25 @@ useEffect(() => {
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500 pb-10">
-      <div className="flex flex-col md:flex-row md:items-center gap-4 justify-between border-b border-slate-200 pb-6">
+      
+      {/* ✅ RESPONSIVO: Cabeçalho com flex-col para mobile */}
+      <div className="flex flex-col gap-4 border-b border-slate-200 pb-6">
         <div className="flex items-center gap-4">
             <button onClick={onBack} className="p-2 hover:bg-slate-200 rounded-full transition-colors"><ArrowLeft className="h-6 w-6 text-slate-600" /></button>
-            <div>
-            <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
-                {machine.hostname}
-                {loadingDetails && <span className="text-xs font-normal text-slate-400 bg-slate-100 px-2 rounded animate-pulse">Carregando detalhes...</span>}
-            </h2>
-            <div className="flex items-center gap-2 text-slate-500 text-sm">
-                <span>{machine.ip_address}</span>
-                <span>•</span>
-                <span className="font-mono text-xs bg-slate-100 px-1 rounded">UUID: {machine.uuid ? machine.uuid.split('-')[0] : '...'}...</span>
-                <span>•</span>
-                <Badge variant={machine.status === 'online' ? 'default' : 'secondary'} className={machine.status === 'online' ? 'bg-emerald-500' : 'bg-slate-400'}>{machine.status}</Badge>
-            </div>
+            <div className="overflow-hidden">
+                <h2 className="text-xl md:text-2xl font-bold text-slate-800 flex flex-wrap items-center gap-2 truncate">
+                    {machine.hostname}
+                    {loadingDetails && <span className="text-xs font-normal text-slate-400 bg-slate-100 px-2 rounded animate-pulse">Carregando...</span>}
+                </h2>
+                <div className="flex flex-wrap items-center gap-2 text-slate-500 text-xs md:text-sm mt-1">
+                    <span className="font-mono bg-slate-100 px-1 rounded">{machine.ip_address}</span>
+                    <span className="hidden sm:inline">•</span>
+                    <Badge variant={machine.status === 'online' ? 'default' : 'secondary'} className={machine.status === 'online' ? 'bg-emerald-500' : 'bg-slate-400'}>{machine.status}</Badge>
+                </div>
             </div>
         </div>
         
-        <div className="flex bg-slate-100 p-1 rounded-lg self-start md:self-auto overflow-x-auto">
+        <div className="flex bg-slate-100 p-1 rounded-lg w-full overflow-x-auto whitespace-nowrap">
             <button onClick={() => setActiveTab('monitoring')} className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md transition-all whitespace-nowrap ${activeTab === 'monitoring' ? 'bg-white shadow text-blue-700' : 'text-slate-500 hover:text-slate-700'}`}>
                 <Activity className="w-4 h-4" /> Monitoramento
             </button>
@@ -669,10 +666,10 @@ useEffect(() => {
       </div>
 
       {isLogModalOpen && createPortal(
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center">
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4"> {/* ✅ Margem modal */}
             <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setIsLogModalOpen(false)} />
-            <Card className="relative z-10 w-full max-w-lg animate-in zoom-in-95 bg-white shadow-2xl">
-                <CardHeader className="border-b pb-4 bg-white rounded-t-lg flex flex-row justify-between items-center">
+            <Card className="relative z-10 w-full max-w-lg animate-in zoom-in-95 bg-white shadow-2xl max-h-[90vh] overflow-y-auto">
+                <CardHeader className="border-b pb-4 bg-white sticky top-0 z-10 flex flex-row justify-between items-center">
                     <CardTitle className="text-slate-800 flex items-center gap-2"><Wrench className="h-5 w-5 text-orange-600" /> Registrar Manutenção</CardTitle>
                     <button onClick={() => setIsLogModalOpen(false)} className="text-slate-400 hover:text-slate-600"><X className="h-5 w-5" /></button>
                 </CardHeader>
@@ -698,7 +695,7 @@ useEffect(() => {
       , document.body)}
 
       {confirmModal.isOpen && createPortal(
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center">
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
           <div 
             className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm transition-opacity" 
             onClick={() => setConfirmModal({ ...confirmModal, isOpen: false })}

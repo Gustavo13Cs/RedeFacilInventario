@@ -96,20 +96,19 @@ export default function TagGenerator() {
 
     return (
         <div className="space-y-6 animate-in fade-in duration-500">
-            <div className="flex justify-between items-center">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                 <div>
                     <h1 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
                         <QrCode className="h-8 w-8 text-indigo-600"/> Gerador de Etiquetas
                     </h1>
-                    <p className="text-slate-500">Selecione os itens e gere etiquetas com QR Code.</p>
+                    <p className="text-slate-500 text-sm md:text-base">Selecione os itens e gere etiquetas com QR Code.</p>
                 </div>
-                <Button onClick={handleGenerate} disabled={selectedIds.length === 0} className="bg-indigo-600 hover:bg-indigo-700 text-white gap-2">
+                <Button onClick={handleGenerate} disabled={selectedIds.length === 0} className="w-full md:w-auto bg-indigo-600 hover:bg-indigo-700 text-white gap-2">
                     <Printer className="h-4 w-4" /> 
                     Imprimir ({selectedIds.length})
                 </Button>
             </div>
-
-            <div className="flex gap-2 border-b border-slate-200 pb-1">
+            <div className="flex gap-2 border-b border-slate-200 pb-1 overflow-x-auto whitespace-nowrap">
                 <button onClick={() => setActiveTab('machines')} className={`flex items-center gap-2 px-4 py-2 rounded-t-lg transition-colors ${activeTab === 'machines' ? 'bg-white border-x border-t border-slate-200 text-blue-600 font-bold' : 'text-slate-500 hover:bg-slate-50'}`}>
                     <Monitor className="h-4 w-4"/> Computadores
                 </button>
@@ -122,7 +121,7 @@ export default function TagGenerator() {
             </div>
 
             <Card className="bg-slate-50 border-none shadow-sm">
-                <CardContent className="p-4 flex flex-col md:flex-row gap-4 items-center">
+                <CardContent className="p-4 flex flex-col md:flex-row gap-4 items-start md:items-center">
                     <div className="relative flex-1 w-full">
                         <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400"/>
                         <input 
@@ -134,8 +133,8 @@ export default function TagGenerator() {
                     </div>
                     {activeTab !== 'chips' && (
                         <div className="flex items-center gap-2 w-full md:w-auto">
-                            <Filter className="h-4 w-4 text-slate-500"/>
-                            <select className="p-2 border rounded-md text-sm outline-none w-full md:w-48" value={sectorFilter} onChange={e => setSectorFilter(e.target.value)}>
+                            <Filter className="h-4 w-4 text-slate-500 shrink-0"/>
+                            <select className="p-2 border rounded-md text-sm outline-none w-full md:w-48 bg-white" value={sectorFilter} onChange={e => setSectorFilter(e.target.value)}>
                                 {uniqueSectors.map(s => <option key={s} value={s}>{s}</option>)}
                             </select>
                         </div>
@@ -146,65 +145,67 @@ export default function TagGenerator() {
 
             <Card>
                 <div className="max-h-[600px] overflow-y-auto">
-                    <table className="w-full text-sm text-left">
-                        <thead className="bg-slate-100 text-slate-600 sticky top-0 z-10 shadow-sm">
-                            <tr>
-                                <th className="p-4 w-10">
-                                    <button onClick={toggleSelectAll}>
-                                        {selectedIds.length === filteredData.length && filteredData.length > 0 ? <CheckSquare className="h-5 w-5 text-indigo-600"/> : <Square className="h-5 w-5 text-slate-400"/>}
-                                    </button>
-                                </th>
-                                <th className="p-4">Identificação</th>
-                                <th className="p-4">Detalhe / Modelo</th>
-                                <th className="p-4">Status / Local</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y">
-                            {loading ? (
-                                <tr><td colSpan="4" className="p-8 text-center text-slate-400">Carregando...</td></tr>
-                            ) : filteredData.length === 0 ? (
-                                <tr><td colSpan="4" className="p-8 text-center text-slate-400">Nenhum item encontrado.</td></tr>
-                            ) : (
-                                filteredData.map(item => {
-                                    const id = item.id || item.uuid;
-                                    const isSelected = selectedIds.includes(id);
-                                    let col1, col2, col3;
+                    <div className="overflow-x-auto w-full">
+                        <table className="w-full text-sm text-left min-w-[600px]">
+                            <thead className="bg-slate-100 text-slate-600 sticky top-0 z-10 shadow-sm">
+                                <tr>
+                                    <th className="p-4 w-10">
+                                        <button onClick={toggleSelectAll}>
+                                            {selectedIds.length === filteredData.length && filteredData.length > 0 ? <CheckSquare className="h-5 w-5 text-indigo-600"/> : <Square className="h-5 w-5 text-slate-400"/>}
+                                        </button>
+                                    </th>
+                                    <th className="p-4 whitespace-nowrap">Identificação</th>
+                                    <th className="p-4 whitespace-nowrap">Detalhe / Modelo</th>
+                                    <th className="p-4 whitespace-nowrap">Status / Local</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y">
+                                {loading ? (
+                                    <tr><td colSpan="4" className="p-8 text-center text-slate-400">Carregando...</td></tr>
+                                ) : filteredData.length === 0 ? (
+                                    <tr><td colSpan="4" className="p-8 text-center text-slate-400">Nenhum item encontrado.</td></tr>
+                                ) : (
+                                    filteredData.map(item => {
+                                        const id = item.id || item.uuid;
+                                        const isSelected = selectedIds.includes(id);
+                                        let col1, col2, col3;
 
-                                    if (activeTab === 'machines') {
-                                        col1 = <span className="font-bold text-slate-700">{item.hostname}</span>;
-                                        col2 = <span className="font-mono text-xs text-slate-500">{item.ip_address}</span>;
-                                        col3 = <Badge variant="outline">{item.sector || 'Sem Setor'}</Badge>;
-                                    } else if (activeTab === 'inventory') {
-                                        col1 = <span className="font-bold text-slate-700">{item.name}</span>;
-                                        col2 = <span className="text-slate-600 font-medium">{item.brand} {item.model}</span>;
-                                        col3 = <span className="text-slate-600">{item.location}</span>;
-                                    } else {
-                                        col1 = <span className="font-bold text-slate-800 text-base">{item.name}</span>; 
-                                        col2 = <span className="text-slate-600 font-medium">{item.model}</span>;
+                                        if (activeTab === 'machines') {
+                                            col1 = <span className="font-bold text-slate-700">{item.hostname}</span>;
+                                            col2 = <span className="font-mono text-xs text-slate-500">{item.ip_address}</span>;
+                                            col3 = <Badge variant="outline">{item.sector || 'Sem Setor'}</Badge>;
+                                        } else if (activeTab === 'inventory') {
+                                            col1 = <span className="font-bold text-slate-700">{item.name}</span>;
+                                            col2 = <span className="text-slate-600 font-medium">{item.brand} {item.model}</span>;
+                                            col3 = <span className="text-slate-600">{item.location}</span>;
+                                        } else {
+                                            col1 = <span className="font-bold text-slate-800 text-base">{item.name}</span>; 
+                                            col2 = <span className="text-slate-600 font-medium">{item.model}</span>;
 
-                                        col3 = (
-                                            <div className="flex flex-col gap-1">
-                                                <Badge className={item.status === 'ativo' ? "bg-emerald-100 text-emerald-700 w-fit border-emerald-200" : "bg-slate-100 text-slate-600 w-fit"}>
-                                                    {item.status || 'ativo'}
-                                                </Badge>
-                                            </div>
+                                            col3 = (
+                                                <div className="flex flex-col gap-1">
+                                                    <Badge className={item.status === 'ativo' ? "bg-emerald-100 text-emerald-700 w-fit border-emerald-200" : "bg-slate-100 text-slate-600 w-fit"}>
+                                                        {item.status || 'ativo'}
+                                                    </Badge>
+                                                </div>
+                                            );
+                                        }
+
+                                        return (
+                                            <tr key={id} className={`hover:bg-slate-50 transition-colors cursor-pointer ${isSelected ? 'bg-indigo-50/50' : ''}`} onClick={() => toggleSelectOne(id)}>
+                                                <td className="p-4">
+                                                    {isSelected ? <CheckSquare className="h-5 w-5 text-indigo-600"/> : <Square className="h-5 w-5 text-slate-300"/>}
+                                                </td>
+                                                <td className="p-4 whitespace-nowrap">{col1}</td>
+                                                <td className="p-4 whitespace-nowrap">{col2}</td>
+                                                <td className="p-4 whitespace-nowrap">{col3}</td>
+                                            </tr>
                                         );
-                                    }
-
-                                    return (
-                                        <tr key={id} className={`hover:bg-slate-50 transition-colors cursor-pointer ${isSelected ? 'bg-indigo-50/50' : ''}`} onClick={() => toggleSelectOne(id)}>
-                                            <td className="p-4">
-                                                {isSelected ? <CheckSquare className="h-5 w-5 text-indigo-600"/> : <Square className="h-5 w-5 text-slate-300"/>}
-                                            </td>
-                                            <td className="p-4">{col1}</td>
-                                            <td className="p-4">{col2}</td>
-                                            <td className="p-4">{col3}</td>
-                                        </tr>
-                                    );
-                                })
-                            )}
-                        </tbody>
-                    </table>
+                                    })
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             </Card>
         </div>

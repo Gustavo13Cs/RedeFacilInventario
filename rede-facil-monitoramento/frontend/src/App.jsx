@@ -1,17 +1,15 @@
 import React, { useEffect, useState } from 'react';
 import { 
   LayoutDashboard, Package, Users, Smartphone, DollarSign, 
-  Network, MessageCircle, Layers, QrCode ,Lock
+  Network, MessageCircle, Layers, QrCode, Lock, Menu, X, LogOut 
 } from 'lucide-react';
 import { Badge } from "@/components/ui/badge";
-
 import { Routes, Route, Link, useLocation, Navigate, useNavigate } from 'react-router-dom';
-
 import io from 'socket.io-client';
 import axios from 'axios';
 import { API_URL } from './config'; 
 
-// Componentes
+
 import CredentialVault from './components/CredentialVault';
 import PublicDetails from './pages/PublicDetails';
 import FinancialDashboard from './components/FinancialDashboard'; 
@@ -26,7 +24,6 @@ import Login from './components/Login';
 import TopNavbar from './components/ui/TopNavbar'; 
 import DashboardHome from './components/DashboardHome'; 
 import TagGenerator from './pages/TagGenerator'; 
-
 
 const getSocketUrl = (url) => {
   let cleanUrl = url.endsWith('/') ? url.slice(0, -1) : url;
@@ -46,6 +43,8 @@ function App() {
   const [stats, setStats] = useState({ total: 0, online: 0, critical: 0 });
   const [lastTelemetry, setLastTelemetry] = useState(null);
 
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -57,6 +56,11 @@ function App() {
   const [userRole, setUserRole] = useState('');
   const [isLoggingOut, setIsLoggingOut] = useState(false);
 
+  const handleNavClick = () => {
+    setMobileMenuOpen(false);
+    setSelectedMachine(null);
+  };
+
   const getApiEndpoint = (endpoint) => {
     const baseUrl = API_URL.endsWith('/') ? API_URL.slice(0, -1) : API_URL;
     if (baseUrl.endsWith('/api')) {
@@ -64,6 +68,7 @@ function App() {
     }
     return `${baseUrl}/api${endpoint}`;
   };
+
 
   const filteredMachines = machines.filter(m => {
     if (!searchTerm) return true;
@@ -225,41 +230,55 @@ function App() {
   }
 
   return (
-    <div className="flex h-screen w-full bg-slate-50">
+    <div className="flex h-screen w-full bg-slate-50 overflow-hidden relative">
       
+      {mobileMenuOpen && (
+        <div 
+            className="fixed inset-0 bg-black/50 z-30 md:hidden transition-opacity"
+            onClick={() => setMobileMenuOpen(false)}
+        />
+      )}
+
       {!isPublicView && (
-      <aside className="w-64 bg-[#0f172a] text-slate-300 flex flex-col shrink-0 transition-all shadow-xl z-20 hidden md:flex">
-        <div className="h-16 flex items-center px-6 bg-[#0a0f1d]">
+      <aside className={`
+            fixed inset-y-0 left-0 z-40 w-64 bg-[#0f172a] text-slate-300 flex flex-col shrink-0 transition-transform duration-300 shadow-xl
+            ${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full'} 
+            md:translate-x-0 md:static
+      `}>
+        <div className="h-16 flex items-center justify-between px-6 bg-[#0a0f1d] shrink-0">
           <div className="font-bold text-white text-lg tracking-wider flex items-center gap-2">
             <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white shadow-lg shadow-blue-900/50">RF</div>
             REDE FÁCIL
           </div>
+          <button onClick={() => setMobileMenuOpen(false)} className="md:hidden text-slate-400 hover:text-white">
+            <X size={24} />
+          </button>
         </div>
         
         <nav className="flex-1 py-6 px-3 space-y-1 overflow-y-auto">
           <p className="px-3 text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2 mt-2">Principal</p>
           
-          <Link to="/" onClick={() => setSelectedMachine(null)} className={getMenuClass('/')}>
+          <Link to="/" onClick={handleNavClick} className={getMenuClass('/')}>
             <LayoutDashboard className="mr-3 h-5 w-5 text-blue-500" /> Visão Geral
           </Link>
           
-          <Link to="/inventario" onClick={() => setSelectedMachine(null)} className={getMenuClass('/inventario')}>
+          <Link to="/inventario" onClick={handleNavClick} className={getMenuClass('/inventario')}>
             <Package className="mr-3 h-5 w-5 text-emerald-500" /> Inventário
           </Link>
 
           <p className="px-3 text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2 mt-6">Gestão</p>
           {userRole !== 'viewer' && (
-            <Link to="/setores" onClick={() => setSelectedMachine(null)} className={getMenuClass('/setores')}>
+            <Link to="/setores" onClick={handleNavClick} className={getMenuClass('/setores')}>
               <Layers className="mr-3 h-5 w-5 text-pink-500" /> Setores
             </Link>
           )}
           {userRole !== 'viewer' && (
-            <Link to="/chips" onClick={() => setSelectedMachine(null)} className={getMenuClass('/chips')}>
+            <Link to="/chips" onClick={handleNavClick} className={getMenuClass('/chips')}>
               <Smartphone className="mr-3 h-5 w-5 text-orange-500" /> Chips / Telefonia
             </Link>
           )}
           {userRole === 'admin' && (
-            <Link to="/patrimonio" onClick={() => setSelectedMachine(null)} className={getMenuClass('/patrimonio')}>
+            <Link to="/patrimonio" onClick={handleNavClick} className={getMenuClass('/patrimonio')}>
               <DollarSign className="mr-3 h-5 w-5 text-yellow-500" /> Patrimônio
             </Link>
           )}
@@ -267,7 +286,7 @@ function App() {
             <>
               <p className="px-3 text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2 mt-6">Segurança</p>
               
-              <Link to="/seguranca/cofre" onClick={() => setSelectedMachine(null)} className={getMenuClass('/seguranca/cofre')}>
+              <Link to="/seguranca/cofre" onClick={handleNavClick} className={getMenuClass('/seguranca/cofre')}>
                 <Lock className="mr-3 h-5 w-5 text-red-500" /> Cofre Digital
               </Link>
             </>
@@ -275,62 +294,101 @@ function App() {
 
           <p className="px-3 text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2 mt-6">Ferramentas</p>
           
-          <Link to="/etiquetas" onClick={() => setSelectedMachine(null)} className={getMenuClass('/etiquetas')}>
+          <Link to="/etiquetas" onClick={handleNavClick} className={getMenuClass('/etiquetas')}>
             <QrCode className="mr-3 h-5 w-5 text-indigo-500" /> Gerador Etiquetas
           </Link>
 
-          <Link to="/mapa" onClick={() => setSelectedMachine(null)} className={getMenuClass('/mapa')}>
+          <Link to="/mapa" onClick={handleNavClick} className={getMenuClass('/mapa')}>
             <Network className="mr-3 h-5 w-5 text-indigo-500" /> Mapa de Rede
           </Link>
           
           {userRole === 'admin' && (
             <>
-            <Link to="/whatsapp" onClick={() => setSelectedMachine(null)} className={getMenuClass('/whatsapp')}>
+            <Link to="/whatsapp" onClick={handleNavClick} className={getMenuClass('/whatsapp')}>
               <MessageCircle className="mr-3 h-5 w-5 text-green-500" /> Notificações
             </Link>
-            <Link to="/usuarios" onClick={() => setSelectedMachine(null)} className={getMenuClass('/usuarios')}>
+            <Link to="/usuarios" onClick={handleNavClick} className={getMenuClass('/usuarios')}>
               <Users className="mr-3 h-5 w-5 text-purple-500" /> Usuários
             </Link>
             </>
           )}
         </nav>
+
+        <div className="p-4 border-t border-slate-800 bg-[#0a0f1d]">
+            <div className="flex items-center gap-3">
+                <div className="h-9 w-9 rounded-full bg-blue-600 flex items-center justify-center text-white font-bold border border-blue-500 shadow-md">
+                    {currentUser.substring(0, 2).toUpperCase()}
+                </div>
+                <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-white truncate">{currentUser}</p>
+                    <p className="text-xs text-slate-500 truncate capitalize">{userRole}</p>
+                </div>
+                <button 
+                    onClick={handleLogout}
+                    className="p-2 text-slate-400 hover:text-red-400 hover:bg-white/5 rounded-md transition-colors"
+                    title="Sair"
+                >
+                    <LogOut size={20} />
+                </button>
+            </div>
+        </div>
+
       </aside>
       )}
 
-      <main className="flex-1 flex flex-col overflow-hidden">
+      <main className="flex-1 flex flex-col overflow-hidden w-full relative">
         
         {!isPublicView && (
             <>
             {location.pathname === '/' && !selectedMachine ? (
-            <TopNavbar 
-                title={getPageTitle()}
-                searchTerm={searchTerm}
-                onSearchChange={setSearchTerm}
-                currentUser={currentUser}
-                onLogout={handleLogout}
-                isLoggingOut={isLoggingOut}
-            />
+            <div className="flex flex-col">
+                 <div className="md:hidden h-16 bg-white border-b flex items-center px-4 justify-between shrink-0">
+                      <button onClick={() => setMobileMenuOpen(true)} className="text-slate-700">
+                        <Menu size={24} />
+                      </button>
+                      <span className="font-bold text-slate-800">Rede Fácil</span>
+                      <div className="w-6"></div>
+                 </div>
+
+                <div className="hidden md:block">
+                    <TopNavbar 
+                        title={getPageTitle()}
+                        searchTerm={searchTerm}
+                        onSearchChange={setSearchTerm}
+                        currentUser={currentUser}
+                        onLogout={handleLogout}
+                        isLoggingOut={isLoggingOut}
+                    />
+                </div>
+            </div>
             ) : (
-            <header className="h-16 bg-white border-b flex items-center justify-between px-8 shadow-sm shrink-0">
-                <h2 className="text-xl font-semibold text-slate-800">
-                {getPageTitle()}
-                </h2>
-                <div className="flex items-center gap-4">
-                {selectedMachine && (
-                    <button onClick={() => setSelectedMachine(null)} className="text-sm text-blue-600 hover:underline">
-                        Voltar
+            <header className="h-16 bg-white border-b flex items-center justify-between px-4 md:px-8 shadow-sm shrink-0">
+                <div className="flex items-center gap-2 overflow-hidden">
+                    <button onClick={() => setMobileMenuOpen(true)} className="md:hidden text-slate-700 mr-2">
+                        <Menu size={24} />
                     </button>
-                )}
-                <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200 px-3 py-1">
-                    Sistema Online
-                </Badge>
+                    
+                    <h2 className="text-lg md:text-xl font-semibold text-slate-800 truncate">
+                        {getPageTitle()}
+                    </h2>
+                </div>
+
+                <div className="flex items-center gap-2 md:gap-4 shrink-0">
+                    {selectedMachine && (
+                        <button onClick={() => setSelectedMachine(null)} className="text-sm text-blue-600 hover:underline">
+                            Voltar
+                        </button>
+                    )}
+                    <Badge variant="outline" className="hidden md:flex bg-emerald-50 text-emerald-700 border-emerald-200 px-3 py-1">
+                        Sistema Online
+                    </Badge>
                 </div>
             </header>
             )}
             </>
         )}
 
-        <div className={isPublicView ? "h-full w-full overflow-auto" : "flex-1 overflow-auto p-8 space-y-6"}>
+        <div className={isPublicView ? "h-full w-full overflow-auto" : "flex-1 overflow-auto p-4 md:p-8 space-y-6"}>
           
           {selectedMachine ? (
              <MachineDetails 
@@ -352,16 +410,8 @@ function App() {
               } />
               
               <Route path="/inventario" element={<Inventory userRole={userRole} />} />
-              
-              <Route path="/setores" element={
-                <SectorManagement 
-                  machines={machines} 
-                  onUpdateMachine={handleLocalMachineUpdate} 
-                />
-              } />
-
+              <Route path="/setores" element={<SectorManagement machines={machines} onUpdateMachine={handleLocalMachineUpdate} />} />
               <Route path="/view/:type/:id" element={<PublicDetails />} />
-              
               <Route path="/whatsapp" element={<WhatsAppConfig />} />
               <Route path="/chips" element={<SimCardManagement userRole={userRole} />} />
               <Route path="/patrimonio" element={<FinancialDashboard />} />
@@ -369,7 +419,6 @@ function App() {
               <Route path="/mapa" element={<NetworkMap />} />
               <Route path="/etiquetas" element={<TagGenerator />} />
               <Route path="/seguranca/cofre" element={<CredentialVault />} />
-              
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
           )}
