@@ -181,10 +181,9 @@ export default function CredentialVault() {
   const [decryptedPassword, setDecryptedPassword] = useState('');
 
   useEffect(() => {
-    fetchCredentials();
-    fetchDevices(); 
-  }, []);
-
+      fetchCredentials();
+      fetchDevices(); 
+    }, []);
   const fetchDevices = async () => {
     try {
         const token = localStorage.getItem('token');
@@ -211,6 +210,8 @@ export default function CredentialVault() {
     }
   };
 
+  
+
   const handleCreate = async (data) => {
     try {
         const token = localStorage.getItem('token');
@@ -232,6 +233,7 @@ export default function CredentialVault() {
     }
   };
 
+  
   const handleReveal = async (id) => {
       if (visiblePasswordId === id) {
           setVisiblePasswordId(null);

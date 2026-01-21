@@ -6,7 +6,7 @@ import {
     MapPin, Settings2, Loader2, 
 } from 'lucide-react';
 
-import { generateExcel, generatePDF } from '@/utils/exportUtils';
+import { generateExcel, generatePDF, generateTagsPDF } from '@/utils/exportUtils';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";

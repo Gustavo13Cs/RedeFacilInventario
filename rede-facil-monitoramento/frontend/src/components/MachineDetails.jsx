@@ -45,7 +45,6 @@ export default function MachineDetails({ machine: initialMachineData, onBack, so
 
   const [softwareSearch, setSoftwareSearch] = useState('');
 
-    const [wallpaperUrl, setWallpaperUrl] = useState('');
     const [sendingWallpaper, setSendingWallpaper] = useState(false);
     const [wallpaperFile, setWallpaperFile] = useState(null);
 
@@ -56,8 +55,7 @@ export default function MachineDetails({ machine: initialMachineData, onBack, so
     });
 
   const PIE_COLORS = ['#10b981', '#1e293b'];
-
-  // ... (useEffect hooks permanecem inalterados) ...
+  
   useEffect(() => {
     const fetchNetworkHistory = async () => {
         try {
