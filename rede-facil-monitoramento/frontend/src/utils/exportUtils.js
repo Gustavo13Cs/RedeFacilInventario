@@ -128,11 +128,18 @@ export const generatePDF = ({ title, details = [], columns, rows, fileName }) =>
 export const generateTagsPDF = async (items, type = 'generic') => {
     const doc = new jsPDF();
     
-    const tagWidth = 63.5;
-    const tagHeight = 33.9;
+    const isMobile = type === 'chips'; 
+    
+    const tagWidth = isMobile ? 40 : 63.5;
+    const tagHeight = isMobile ? 22 : 33.9;
+    
     const marginX = 10;
     const marginY = 10;
-    
+    const headerHeight = isMobile ? 5 : 7; 
+
+    const maxCols = isMobile ? 4 : 3; 
+    const maxRows = isMobile ? 11 : 8;
+
     let col = 0;
     let row = 0;
 
@@ -141,7 +148,7 @@ export const generateTagsPDF = async (items, type = 'generic') => {
     for (let i = 0; i < items.length; i++) {
         const item = items[i];
         
-        let code, title, subtitle, footer, qrLink;
+        let code, title, subtitle, footer, qrLink, headerColor;
 
         if (type === 'machines') {
             code = item.hostname; 
@@ -149,12 +156,16 @@ export const generateTagsPDF = async (items, type = 'generic') => {
             subtitle = item.ip_address || "IP Dinâmico";
             footer = item.sector || "Sem Setor";
             qrLink = `${baseUrl}/view/machine/${item.uuid}`;
+            headerColor = [30, 58, 138]; 
         } else if (type === 'chips') {
             code = item.name || item.id_number || "S/N"; 
             title = "CELULAR"; 
-            subtitle = item.model || "Modelo Desconhecido";
+            subtitle = item.model || "Modelo";
+            if(subtitle.length > 15) subtitle = subtitle.substring(0, 15) + '...';
+            
             footer = item.employee_name || "ATIVO";
             qrLink = `${baseUrl}/view/device/${item.id}`;
+            headerColor = [234, 88, 12]; 
         } else {
             code = item.patrimony_code || item.serial_number || "S/N";
             title = "PATRIMÔNIO";
@@ -163,6 +174,7 @@ export const generateTagsPDF = async (items, type = 'generic') => {
             subtitle = displayText.length > 30 ? displayText.substring(0, 30) + '...' : displayText;
             footer = item.location || "Geral";
             qrLink = `${baseUrl}/view/item/${item.id}`;
+            headerColor = [30, 58, 138]; 
         }
 
         const x = marginX + (col * tagWidth);
@@ -172,47 +184,79 @@ export const generateTagsPDF = async (items, type = 'generic') => {
         doc.setLineWidth(0.1);
         doc.rect(x, y, tagWidth, tagHeight);
 
-        doc.setFillColor(30, 58, 138); 
-        doc.rect(x, y, tagWidth, 7, 'F');
+        doc.setFillColor(...headerColor); 
+        doc.rect(x, y, tagWidth, headerHeight, 'F');
         
         doc.setTextColor(255, 255, 255);
-        doc.setFontSize(8);
+        doc.setFontSize(isMobile ? 5 : 8); 
         doc.setFont("helvetica", "bold");
-        doc.text("REDE FÁCIL", x + 2, y + 4.5);
-        doc.setFontSize(6);
-        doc.text(title, x + tagWidth - 2, y + 4.5, { align: 'right' });
+        
+        if (isMobile) {
+            doc.text("REDE FÁCIL", x + 2, y + 3.5);
+            doc.text(title, x + tagWidth - 2, y + 3.5, { align: 'right' });
+        } else {
+            doc.text("REDE FÁCIL", x + 2, y + 4.5);
+            doc.setFontSize(6);
+            doc.text(title, x + tagWidth - 2, y + 4.5, { align: 'right' });
+        }
 
         doc.setTextColor(0, 0, 0);
-        
-        doc.setFontSize(10);
-        doc.setFont("helvetica", "bold");
-        doc.text(code, x + 2, y + 14);
-
-        doc.setFontSize(7);
-        doc.setFont("helvetica", "normal");
-        doc.text(subtitle, x + 2, y + 19);
-        
-        doc.setFontSize(6);
-        doc.setTextColor(100);
-        doc.text(footer, x + 2, y + 28);
-
         try {
             const qrDataUrl = await QRCode.toDataURL(qrLink, { margin: 0 });
-            doc.addImage(qrDataUrl, 'PNG', x + tagWidth - 22, y + 9, 20, 20);
+
+            if (isMobile) {
+
+                const qrSize = 14; 
+                doc.addImage(qrDataUrl, 'PNG', x + 2, y + headerHeight + 1.5, qrSize, qrSize);
+
+                const textX = x + 18; 
+                
+                doc.setFontSize(12);
+                doc.setFont("helvetica", "bold");
+                doc.text(code, textX, y + headerHeight + 5);
+
+                doc.setFontSize(6);
+                doc.setFont("helvetica", "normal");
+                doc.setTextColor(80);
+                doc.text(subtitle, textX, y + headerHeight + 9);
+
+                doc.setFontSize(5);
+                doc.setTextColor(150);
+                doc.text(footer.toUpperCase(), textX, y + headerHeight + 13);
+
+            } else {
+                
+                doc.setFontSize(10);
+                doc.setFont("helvetica", "bold");
+                doc.text(code, x + 2, y + 14);
+
+                doc.setFontSize(7);
+                doc.setFont("helvetica", "normal");
+                doc.text(subtitle, x + 2, y + 19);
+                
+                doc.setFontSize(6);
+                doc.setTextColor(100);
+                doc.text(footer, x + 2, y + 28);
+
+
+                doc.addImage(qrDataUrl, 'PNG', x + tagWidth - 22, y + 9, 20, 20);
+            }
+
         } catch (err) {
             console.error("Erro QR", err);
         }
 
         col++;
-        if (col >= 3) {
+        if (col >= maxCols) {
             col = 0;
             row++;
-            if (row >= 8) {
+            if (row >= maxRows) {
                 doc.addPage();
                 row = 0;
             }
         }
     }
 
-    doc.save(`Etiquetas_${type.toUpperCase()}.pdf`);
+    const fileNameOutput = isMobile ? "Etiquetas_Celulares_Mini.pdf" : `Etiquetas_${type.toUpperCase()}.pdf`;
+    doc.save(fileNameOutput);
 };
