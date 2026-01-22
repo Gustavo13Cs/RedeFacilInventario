@@ -130,15 +130,21 @@ exports.registerMachine = async (data) => {
         await connection.beginTransaction();
 
         await connection.execute(
-            `INSERT INTO machines (uuid, hostname, ip_address, default_gateway, subnet_mask, os_name, status, last_seen) 
-             VALUES (?, ?, ?, ?, ?, ?, 'online', NOW()) 
-             ON DUPLICATE KEY UPDATE 
-             hostname=?, ip_address=?, default_gateway=?, subnet_mask=?, os_name=?, last_seen=NOW(), status='online'`,
-            [
-                uuid, hostname, ip_address, default_gateway || null, subnet_mask || null, os_name,
-                hostname, ip_address, default_gateway || null, subnet_mask || null, os_name
-            ]
-        );
+    `INSERT INTO machines (
+        uuid, hostname, ip_address, default_gateway, subnet_mask, 
+        os_name, status, last_seen, auto_shutdown_enabled
+    ) 
+    VALUES (?, ?, ?, ?, ?, ?, 'online', NOW(), ?) 
+    ON DUPLICATE KEY UPDATE 
+    hostname=?, ip_address=?, default_gateway=?, subnet_mask=?, os_name=?, last_seen=NOW(), status='online'`,
+    [
+        // Valores para o INSERT (9 valores)
+        uuid, hostname, ip_address, default_gateway || null, subnet_mask || null, os_name, true, 
+        
+        // Valores para o UPDATE (5 valores)
+        hostname, ip_address, default_gateway || null, subnet_mask || null, os_name
+    ]
+);
 
         const [rows] = await connection.execute('SELECT id FROM machines WHERE uuid = ?', [uuid]);
         const machine_id = rows[0].id;
@@ -342,4 +348,17 @@ exports.getTopology = async () => {
     });
 
     return Object.values(topology);
+};
+
+exports.updateAutoShutdownStatus = async (uuid, status) => {
+    try {
+        await db.query(
+            'UPDATE machines SET auto_shutdown_enabled = ? WHERE uuid = ?', 
+            [status ? 1 : 0, uuid]
+        );
+        console.log(`✅ Configuração salva: Autodesligamento da máquina ${uuid} -> ${status ? 'LIGADO' : 'DESLIGADO'}`);
+    } catch (error) {
+        console.error("Erro ao atualizar status no banco:", error);
+        throw error;
+    }
 };

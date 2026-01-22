@@ -111,15 +111,23 @@ exports.sendCommand = async (req, res) => {
     const { uuid } = req.params;
     const { command, payload } = req.body; 
 
-    if (!command) return res.status(400).json({ message: 'Comando obrigatório.' });
-
     try {
-        commandService.addCommand(uuid, { command, payload });
-        
-        const io = socketHandler.getIO();
-        io.emit('command_queued', { machine_uuid: uuid, command });
+       if (command === 'enable_auto_shutdown' || command === 'disable_auto_shutdown') {
+    const isEnabled = command === 'enable_auto_shutdown';
+    
+    // 1. Salva no Banco de Dados
+    await monitorServices.updateAutoShutdownStatus(uuid, isEnabled);
+    
+    // 2. Avisa o Frontend para mudar a cor do botão na hora
+    const io = socketHandler.getIO();
+    io.emit('machine_status_update', { 
+        machine_uuid: uuid, 
+        auto_shutdown_enabled: isEnabled 
+    });
+}
 
-        res.json({ message: `Comando enviado! Aguardando agente...` });
+        commandService.addCommand(uuid, { command, payload });
+        res.json({ message: `Comando enviado com sucesso!` });
     } catch (error) {
         res.status(500).json({ message: 'Erro ao processar comando.' });
     }

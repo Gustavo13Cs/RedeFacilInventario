@@ -190,6 +190,16 @@ useEffect(() => {
 useEffect(() => {
     if (!socket) return;
 
+const handleStatusUpdate = (data) => {
+        if (data.machine_uuid === machine.uuid) {
+            // Atualiza o estado local da máquina para o botão mudar de cor
+            setMachine(prev => ({ 
+                ...prev, 
+                auto_shutdown_enabled: data.auto_shutdown_enabled 
+            }));
+        }
+    };
+
     setTelemetryData(prev => {
         if (prev.length > 0) return prev;
         return Array(10).fill({ time: '--:--', cpu: 0, ram: 0, temp: 0 });
@@ -250,11 +260,13 @@ useEffect(() => {
     socket.on('new_telemetry', handleNewTelemetry);
     socket.on('command_output', handleCommandOutput);
     socket.on('network_update', handleNetworkUpdate);
-    
+    socket.on('machine_status_update', handleStatusUpdate);
+
     return () => { 
         socket.off('new_telemetry', handleNewTelemetry);
         socket.off('command_output', handleCommandOutput); 
         socket.off('network_update', handleNetworkUpdate);
+        socket.off('machine_status_update', handleStatusUpdate);
     };
 }, [machine.uuid, socket]);
 
@@ -325,15 +337,32 @@ useEffect(() => {
                     <span className="font-bold text-slate-700">LIMPEZA</span>
                 </button>
                 <button 
-                    onClick={() => requestCommand('cancel_shutdown', 'EVITAR OFF', 'Impede o desligamento automático hoje')} 
-                    className="relative overflow-hidden flex flex-col items-center justify-center p-6 bg-white border-2 border-slate-100 rounded-xl hover:border-purple-500 hover:bg-purple-50 transition-all group duration-300"
-                >
-                    <div className="bg-purple-100 p-4 rounded-full mb-3">
-                        {/* Ícone de Relógio ou Escudo */}
-                        <Clock className="h-8 w-8 text-purple-600" /> 
+                    onClick={() => requestCommand(
+                         machine.auto_shutdown_enabled ? 'disable_auto_shutdown' : 'enable_auto_shutdown', 
+                        machine.auto_shutdown_enabled ? 'DESATIVAR' : 'ATIVAR', 
+                        `Deseja ${machine.auto_shutdown_enabled ? 'desativar' : 'ativar'} o desligamento automático?`
+                     )}
+                    className={`relative overflow-hidden flex flex-col items-center justify-center p-6 bg-white border-2 rounded-xl transition-all group duration-300 ${
+                                    machine.auto_shutdown_enabled 
+                        ? 'border-purple-500 bg-purple-50 hover:bg-purple-100' 
+                        : 'border-slate-100 hover:border-slate-300 hover:bg-slate-50'
+                    }`}
+>
+                    <div className={`p-4 rounded-full mb-3 ${machine.auto_shutdown_enabled ? 'bg-purple-100 text-purple-600' : 'bg-slate-100 text-slate-400'}`}>
+                        <Power className="h-8 w-8" />
                     </div>
-                    <span className="font-bold text-slate-700">EVITAR OFF</span>
-                    <span className="text-[10px] text-slate-400 mt-1 uppercase font-semibold">Válido p/ hoje</span>
+                    
+                    <div className="flex flex-col items-center">
+                        <span className="font-bold text-slate-700 flex items-center gap-2">
+                            AUTO-OFF: 
+                            <span className={machine.auto_shutdown_enabled ? 'text-purple-600' : 'text-slate-400'}>
+                                {machine.auto_shutdown_enabled ? 'ON' : 'OFF'}
+                            </span>
+                        </span>
+                        <span className="text-[10px] text-slate-400 mt-1 uppercase font-semibold">
+                            {machine.auto_shutdown_enabled ? 'Válido p/ hoje' : 'Desativado'}
+                        </span>
+                    </div>
                 </button>     
             </div>
             

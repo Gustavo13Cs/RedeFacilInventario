@@ -29,7 +29,7 @@ import (
 )
 
 // --- CONFIGURAÇÕES DE AUTO-UPDATE ---
-const AGENT_VERSION = "4.4"
+const AGENT_VERSION = "4.8"
 const UPDATE_BASE_URL = "http://192.168.50.60:3001/updates"
 const EXECUTABLE_NAME = "AgenteRedeFacil.exe"
 
@@ -43,7 +43,7 @@ const RETRY_DELAY = 10 * time.Second
 
 var GlobalMachineIP string
 var ShutdownCancelled bool = false
-
+var AutoShutdownEnabled bool = true
 var (
 	user32           = syscall.NewLazyDLL("user32.dll")
 	getLastInputInfo = user32.NewProc("GetLastInputInfo")
@@ -105,6 +105,7 @@ type TelemetryData struct {
 	DiskSmartStatus    string  `json:"disk_smart_status"`
 	TemperatureCelsius float64 `json:"temperature_celsius"`
 	UptimeSeconds      uint64  `json:"uptime_seconds"`
+	IdleSeconds        uint32  `json:"idle_seconds"`
 }
 
 type NetworkStats struct {
@@ -137,25 +138,24 @@ func shutdownPC() {
 }
 
 func checkAutoShutdown() {
-	now := time.Now()
+    if !AutoShutdownEnabled {
+        return 
+    }
 
-	if now.Hour() == 6 && ShutdownCancelled {
-		ShutdownCancelled = false
-		log.Println("🔄 Resetando trava de desligamento automático para o novo dia.")
-	}
-	if ShutdownCancelled {
-		return
-	}
+    now := time.Now()
+    // Só verifica se for 19:15 ou depois
+    if now.Hour() > 19 || (now.Hour() == 19 && now.Minute() >= 15) {
+        idleSeconds := getIdleTime()
+        
+        // Tolerância de 5 minutos (300 segundos)
+        const tolerancia = 300 
 
-	ehHorarioDesligamento := (now.Hour() == 19 && now.Minute() >= 30) || now.Hour() > 19 || now.Hour() < 6
-	if ehHorarioDesligamento {
-		idleSeconds := getIdleTime()
-		if idleSeconds > 1800 {
-			shutdownPC()
-		}
-	}
+        if idleSeconds >= tolerancia {
+            log.Printf("🌙 Horário limite (19:15) e inatividade atingidos. Desligando...")
+            shutdownPC()
+        }
+    }
 }
-
 func getIdleTime() uint32 {
 	var lii LASTINPUTINFO
 	lii.cbSize = uint32(unsafe.Sizeof(lii))
@@ -674,6 +674,7 @@ func collectTelemetry() TelemetryData {
 		DiskSmartStatus:    "OK",
 		TemperatureCelsius: math.Round(tempValue*10) / 10,
 		UptimeSeconds:      uptime,
+		IdleSeconds:        getIdleTime(),
 	}
 }
 
@@ -937,12 +938,11 @@ func main() {
 	go startNetworkMonitor()
 
 	go func() {
-		shutdownTicker := time.NewTicker(30 * time.Second)
-		for range shutdownTicker.C {
-			log.Println("🔍 Verificando inatividade...")
-			checkAutoShutdown()
-		}
-	}()
+		shutdownTicker := time.NewTicker(1 * time.Minute) 
+    for range shutdownTicker.C {
+        checkAutoShutdown()
+    }
+}()
 
 	ticker := time.NewTicker(TELEMETRY_INTERVAL)
 
