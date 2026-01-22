@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"crypto/tls" 
 	"encoding/json"
 	"fmt"
 	"io"
@@ -13,12 +14,12 @@ import (
 	"os/exec"
 	"os/user"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strconv"
 	"strings"
 	"syscall"
 	"time"
-	"regexp"
 	"unsafe"
 
 	"github.com/shirou/gopsutil/v3/cpu"
@@ -28,18 +29,34 @@ import (
 	gonet "github.com/shirou/gopsutil/v3/net"
 )
 
-// --- CONFIGURAÇÕES DE AUTO-UPDATE ---
-const AGENT_VERSION = "4.8"
-const UPDATE_BASE_URL = "http://192.168.50.60:3001/updates"
+// --- CONFIGURAÇÕES DE AUTO-UPDATE E SEGURANÇA ---
+const AGENT_VERSION = "4.9-LGPD" 
+
+const UPDATE_BASE_URL = "https://192.168.50.60:3001/updates"
 const EXECUTABLE_NAME = "AgenteRedeFacil.exe"
 
 const RESTORE_POINT_FILE = "restore_point_last_run.txt"
-const API_BASE_URL = "http://192.168.50.60:3001/api"
+const API_BASE_URL = "https://192.168.50.60:3001/api"
+
 const TELEMETRY_INTERVAL = 5 * time.Second
 const RESTORE_POINT_INTERVAL = 168 * time.Hour
 
 const MAX_RETRIES = 3
 const RETRY_DELAY = 10 * time.Second
+
+var AgentSecret string = "DEV_SECRET_CHANGE_ME"
+
+var httpClient *http.Client
+
+func init() {
+	tr := &http.Transport{
+		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+	}
+	httpClient = &http.Client{
+		Transport: tr,
+		Timeout:   30 * time.Second, 
+	}
+}
 
 var GlobalMachineIP string
 var ShutdownCancelled bool = false
@@ -138,30 +155,27 @@ func shutdownPC() {
 }
 
 func checkAutoShutdown() {
-    if !AutoShutdownEnabled {
-        return 
-    }
+	if !AutoShutdownEnabled {
+		return
+	}
 
-    now := time.Now()
-    // Só verifica se for 19:15 ou depois
-    if now.Hour() > 19 || (now.Hour() == 19 && now.Minute() >= 15) {
-        idleSeconds := getIdleTime()
-        
-        // Tolerância de 5 minutos (300 segundos)
-        const tolerancia = 300 
+	now := time.Now()
+	if now.Hour() > 19 || (now.Hour() == 19 && now.Minute() >= 15) {
+		idleSeconds := getIdleTime()
 
-        if idleSeconds >= tolerancia {
-            log.Printf("🌙 Horário limite (19:15) e inatividade atingidos. Desligando...")
-            shutdownPC()
-        }
-    }
+		const tolerancia = 300
+
+		if idleSeconds >= tolerancia {
+			log.Printf("🌙 Horário limite (19:15) e inatividade atingidos. Desligando...")
+			shutdownPC()
+		}
+	}
 }
 func getIdleTime() uint32 {
 	var lii LASTINPUTINFO
 	lii.cbSize = uint32(unsafe.Sizeof(lii))
 	getLastInputInfo.Call(uintptr(unsafe.Pointer(&lii)))
 
-	// GetTickCount retorna o tempo desde o boot em ms
 	kernel32 := syscall.NewLazyDLL("kernel32.dll")
 	getTickCount := kernel32.NewProc("GetTickCount")
 	t, _, _ := getTickCount.Call()
@@ -255,7 +269,7 @@ func startNetworkMonitor() {
 }
 
 func checkForUpdates() {
-	resp, err := http.Get(UPDATE_BASE_URL + "/version.txt")
+	resp, err := httpClient.Get(UPDATE_BASE_URL + "/version.txt")
 	if err != nil {
 		return
 	}
@@ -279,7 +293,7 @@ func checkForUpdates() {
 
 func doUpdate() {
 	newExeName := EXECUTABLE_NAME + ".new"
-	resp, err := http.Get(UPDATE_BASE_URL + "/" + EXECUTABLE_NAME)
+	resp, err := httpClient.Get(UPDATE_BASE_URL + "/" + EXECUTABLE_NAME)
 	if err != nil {
 		log.Printf("❌ Erro download update: %v", err)
 		return
@@ -437,7 +451,6 @@ func collectInstalledSoftware() []Software {
         ForEach-Object { $_.DisplayName + "|||" + $_.DisplayVersion }
     `
 
-	// Usando versão oculta
 	outputStr, err := runCommandHidden("powershell", "-NoProfile", "-Command", psCommand)
 
 	if err != nil {
@@ -687,11 +700,9 @@ func sendCommandResult(output string, errorMsg string) {
 	}
 
 	jsonValue, _ := json.Marshal(payload)
-	client := http.Client{Timeout: 10 * time.Second}
-
 	log.Printf("📤 Enviando resposta para: %s", url)
 
-	resp, err := client.Post(url, "application/json", bytes.NewBuffer(jsonValue))
+	resp, err := httpClient.Post(url, "application/json", bytes.NewBuffer(jsonValue))
 	if err != nil {
 		log.Printf("❌ Falha ao enviar resposta do comando: %v", err)
 		return
@@ -865,7 +876,6 @@ func postData(endpoint string, data interface{}) {
 	}
 
 	url := fmt.Sprintf("%s%s", API_BASE_URL, endpoint)
-	client := http.Client{Timeout: 10 * time.Second}
 
 	for i := 0; i < MAX_RETRIES; i++ {
 		req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonValue))
@@ -875,9 +885,9 @@ func postData(endpoint string, data interface{}) {
 		}
 
 		req.Header.Set("Content-Type", "application/json")
-		req.Header.Set("x-agent-secret", "REDE_FACIL_AGENTE_SECRETO_2026")
+		req.Header.Set("x-agent-secret", AgentSecret)
 
-		resp, err := client.Do(req)
+		resp, err := httpClient.Do(req)
 		if err != nil {
 			if i < MAX_RETRIES-1 {
 				time.Sleep(RETRY_DELAY)
@@ -908,11 +918,10 @@ func postData(endpoint string, data interface{}) {
 func registerMachine() {
 	info := collectStaticInfo()
 	url := fmt.Sprintf("%s/register", API_BASE_URL)
-	client := http.Client{Timeout: 30 * time.Second}
 	jsonValue, _ := json.Marshal(info)
 
 	for i := 0; i < MAX_RETRIES; i++ {
-		resp, err := client.Post(url, "application/json", bytes.NewBuffer(jsonValue))
+		resp, err := httpClient.Post(url, "application/json", bytes.NewBuffer(jsonValue))
 		if err == nil {
 			defer resp.Body.Close()
 			if resp.StatusCode >= 200 && resp.StatusCode < 300 {
@@ -938,11 +947,11 @@ func main() {
 	go startNetworkMonitor()
 
 	go func() {
-		shutdownTicker := time.NewTicker(1 * time.Minute) 
-    for range shutdownTicker.C {
-        checkAutoShutdown()
-    }
-}()
+		shutdownTicker := time.NewTicker(1 * time.Minute)
+		for range shutdownTicker.C {
+			checkAutoShutdown()
+		}
+	}()
 
 	ticker := time.NewTicker(TELEMETRY_INTERVAL)
 

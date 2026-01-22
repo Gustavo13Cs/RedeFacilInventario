@@ -1,7 +1,8 @@
 const path = require('path');
 const express = require('express');
 const cors = require('cors');
-const http = require('http');
+const fs = require('fs');     
+const https = require('https');
 
 require('dotenv').config({ path: path.join(__dirname, '../.env') });
 require('./config/db'); 
@@ -25,14 +26,28 @@ const whatsappService = require('./services/whatsappService');
 const deviceRoutes = require('./routes/deviceRoutes');
 
 const app = express();
-const server = http.createServer(app);
+
+
+let server;
+try {
+    const httpsOptions = {
+        key: fs.readFileSync(path.join(__dirname, '../server.key')),
+        cert: fs.readFileSync(path.join(__dirname, '../server.cert'))
+    };
+    server = https.createServer(httpsOptions, app);
+    console.log("🔒 Modo HTTPS Ativado com Sucesso!");
+} catch (error) {
+    console.error("❌ ERRO CRÍTICO: Certificados SSL não encontrados (server.key / server.cert).");
+    console.error("   Rode 'openssl req ...' na raiz do projeto para gerar.");
+    process.exit(1); 
+}
 
 app.use(express.json());
 
 app.use(cors({
     origin: '*', 
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization'] 
+    allowedHeaders: ['Content-Type', 'Authorization', 'x-agent-secret']
 }));
 
 const io = socketHandler.init(server);
@@ -44,16 +59,17 @@ const uploadsPath = path.resolve(__dirname, 'uploads');
 app.use('/uploads', express.static(uploadsPath));
 
 app.get('/', (req, res) => {
-    res.json({ message: 'API Rede Fácil Financeira - Online 🚀' });
+    res.json({ message: 'API Rede Fácil Financeira - Online e Segura (HTTPS) 🔒🚀' });
 });
 
 
 app.use('/updates', express.static(path.join(__dirname, '../updates')));
+
+
 app.use('/api/credentials', require('./routes/credentialRoutes'));
 app.use('/api/telemetry', telemetryRoutes); 
 app.use('/api', monitorRoutes); 
 app.use('/auth', authRoutes);  
-
 
 app.use(authMiddleware); 
 
@@ -68,6 +84,8 @@ app.use('/api/financial', financialRoutes);
 app.use('/api', wallpaperRoutes);
 
 const PORT = process.env.PORT || 3001;
+
+
 server.listen(PORT, '0.0.0.0', () => {
     whatsappService.start();
     
@@ -80,5 +98,6 @@ server.listen(PORT, '0.0.0.0', () => {
 
     setInterval(() => { monitorService.checkOfflineMachines(); }, 5000);
     
-    console.log(`Servidor rodando na porta ${PORT}`);
+    console.log(`🔒 Servidor HTTPS rodando na porta ${PORT}`);
+    console.log(`   Agentes devem apontar para: https://192.168.50.60:${PORT}`);
 });
