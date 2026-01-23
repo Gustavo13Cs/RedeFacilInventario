@@ -27,7 +27,6 @@ const deviceRoutes = require('./routes/deviceRoutes');
 
 const app = express();
 
-
 let server;
 try {
     const httpsOptions = {
@@ -35,10 +34,7 @@ try {
         cert: fs.readFileSync(path.join(__dirname, '../server.cert'))
     };
     server = https.createServer(httpsOptions, app);
-    console.log("🔒 Modo HTTPS Ativado com Sucesso!");
 } catch (error) {
-    console.error("❌ ERRO CRÍTICO: Certificados SSL não encontrados (server.key / server.cert).");
-    console.error("   Rode 'openssl req ...' na raiz do projeto para gerar.");
     process.exit(1); 
 }
 
@@ -62,9 +58,7 @@ app.get('/', (req, res) => {
     res.json({ message: 'API Rede Fácil Financeira - Online e Segura (HTTPS) 🔒🚀' });
 });
 
-
 app.use('/updates', express.static(path.join(__dirname, '../updates')));
-
 
 app.use('/api/credentials', require('./routes/credentialRoutes'));
 app.use('/api/telemetry', telemetryRoutes); 
@@ -85,14 +79,14 @@ app.use('/api', wallpaperRoutes);
 
 const PORT = process.env.PORT || 3001;
 
-
 server.listen(PORT, '0.0.0.0', () => {
     whatsappService.start();
     
-    cleanupService.cleanOldWallpapers(uploadsPath, 24);
     cleanupService.startCleanupTask();
-    
+    cleanupService.cleanOldWallpapers(uploadsPath, 24);
+
     setInterval(() => {
+        console.log("♻️ Iniciando rotina periódica de limpeza de uploads...");
         cleanupService.cleanOldWallpapers(uploadsPath, 1);
     }, 12 * 60 * 60 * 1000);
 

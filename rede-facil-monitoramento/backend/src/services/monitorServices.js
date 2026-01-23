@@ -8,9 +8,9 @@ global.pendingCommands = global.pendingCommands || {};
 let globalIo;
 
 const NOTIFICATION_TARGET = '120363420551985100@g.us'
-const CPU_THRESHOLD = 95; // Consideramos "100%" qualquer coisa acima de 95% para garantir
-const CPU_TIME_WINDOW = 2; // Minutos
-const OFFLINE_THRESHOLD_SECONDS = 300;
+const CPU_THRESHOLD = 95; 
+const CPU_TIME_WINDOW = 2; 
+const OFFLINE_THRESHOLD_SECONDS = 300; 
 
 exports.setSocketIo = (ioInstance) => {
     globalIo = ioInstance;
@@ -138,10 +138,7 @@ exports.registerMachine = async (data) => {
     ON DUPLICATE KEY UPDATE 
     hostname=?, ip_address=?, default_gateway=?, subnet_mask=?, os_name=?, last_seen=NOW(), status='online'`,
     [
-        // Valores para o INSERT (9 valores)
         uuid, hostname, ip_address, default_gateway || null, subnet_mask || null, os_name, true, 
-        
-        // Valores para o UPDATE (5 valores)
         hostname, ip_address, default_gateway || null, subnet_mask || null, os_name
     ]
 );
@@ -234,7 +231,7 @@ exports.processTelemetry = async (data) => {
                     INSERT INTO telemetry_logs (machine_id, cpu_usage, ram_usage, disk_usage, temperature)
                     VALUES (?, ?, ?, ?, ?)
                 `, [machineId, cpu, ram, diskFree, temp]);
-            
+
                 await checkCpuHealth(machineId, cpu);
             }
         } catch (dbErr) {
@@ -249,13 +246,11 @@ exports.processTelemetry = async (data) => {
             io.emit(`machine_${machine_uuid}`, socketData);
         }
 
-        return { message: "Telemetria processada e histórico limpo" };
+        return { message: "Telemetria processada" };
     } catch (error) {
         console.error("Erro no processTelemetry:", error);
     }
 };
-
-
 
 exports.listMachines = async () => {
     const [machines] = await db.execute(`
@@ -264,11 +259,10 @@ exports.listMachines = async () => {
                h.cpu_model, h.ram_total_gb, h.disk_total_gb, h.machine_type
         FROM machines m 
         LEFT JOIN hardware_specs h ON m.id = h.machine_id 
-        ORDER BY m.sector ASC, m.status DESC, m.hostname ASC /* Ordena por setor primeiro */
+        ORDER BY m.sector ASC, m.status DESC, m.hostname ASC 
     `);
     return machines;
 };
-
 
 exports.updateMachineSector = async (uuid, sector) => {
     try {

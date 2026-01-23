@@ -30,7 +30,7 @@ import (
 )
 
 // --- CONFIGURAÇÕES DE AUTO-UPDATE E SEGURANÇA ---
-const AGENT_VERSION = "5.2-LGPD" 
+const AGENT_VERSION = "5.3-LGPD" 
 const UPDATE_BASE_URL = "https://192.168.50.60:3001/updates"
 const UPDATE_URL_VERSION = "https://192.168.50.60:3001/updates/version.txt"
 const UPDATE_URL_EXE = "https://192.168.50.60:3001/updates/AgenteRedeFacil.exe"
@@ -52,7 +52,7 @@ const (
 )
 
 var (
-	kernel32        = syscall.NewLazyDLL("kernel32.dll")
+	kernel32           = syscall.NewLazyDLL("kernel32.dll")
 	setThreadExecState = kernel32.NewProc("SetThreadExecutionState")
 )
 
@@ -60,7 +60,7 @@ func preventSystemSleep() {
 	setThreadExecState.Call(uintptr(ES_CONTINUOUS | ES_SYSTEM_REQUIRED))
 }
 
-var AgentSecret string = "DEV_SECRET_CHANGE_ME"
+var AgentSecret string = "REDE_FACIL_AGENTE_SECRETO_2026"
 
 var httpClient *http.Client
 
