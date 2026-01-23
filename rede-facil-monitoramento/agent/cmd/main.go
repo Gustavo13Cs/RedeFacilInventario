@@ -30,7 +30,7 @@ import (
 	gonet "github.com/shirou/gopsutil/v3/net"
 )
 
-const AGENT_VERSION = "5.9" 
+const AGENT_VERSION = "6.0" 
 const UPDATE_BASE_URL = "https://192.168.50.60:3001/updates"
 const UPDATE_URL_VERSION = "https://192.168.50.60:3001/updates/version.txt"
 const UPDATE_URL_EXE = "https://192.168.50.60:3001/updates/AgenteRedeFacil.exe"
@@ -246,34 +246,36 @@ func runCommandHidden(command string, args ...string) (string, error) {
 }
 
 func ensureAutoStart() {
-	if runtime.GOOS != "windows" {
-		return
-	}
-
+	if runtime.GOOS != "windows" { return }
 	exePath, err := os.Executable()
-	if err != nil {
-		log.Println("❌ Erro ao obter caminho do executável para auto-start")
-		return
+	if err != nil { return }
+
+	taskName := "AgenteRedeFacil"
+	log.Println("🛠️ Tentando criar Tarefa Agendada (Admin)...")
+
+	cmdTask := exec.Command("schtasks", "/create", "/tn", taskName, "/tr", exePath, "/sc", "onlogon", "/rl", "highest", "/f")
+	cmdTask.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+	errTask := cmdTask.Run()
+
+	if errTask == nil {
+		log.Println("✅ Tarefa Agendada criada com sucesso!")
+		return 
 	}
 
+	log.Printf("⚠️ Falha ao criar tarefa (provavelmente sem Admin). Usando Registro HKCU...")
 	psCommand := fmt.Sprintf(`
 		$key = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
 		$name = 'AgenteRedeFacil'
 		$path = '%s'
-		
-		# Verifica se já existe e se o caminho está correto
 		$current = (Get-ItemProperty -Path $key -Name $name -ErrorAction SilentlyContinue).$name
 		if ($current -ne $path) {
 			Set-ItemProperty -Path $key -Name $name -Value $path
-			Write-Output "Adicionado ao AutoStart"
 		}
 	`, exePath)
-
 	runCommandHidden("powershell", "-NoProfile", "-Command", psCommand)
 }
 
 func pingHost(target string) (int, int) {
-	// Agora usa o runCommandHidden com timeout, então o ping não trava mais
 	outputStr, err := runCommandHidden("ping", "-n", "4", "-w", "1000", target)
 
 	if err != nil {
@@ -307,7 +309,6 @@ func pingHost(target string) (int, int) {
 }
 
 func startNetworkMonitor() {
-	// Proteção contra crash da rede
 	defer func() {
 		if r := recover(); r != nil {
 			log.Printf("⚠️ Erro recuperado no NetworkMonitor: %v. Reiniciando monitor...", r)
@@ -414,7 +415,6 @@ func doUpdate(client *http.Client) {
 
 	log.Println("✅ Atualização baixada com sucesso! Reiniciando agente...")
 
-	// --- CORREÇÃO DO REINÍCIO (Usa 'start' do Windows para separar processo) ---
 	cmd := exec.Command("cmd", "/C", "start", "", exePath)
 	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 	errStart := cmd.Start()
