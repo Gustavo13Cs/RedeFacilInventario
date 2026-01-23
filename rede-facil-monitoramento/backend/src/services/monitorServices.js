@@ -10,7 +10,7 @@ let globalIo;
 const NOTIFICATION_TARGET = '120363420551985100@g.us'
 const CPU_THRESHOLD = 95; // Consideramos "100%" qualquer coisa acima de 95% para garantir
 const CPU_TIME_WINDOW = 2; // Minutos
-const OFFLINE_THRESHOLD_SECONDS = 70;
+const OFFLINE_THRESHOLD_SECONDS = 300;
 
 exports.setSocketIo = (ioInstance) => {
     globalIo = ioInstance;
@@ -234,21 +234,7 @@ exports.processTelemetry = async (data) => {
                     INSERT INTO telemetry_logs (machine_id, cpu_usage, ram_usage, disk_usage, temperature)
                     VALUES (?, ?, ?, ?, ?)
                 `, [machineId, cpu, ram, diskFree, temp]);
-                
-                await db.execute(`
-                    DELETE FROM telemetry_logs 
-                    WHERE machine_id = ? 
-                    AND id NOT IN (
-                        SELECT id FROM (
-                            SELECT id 
-                            FROM telemetry_logs 
-                            WHERE machine_id = ? 
-                            ORDER BY created_at DESC 
-                            LIMIT 10
-                        ) as keep_latest
-                    )
-                `, [machineId, machineId]);
-
+            
                 await checkCpuHealth(machineId, cpu);
             }
         } catch (dbErr) {

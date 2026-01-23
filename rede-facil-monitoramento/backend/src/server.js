@@ -90,14 +90,12 @@ server.listen(PORT, '0.0.0.0', () => {
     whatsappService.start();
     
     cleanupService.cleanOldWallpapers(uploadsPath, 24);
-
+    cleanupService.startCleanupTask();
+    
     setInterval(() => {
-        console.log("♻️ Iniciando rotina periódica de limpeza de uploads...");
         cleanupService.cleanOldWallpapers(uploadsPath, 1);
     }, 12 * 60 * 60 * 1000);
 
     setInterval(() => { monitorService.checkOfflineMachines(); }, 5000);
     
-    console.log(`🔒 Servidor HTTPS rodando na porta ${PORT}`);
-    console.log(`   Agentes devem apontar para: https://192.168.50.60:${PORT}`);
 });

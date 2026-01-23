@@ -357,6 +357,44 @@ export default function SimCardManagement({ userRole }) {
     </Card>
   );
 
+const renderChipsInventoryTab = () => (
+    <Card className="border-slate-200 shadow-sm mt-6">
+        <div className="p-4 border-b bg-slate-50/50 flex justify-between items-center">
+            <h3 className="text-sm font-bold text-slate-700">Inventário de Chips</h3>
+        </div>
+        <CardContent className="p-0">
+            <div className="overflow-x-auto w-full">
+                <Table className="min-w-[600px]">
+                    <TableHeader>
+                        <TableRow className="bg-slate-50">
+                            <TableHead>Número</TableHead>
+                            <TableHead>Operadora</TableHead>
+                            <TableHead>Tipo</TableHead>
+                            <TableHead>Status</TableHead>
+                            <TableHead className="text-right">Ações</TableHead>
+                        </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                        {(chips || []).map(chip => (
+                            <TableRow key={chip.id}>
+                                <TableCell className="font-mono font-medium">{chip.phone_number}</TableCell>
+                                <TableCell>{chip.carrier}</TableCell>
+                                <TableCell>{getWhatsappBadge(chip.whatsapp_type)}</TableCell>
+                                <TableCell>{getStatusBadge(chip.status)}</TableCell>
+                                <TableCell className="text-right">
+                                    <Button variant="ghost" size="sm" onClick={() => handleOpenModal('general', chip)}>
+                                        <Edit2 className="h-4 w-4 text-blue-600"/>
+                                    </Button>
+                                </TableCell>
+                            </TableRow>
+                        ))}
+                    </TableBody>
+                </Table>
+            </div>
+        </CardContent>
+    </Card>
+  );
+
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
       
@@ -365,6 +403,11 @@ export default function SimCardManagement({ userRole }) {
             <button onClick={() => setActiveTab('general')} className={`flex items-center px-4 py-2 text-sm font-medium rounded-md transition-all ${activeTab === 'general' ? 'bg-white shadow text-blue-700' : 'text-slate-500 hover:text-slate-700'}`}>
                 <Paperclip className="w-4 h-4 mr-2"/> Gestão de Vínculos
             </button>
+
+            <button onClick={() => setActiveTab('chips_inventory')} className={`flex items-center px-4 py-2 text-sm font-medium rounded-md transition-all ${activeTab === 'chips_inventory' ? 'bg-white shadow text-blue-700' : 'text-slate-500 hover:text-slate-700'}`}>
+        <Smartphone className="w-4 h-4 mr-2"/> Chips
+    </button>
+
             <button onClick={() => setActiveTab('devices')} className={`flex items-center px-4 py-2 text-sm font-medium rounded-md transition-all ${activeTab === 'devices' ? 'bg-white shadow text-blue-700' : 'text-slate-500 hover:text-slate-700'}`}>
                 <Smartphone className="w-4 h-4 mr-2"/> Celulares
             </button>
@@ -374,9 +417,11 @@ export default function SimCardManagement({ userRole }) {
         </div>
         
         {userRole === 'admin' && (
-            <Button onClick={() => handleOpenModal(activeTab)} className="w-full md:w-auto bg-blue-600 hover:bg-blue-700 text-white gap-2 shadow-md">
+            <Button onClick={() => handleOpenModal(activeTab === 'chips_inventory' ? 'general' : activeTab)} className="w-full md:w-auto bg-blue-600 hover:bg-blue-700 text-white gap-2 shadow-md">
                 <Plus className="h-4 w-4" /> 
-                {activeTab === 'general' ? 'Novo Vínculo' : activeTab === 'devices' ? 'Cadastrar Celular' : 'Cadastrar Pessoa'}
+                {activeTab === 'general' ? 'Novo Vínculo' : 
+                 activeTab === 'chips_inventory' ? 'Cadastrar Chip' :
+                 activeTab === 'devices' ? 'Cadastrar Celular' : 'Cadastrar Pessoa'}
             </Button>
         )}
       </div>
@@ -384,6 +429,7 @@ export default function SimCardManagement({ userRole }) {
       {activeTab === 'general' && renderGeneralTab()}
       {activeTab === 'devices' && renderDevicesTab()}
       {activeTab === 'people' && renderPeopleTab()}
+      {activeTab === 'chips_inventory' && renderChipsInventoryTab()}
 
       {/* MODAL DE CADASTRO */}
       {isModalOpen && createPortal(
@@ -465,7 +511,7 @@ export default function SimCardManagement({ userRole }) {
         </div>, document.body
       )}
 
-      {/* MODAL DE LOGS (HISTÓRICO) */}
+    {/* MODAL DE LOGS (HISTÓRICO) */}
       {isLogModalOpen && createPortal(
         <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
             <Card className="w-full max-w-lg bg-white shadow-2xl h-[500px] flex flex-col max-h-[90vh]">

@@ -45,6 +45,21 @@ const RESTORE_POINT_INTERVAL = 168 * time.Hour
 const MAX_RETRIES = 3
 const RETRY_DELAY = 10 * time.Second
 
+const (
+	ES_CONTINUOUS       = 0x80000000
+	ES_SYSTEM_REQUIRED  = 0x00000001
+	ES_DISPLAY_REQUIRED = 0x00000002
+)
+
+var (
+	kernel32        = syscall.NewLazyDLL("kernel32.dll")
+	setThreadExecState = kernel32.NewProc("SetThreadExecutionState")
+)
+
+func preventSystemSleep() {
+	setThreadExecState.Call(uintptr(ES_CONTINUOUS | ES_SYSTEM_REQUIRED))
+}
+
 var AgentSecret string = "DEV_SECRET_CHANGE_ME"
 
 var httpClient *http.Client
@@ -948,6 +963,7 @@ func main() {
 	log.Printf("Agente v%s Iniciando...", AGENT_VERSION)
 
 	ensureAutoStart()
+	preventSystemSleep()
 
 	go registerMachine()
 	go checkForUpdates()
