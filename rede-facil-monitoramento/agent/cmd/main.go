@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context" // <--- ADICIONADO: Essencial para evitar travamentos
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
@@ -29,8 +30,7 @@ import (
 	gonet "github.com/shirou/gopsutil/v3/net"
 )
 
-// --- CONFIGURAÇÕES DE AUTO-UPDATE E SEGURANÇA ---
-const AGENT_VERSION = "5.5-LGPD" 
+const AGENT_VERSION = "5.8" 
 const UPDATE_BASE_URL = "https://192.168.50.60:3001/updates"
 const UPDATE_URL_VERSION = "https://192.168.50.60:3001/updates/version.txt"
 const UPDATE_URL_EXE = "https://192.168.50.60:3001/updates/AgenteRedeFacil.exe"
@@ -39,7 +39,7 @@ const EXECUTABLE_NAME = "AgenteRedeFacil.exe"
 const RESTORE_POINT_FILE = "restore_point_last_run.txt"
 const API_BASE_URL = "https://192.168.50.60:3001/api"
 
-const TELEMETRY_INTERVAL = 5 * time.Second
+const TELEMETRY_INTERVAL = 20 * time.Second
 const RESTORE_POINT_INTERVAL = 168 * time.Hour
 
 const MAX_RETRIES = 3
@@ -64,7 +64,7 @@ var AgentSecret string = "REDE_FACIL_AGENTE_SECRETO_2026"
 
 var httpClient *http.Client
 
-// --- NOVO: FUNÇÃO PARA GERAR LOG EM ARQUIVO (DEBUG) ---
+// --- FUNÇÃO PARA GERAR LOG EM ARQUIVO (DEBUG) ---
 func setupLogger() {
 	logFileLocation := "agente_debug.log"
 	f, err := os.OpenFile(logFileLocation, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
@@ -221,13 +221,27 @@ func getIdleTime() uint32 {
 	return (uint32(t) - lii.dwTime) / 1000
 }
 
+// 🔴 CORREÇÃO CRÍTICA: Função com TIMEOUT para impedir travamento eterno
 func runCommandHidden(command string, args ...string) (string, error) {
-	cmd := exec.Command(command, args...)
+	// Define um limite de 5 segundos para qualquer comando do Windows
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	// Usa CommandContext em vez de Command simples
+	cmd := exec.CommandContext(ctx, command, args...)
 	cmd.SysProcAttr = &syscall.SysProcAttr{
 		HideWindow:    true,
 		CreationFlags: 0x08000000,
 	}
+
 	output, err := cmd.Output()
+
+	// Verifica se o erro foi por timeout
+	if ctx.Err() == context.DeadlineExceeded {
+		log.Printf("⚠️ ALERTA: Comando '%s' travou e foi cancelado pelo Agente.", command)
+		return "", fmt.Errorf("timeout executando comando")
+	}
+
 	return string(output), err
 }
 
@@ -259,6 +273,7 @@ func ensureAutoStart() {
 }
 
 func pingHost(target string) (int, int) {
+	// Agora usa o runCommandHidden com timeout, então o ping não trava mais
 	outputStr, err := runCommandHidden("ping", "-n", "4", "-w", "1000", target)
 
 	if err != nil {
@@ -1045,6 +1060,7 @@ func main() {
 		}
 	}()
 
+	// 🔴 INTERVALO CORRIGIDO AQUI EMBAIXO
 	ticker := time.NewTicker(TELEMETRY_INTERVAL)
 
 	updateTicker := time.NewTicker(30 * time.Minute)

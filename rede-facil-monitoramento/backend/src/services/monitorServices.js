@@ -1,3 +1,4 @@
+// src/services/monitorServices.js
 const { db, getMachineId } = require('../config/db');
 const moment = require('moment');
 const socketHandler = require('../socket/socketHandler');
@@ -10,7 +11,9 @@ let globalIo;
 const NOTIFICATION_TARGET = '120363420551985100@g.us'
 const CPU_THRESHOLD = 95; 
 const CPU_TIME_WINDOW = 2; 
-const OFFLINE_THRESHOLD_SECONDS = 300; 
+
+// 🔴 MUDANÇA AQUI: Reduzi de 300 (5 min) para 45 segundos
+const OFFLINE_THRESHOLD_SECONDS = 45; 
 
 exports.setSocketIo = (ioInstance) => {
     globalIo = ioInstance;
@@ -49,15 +52,6 @@ const createAlert = async (machine_id, type, message) => {
     }
 };
 
-const resolveAlert = async (machine_id, type) => {
-    await db.execute(
-        `UPDATE alerts SET is_resolved = TRUE, resolved_at = CURRENT_TIMESTAMP 
-         WHERE machine_id = ? AND alert_type = ? AND is_resolved = FALSE`,
-        [machine_id, type]
-    );
-};
-
-
 async function checkCpuHealth(machineId, currentCpu) {
     if (currentCpu < CPU_THRESHOLD) return;
     const [logs] = await db.execute(`
@@ -67,12 +61,9 @@ async function checkCpuHealth(machineId, currentCpu) {
     `, [machineId, CPU_TIME_WINDOW]);
 
     if (logs[0].count > 5 && logs[0].avg_cpu >= CPU_THRESHOLD) {
-        
         const [machineRows] = await db.execute('SELECT hostname FROM machines WHERE id = ?', [machineId]);
         const machineName = machineRows.length > 0 ? machineRows[0].hostname : 'Máquina';
-
         const msg = `🔥 CPU CRÍTICA: ${machineName} está operando acima de ${CPU_THRESHOLD}% há mais de ${CPU_TIME_WINDOW} minutos!`;
-        
         await createAlert(machineId, 'HIGH_CPU', msg);
     }
 }
@@ -80,13 +71,13 @@ async function checkCpuHealth(machineId, currentCpu) {
 exports.checkOfflineMachines = async () => {
     try {
         const now = moment().utcOffset(-3); 
-        
         const currentMinutes = (now.hours() * 60) + now.minutes();
         const startWork = (8 * 60) + 30; 
         const endWork = (18 * 60) + 15;  
         const isWeekDay = (now.day() >= 1 && now.day() <= 5);
         const isBusinessHours = isWeekDay && (currentMinutes >= startWork && currentMinutes <= endWork);
 
+        // Busca máquinas que estão ONLINE mas não mandam sinal há X segundos
         const [offlineMachines] = await db.execute(`
             SELECT id, uuid, hostname, last_seen, TIMESTAMPDIFF(SECOND, last_seen, NOW()) as seconds_offline
             FROM machines 
@@ -95,10 +86,16 @@ exports.checkOfflineMachines = async () => {
         `, [OFFLINE_THRESHOLD_SECONDS]);
 
         for (const machine of offlineMachines) {
+            console.log(`🔌 Detectado OFFLINE: ${machine.hostname} (${machine.seconds_offline}s sem sinal)`);
             
             await db.execute(`UPDATE machines SET status = 'offline' WHERE id = ?`, [machine.id]);
+            
             const io = globalIo || socketHandler.getIO();
-            if (io) io.emit('machine_status_change', { uuid: machine.uuid, status: 'offline' });
+            if (io) {
+                // Avisa o Frontend IMEDIATAMENTE
+                io.emit('machine_status_change', { uuid: machine.uuid, status: 'offline' });
+                io.emit('machine_update', { uuid: machine.uuid, status: 'offline' }); 
+            }
 
             if (isBusinessHours) {
                 const msg = `🔌 ${machine.hostname} parou de responder. (Offline há ${machine.seconds_offline} segs)`;
@@ -109,6 +106,7 @@ exports.checkOfflineMachines = async () => {
         console.error('Erro checar offline:', error);
     }
 };
+
 
 exports.registerMachine = async (data) => {
     const {
