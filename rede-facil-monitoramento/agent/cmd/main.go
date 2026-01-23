@@ -2,7 +2,7 @@ package main
 
 import (
 	"bytes"
-	"context" // <--- ADICIONADO: Essencial para evitar travamentos
+	"context" 
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
@@ -30,7 +30,7 @@ import (
 	gonet "github.com/shirou/gopsutil/v3/net"
 )
 
-const AGENT_VERSION = "5.8" 
+const AGENT_VERSION = "5.9" 
 const UPDATE_BASE_URL = "https://192.168.50.60:3001/updates"
 const UPDATE_URL_VERSION = "https://192.168.50.60:3001/updates/version.txt"
 const UPDATE_URL_EXE = "https://192.168.50.60:3001/updates/AgenteRedeFacil.exe"
@@ -792,22 +792,17 @@ func collectTelemetry() TelemetryData {
 
 func sendCommandResult(output string, errorMsg string) {
 	url := fmt.Sprintf("%s/machines/%s/command-result", API_BASE_URL, getMachineUUID())
-
-	payload := CommandResult{
-		Output: output,
-		Error:  errorMsg,
-	}
-
+	payload := CommandResult{ Output: output, Error:  errorMsg }
 	jsonValue, _ := json.Marshal(payload)
-	log.Printf("📤 Enviando resposta para: %s", url)
 
-	resp, err := httpClient.Post(url, "application/json", bytes.NewBuffer(jsonValue))
-	if err != nil {
-		log.Printf("❌ Falha ao enviar resposta do comando: %v", err)
-		return
-	}
-	defer resp.Body.Close()
-	log.Printf("📥 Resposta enviada. Status: %s", resp.Status)
+
+	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonValue))
+	if err != nil { return }
+
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("x-agent-secret", AgentSecret)
+
+	httpClient.Do(req)
 }
 
 func runPowerShellScript(scriptContent string) {
@@ -1013,7 +1008,6 @@ func postData(endpoint string, data interface{}) {
 }
 
 func registerMachine() {
-	// Proteção contra crash no registro
 	defer func() {
 		if r := recover(); r != nil {
 			log.Printf("⚠️ Erro recuperado no registro: %v", r)
@@ -1023,9 +1017,13 @@ func registerMachine() {
 	info := collectStaticInfo()
 	url := fmt.Sprintf("%s/register", API_BASE_URL)
 	jsonValue, _ := json.Marshal(info)
-
-	for i := 0; i < MAX_RETRIES; i++ {
-		resp, err := httpClient.Post(url, "application/json", bytes.NewBuffer(jsonValue))
+	
+	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonValue))
+	if err == nil {
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("x-agent-secret", AgentSecret) 
+		
+		resp, err := httpClient.Do(req)
 		if err == nil {
 			defer resp.Body.Close()
 			if resp.StatusCode >= 200 && resp.StatusCode < 300 {
@@ -1034,10 +1032,10 @@ func registerMachine() {
 				json.Unmarshal(body, &regResp)
 				GlobalMachineIP = regResp.MachineIP
 				log.Printf("Máquina registrada! IP: %s | UUID: %s", GlobalMachineIP, info.UUID)
-				return
+			} else {
+				log.Printf("❌ Falha Registro: %d", resp.StatusCode)
 			}
 		}
-		time.Sleep(RETRY_DELAY)
 	}
 }
 
@@ -1060,7 +1058,6 @@ func main() {
 		}
 	}()
 
-	// 🔴 INTERVALO CORRIGIDO AQUI EMBAIXO
 	ticker := time.NewTicker(TELEMETRY_INTERVAL)
 
 	updateTicker := time.NewTicker(30 * time.Minute)
