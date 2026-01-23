@@ -37,9 +37,6 @@ const getSocketUrl = (url) => {
   return cleanUrl;
 };
 
-const socket = io(getSocketUrl(API_URL), {
-  transports: ['websocket', 'polling'] 
-});
 
 function App() {
   const [socket, setSocket] = useState(null);
@@ -142,8 +139,6 @@ function App() {
     
     const socketUrl = getSocketUrl(API_URL);
 
-    console.log("🔌 Tentando conectar Socket em:", socketUrl);
-
     const newSocket = io(socketUrl, {
       transports: ['websocket'],
       secure: true,              
@@ -153,14 +148,7 @@ function App() {
       reconnectionDelay: 2000
     });
 
-    newSocket.on('connect', () => {
-      console.log("✅ Socket Conectado com Sucesso! ID:", newSocket.id);
-    });
-
-    newSocket.on('connect_error', (err) => {
-      console.error("❌ Falha na conexão do Socket:", err.message);
-    });
-
+    
     newSocket.on("new_telemetry", (data) => {
       setLastTelemetry(data);
       setMachines(prevMachines => 

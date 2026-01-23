@@ -30,9 +30,10 @@ import (
 )
 
 // --- CONFIGURAÇÕES DE AUTO-UPDATE E SEGURANÇA ---
-const AGENT_VERSION = "5.0-LGPD" 
-
+const AGENT_VERSION = "5.1-LGPD" 
 const UPDATE_BASE_URL = "https://192.168.50.60:3001/updates"
+const UPDATE_URL_VERSION = "https://192.168.50.60:3001/updates/version.txt"
+const UPDATE_URL_EXE = "https://192.168.50.60:3001/updates/AgenteRedeFacil.exe"
 const EXECUTABLE_NAME = "AgenteRedeFacil.exe"
 
 const RESTORE_POINT_FILE = "restore_point_last_run.txt"
@@ -269,77 +270,81 @@ func startNetworkMonitor() {
 }
 
 func checkForUpdates() {
-	resp, err := httpClient.Get(UPDATE_BASE_URL + "/version.txt")
-	if err != nil {
-		return
-	}
-	defer resp.Body.Close()
+    for {
+        time.Sleep(10 * time.Second)
 
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return
-	}
+        tr := &http.Transport{
+            TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+        }
+        client := &http.Client{Transport: tr, Timeout: 10 * time.Second}
 
-	serverVersion := strings.TrimSpace(string(body))
-	if serverVersion == "" {
-		return
-	}
+        resp, err := client.Get(UPDATE_URL_VERSION)
+        if err != nil {
+            log.Printf("⚠️ Erro ao verificar atualizações: %v", err)
+            continue
+        }
+        
+        body, err := io.ReadAll(resp.Body)
+        resp.Body.Close()
+        if err != nil {
+            continue
+        }
 
-	if serverVersion != AGENT_VERSION {
-		log.Printf("🔄 ATUALIZAÇÃO ENCONTRADA: v%s (Local: v%s). Baixando...", serverVersion, AGENT_VERSION)
-		doUpdate()
-	}
+        remoteVersion := strings.TrimSpace(string(body))
+        
+        if remoteVersion != "" && remoteVersion != AGENT_VERSION {
+            log.Printf("🔄 Nova versão encontrada: %s (Atual: %s). Iniciando atualização...", remoteVersion, AGENT_VERSION)
+            doUpdate(client) 
+        }
+    }
 }
 
-func doUpdate() {
-	newExeName := EXECUTABLE_NAME + ".new"
-	resp, err := httpClient.Get(UPDATE_BASE_URL + "/" + EXECUTABLE_NAME)
-	if err != nil {
-		log.Printf("❌ Erro download update: %v", err)
-		return
-	}
-	defer resp.Body.Close()
+func doUpdate(client *http.Client) {
+    exePath, err := os.Executable()
+    if err != nil {
+        log.Printf("❌ Erro ao obter caminho do executável: %v", err)
+        return
+    }
 
-	out, err := os.Create(newExeName)
-	if err != nil {
-		return
-	}
-	_, err = io.Copy(out, resp.Body)
-	out.Close()
-	if err != nil {
-		return
-	}
+    oldPath := exePath + ".old"
 
-	currentExe, _ := os.Executable()
-	oldExe := currentExe + ".old"
+    if _, err := os.Stat(oldPath); err == nil {
+        os.Remove(oldPath)
+    }
 
-	os.Remove(oldExe)
+    err = os.Rename(exePath, oldPath)
+    if err != nil {
+        log.Printf("❌ Falha ao renomear executável atual: %v", err)
+        return
+    }
 
-	if err := os.Rename(currentExe, oldExe); err != nil {
-		log.Printf("❌ Erro ao renomear atual: %v", err)
-		return
-	}
+    log.Println("⬇️ Baixando nova versão...")
+    resp, err := client.Get(UPDATE_URL_EXE)
+    if err != nil {
+        log.Printf("❌ Erro no download: %v", err)
+        os.Rename(oldPath, exePath) 
+        return
+    }
+    defer resp.Body.Close()
 
-	if err := os.Rename(newExeName, currentExe); err != nil {
-		log.Printf("❌ Erro ao aplicar novo exe: %v", err)
-		os.Rename(oldExe, currentExe)
-		return
-	}
+    out, err := os.Create(exePath)
+    if err != nil {
+        log.Printf("❌ Erro ao criar novo arquivo: %v", err)
+        os.Rename(oldPath, exePath) 
+    }
+    defer out.Close()
 
-	log.Println("✅ Atualizado com sucesso! Reiniciando agente...")
+    _, err = io.Copy(out, resp.Body)
+    if err != nil {
+        log.Printf("❌ Erro ao salvar novo executável: %v", err)
+        return
+    }
 
-	cmd := exec.Command(currentExe)
+    log.Println("✅ Atualização baixada com sucesso! Reiniciando agente...")
 
-	cmd.SysProcAttr = &syscall.SysProcAttr{
-		HideWindow:    true,
-		CreationFlags: 0x08000000,
-	}
-
-	if err := cmd.Start(); err != nil {
-		log.Printf("❌ Falha ao reiniciar: %v", err)
-	}
-
-	os.Exit(0)
+    cmd := exec.Command(exePath)
+    cmd.Start()
+    os.Exit(0)
 }
 
 func getBackupFolderPath() string {
