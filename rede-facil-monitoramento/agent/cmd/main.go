@@ -30,7 +30,7 @@ import (
 )
 
 // --- CONFIGURAÇÕES DE AUTO-UPDATE E SEGURANÇA ---
-const AGENT_VERSION = "4.9-LGPD" 
+const AGENT_VERSION = "5.0-LGPD" 
 
 const UPDATE_BASE_URL = "https://192.168.50.60:3001/updates"
 const EXECUTABLE_NAME = "AgenteRedeFacil.exe"
@@ -772,13 +772,15 @@ func handleRemoteCommand(command string, payload string) {
 		log.Println("🚫 Desligamento automático CANCELADO para hoje pelo usuário.")
 		sendCommandResult("Desligamento automático suspenso até amanhã às 06:00.", "")
 	case "set_wallpaper":
-		if runtime.GOOS == "windows" {
-			psScript := fmt.Sprintf(`
+		psScript := fmt.Sprintf(`
 				$url = "%s"
 				$path = "$env:TEMP\wallpaper_agente.jpg"
 				
 				# Tenta deletar o anterior se existir
 				if (Test-Path $path) { Remove-Item $path -Force }
+
+				# ADICIONE ESTA LINHA ABAIXO PARA O POWERSHELL ACEITAR O CERTIFICADO AUTOASSINADO:
+				[System.Net.ServicePointManager]::ServerCertificateValidationCallback = {$true}
 
 				# Download
 				try {
@@ -807,7 +809,7 @@ func handleRemoteCommand(command string, payload string) {
 			`, payload)
 
 			go runPowerShellScript(psScript)
-		}
+		
 
 	case "custom_script":
 		if runtime.GOOS == "windows" {

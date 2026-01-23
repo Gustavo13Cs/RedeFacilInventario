@@ -10,7 +10,7 @@ exports.setWallpaper = async (req, res) => {
         }
 
         const serverIp = "192.168.50.60"; 
-        const imageUrl = `http://${serverIp}:3001/uploads/${req.file.filename}`;
+        const imageUrl = `https://${serverIp}:3001/uploads/${req.file.filename}`;
 
         const machine_id = await getMachineId(uuid);
         if (!machine_id) {

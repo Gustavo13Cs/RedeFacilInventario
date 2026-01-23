@@ -26,9 +26,13 @@ import DashboardHome from './components/DashboardHome';
 import TagGenerator from './pages/TagGenerator'; 
 
 const getSocketUrl = (url) => {
+  if (!url) return "";
   let cleanUrl = url.endsWith('/') ? url.slice(0, -1) : url;
   if (cleanUrl.endsWith('/api')) {
     cleanUrl = cleanUrl.slice(0, -4);
+  }
+  if (cleanUrl.startsWith('http:')) {
+     cleanUrl = cleanUrl.replace('http:', 'https:');
   }
   return cleanUrl;
 };
@@ -38,6 +42,7 @@ const socket = io(getSocketUrl(API_URL), {
 });
 
 function App() {
+  const [socket, setSocket] = useState(null);
   const [machines, setMachines] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [stats, setStats] = useState({ total: 0, online: 0, critical: 0 });
@@ -134,6 +139,36 @@ function App() {
     const token = localStorage.getItem('token');
     const user = localStorage.getItem('user_name');
     const role = localStorage.getItem('user_role');
+    
+    const socketUrl = getSocketUrl(API_URL);
+
+    console.log("🔌 Tentando conectar Socket em:", socketUrl);
+
+    const newSocket = io(socketUrl, {
+      transports: ['websocket'],
+      secure: true,              
+      rejectUnauthorized: false, 
+      reconnection: true,
+      reconnectionAttempts: 10,
+      reconnectionDelay: 2000
+    });
+
+    newSocket.on('connect', () => {
+      console.log("✅ Socket Conectado com Sucesso! ID:", newSocket.id);
+    });
+
+    newSocket.on('connect_error', (err) => {
+      console.error("❌ Falha na conexão do Socket:", err.message);
+    });
+
+    newSocket.on("new_telemetry", (data) => {
+      setLastTelemetry(data);
+      setMachines(prevMachines => 
+          prevMachines.map(m => m.uuid === data.machine_uuid ? { ...m, status: data.status || 'online' } : m)
+      );
+    });
+
+    setSocket(newSocket);
 
     if (token) {
       setIsAuthenticated(true);
@@ -141,17 +176,9 @@ function App() {
       setUserRole(role || 'suporte');
       fetchMachines(); 
     }
-    
-    socket.on("new_telemetry", (data) => {
-      setLastTelemetry(data);
-      setMachines(prevMachines => 
-         prevMachines.map(m => m.uuid === data.machine_uuid ? { ...m, status: data.status || 'online' } : m)
-      );
-    });
 
     return () => {
-      socket.off("connect");
-      socket.off("new_telemetry");
+      if (newSocket) newSocket.disconnect();
     };
   }, []);
 
