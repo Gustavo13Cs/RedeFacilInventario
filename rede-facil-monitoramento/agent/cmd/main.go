@@ -2,7 +2,7 @@ package main
 
 import (
 	"bytes"
-	"crypto/tls" 
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -30,7 +30,7 @@ import (
 )
 
 // --- CONFIGURAÇÕES DE AUTO-UPDATE E SEGURANÇA ---
-const AGENT_VERSION = "5.3-LGPD" 
+const AGENT_VERSION = "5.5-LGPD" 
 const UPDATE_BASE_URL = "https://192.168.50.60:3001/updates"
 const UPDATE_URL_VERSION = "https://192.168.50.60:3001/updates/version.txt"
 const UPDATE_URL_EXE = "https://192.168.50.60:3001/updates/AgenteRedeFacil.exe"
@@ -64,13 +64,26 @@ var AgentSecret string = "REDE_FACIL_AGENTE_SECRETO_2026"
 
 var httpClient *http.Client
 
+// --- NOVO: FUNÇÃO PARA GERAR LOG EM ARQUIVO (DEBUG) ---
+func setupLogger() {
+	logFileLocation := "agente_debug.log"
+	f, err := os.OpenFile(logFileLocation, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
+	if err != nil {
+		fmt.Printf("Erro ao criar log: %v", err)
+		return
+	}
+	// Grava log tanto no arquivo quanto no terminal
+	wrt := io.MultiWriter(os.Stdout, f)
+	log.SetOutput(wrt)
+}
+
 func init() {
 	tr := &http.Transport{
 		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
 	}
 	httpClient = &http.Client{
 		Transport: tr,
-		Timeout:   30 * time.Second, 
+		Timeout:   30 * time.Second,
 	}
 }
 
@@ -171,6 +184,13 @@ func shutdownPC() {
 }
 
 func checkAutoShutdown() {
+	// Proteção contra crash no timer
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("⚠️ Erro recuperado no checkAutoShutdown: %v", r)
+		}
+	}()
+
 	if !AutoShutdownEnabled {
 		return
 	}
@@ -187,6 +207,7 @@ func checkAutoShutdown() {
 		}
 	}
 }
+
 func getIdleTime() uint32 {
 	var lii LASTINPUTINFO
 	lii.cbSize = uint32(unsafe.Sizeof(lii))
@@ -196,6 +217,7 @@ func getIdleTime() uint32 {
 	getTickCount := kernel32.NewProc("GetTickCount")
 	t, _, _ := getTickCount.Call()
 
+	if t == 0 { return 0 }
 	return (uint32(t) - lii.dwTime) / 1000
 }
 
@@ -270,6 +292,15 @@ func pingHost(target string) (int, int) {
 }
 
 func startNetworkMonitor() {
+	// Proteção contra crash da rede
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("⚠️ Erro recuperado no NetworkMonitor: %v. Reiniciando monitor...", r)
+			time.Sleep(30 * time.Second)
+			go startNetworkMonitor()
+		}
+	}()
+
 	for {
 		lat, loss := pingHost("8.8.8.8")
 
@@ -285,81 +316,100 @@ func startNetworkMonitor() {
 }
 
 func checkForUpdates() {
-    for {
-        time.Sleep(10 * time.Second)
+	// Proteção contra crash no update
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("⚠️ Crash recuperado no checkForUpdates: %v", r)
+			time.Sleep(1 * time.Minute)
+			go checkForUpdates()
+		}
+	}()
 
-        tr := &http.Transport{
-            TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-        }
-        client := &http.Client{Transport: tr, Timeout: 10 * time.Second}
+	for {
+		time.Sleep(1 * time.Minute) // Verifica a cada 1 minuto
 
-        resp, err := client.Get(UPDATE_URL_VERSION)
-        if err != nil {
-            log.Printf("⚠️ Erro ao verificar atualizações: %v", err)
-            continue
-        }
-        
-        body, err := io.ReadAll(resp.Body)
-        resp.Body.Close()
-        if err != nil {
-            continue
-        }
+		tr := &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+		}
+		client := &http.Client{Transport: tr, Timeout: 10 * time.Second}
 
-        remoteVersion := strings.TrimSpace(string(body))
-        
-        if remoteVersion != "" && remoteVersion != AGENT_VERSION {
-            log.Printf("🔄 Nova versão encontrada: %s (Atual: %s). Iniciando atualização...", remoteVersion, AGENT_VERSION)
-            doUpdate(client) 
-        }
-    }
+		resp, err := client.Get(UPDATE_URL_VERSION)
+		if err != nil {
+			log.Printf("⚠️ Erro ao verificar atualizações: %v", err)
+			continue
+		}
+		
+		body, err := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if err != nil {
+			continue
+		}
+
+		remoteVersion := strings.TrimSpace(string(body))
+		
+		if remoteVersion != "" && remoteVersion != AGENT_VERSION {
+			log.Printf("🔄 Nova versão encontrada: %s (Atual: %s). Iniciando atualização...", remoteVersion, AGENT_VERSION)
+			doUpdate(client) 
+		}
+	}
 }
 
 func doUpdate(client *http.Client) {
-    exePath, err := os.Executable()
-    if err != nil {
-        log.Printf("❌ Erro ao obter caminho do executável: %v", err)
-        return
-    }
+	exePath, err := os.Executable()
+	if err != nil {
+		log.Printf("❌ Erro ao obter caminho do executável: %v", err)
+		return
+	}
 
-    oldPath := exePath + ".old"
+	oldPath := exePath + ".old"
 
-    if _, err := os.Stat(oldPath); err == nil {
-        os.Remove(oldPath)
-    }
+	if _, err := os.Stat(oldPath); err == nil {
+		os.Remove(oldPath)
+	}
 
-    err = os.Rename(exePath, oldPath)
-    if err != nil {
-        log.Printf("❌ Falha ao renomear executável atual: %v", err)
-        return
-    }
+	err = os.Rename(exePath, oldPath)
+	if err != nil {
+		log.Printf("❌ Falha ao renomear executável atual: %v", err)
+		return
+	}
 
-    log.Println("⬇️ Baixando nova versão...")
-    resp, err := client.Get(UPDATE_URL_EXE)
-    if err != nil {
-        log.Printf("❌ Erro no download: %v", err)
-        os.Rename(oldPath, exePath) 
-        return
-    }
-    defer resp.Body.Close()
+	log.Println("⬇️ Baixando nova versão...")
+	resp, err := client.Get(UPDATE_URL_EXE)
+	if err != nil {
+		log.Printf("❌ Erro no download: %v", err)
+		os.Rename(oldPath, exePath) 
+		return
+	}
+	defer resp.Body.Close()
 
-    out, err := os.Create(exePath)
-    if err != nil {
-        log.Printf("❌ Erro ao criar novo arquivo: %v", err)
-        os.Rename(oldPath, exePath) 
-    }
-    defer out.Close()
+	out, err := os.Create(exePath)
+	if err != nil {
+		log.Printf("❌ Erro ao criar novo arquivo: %v", err)
+		os.Rename(oldPath, exePath) 
+		return // Retorna para evitar crash
+	}
+	
+	_, err = io.Copy(out, resp.Body)
+	out.Close() // Fecha explicitamente aqui
 
-    _, err = io.Copy(out, resp.Body)
-    if err != nil {
-        log.Printf("❌ Erro ao salvar novo executável: %v", err)
-        return
-    }
+	if err != nil {
+		log.Printf("❌ Erro ao salvar novo executável: %v", err)
+		return
+	}
 
-    log.Println("✅ Atualização baixada com sucesso! Reiniciando agente...")
+	log.Println("✅ Atualização baixada com sucesso! Reiniciando agente...")
 
-    cmd := exec.Command(exePath)
-    cmd.Start()
-    os.Exit(0)
+	// --- CORREÇÃO DO REINÍCIO (Usa 'start' do Windows para separar processo) ---
+	cmd := exec.Command("cmd", "/C", "start", "", exePath)
+	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+	errStart := cmd.Start()
+	
+	if errStart != nil {
+		log.Printf("❌ Erro ao reiniciar agente automaticamente: %v", errStart)
+	} else {
+		log.Println("👋 Encerrando processo antigo para troca.")
+		os.Exit(0)
+	}
 }
 
 func getBackupFolderPath() string {
@@ -466,10 +516,10 @@ func collectInstalledSoftware() []Software {
 	}
 
 	psCommand := `
-        Get-ItemProperty HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*, HKLM:\Software\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall\* | 
-        Where-Object { $_.DisplayName -ne $null } | 
-        ForEach-Object { $_.DisplayName + "|||" + $_.DisplayVersion }
-    `
+		Get-ItemProperty HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*, HKLM:\Software\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall\* | 
+		Where-Object { $_.DisplayName -ne $null } | 
+		ForEach-Object { $_.DisplayName + "|||" + $_.DisplayVersion }
+	`
 
 	outputStr, err := runCommandHidden("powershell", "-NoProfile", "-Command", psCommand)
 
@@ -577,6 +627,13 @@ func getNetworkDetails() (gateway string, mask string) {
 }
 
 func collectStaticInfo() MachineInfo {
+	// Proteção contra crash na coleta de info estática
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("⚠️ Erro recuperado no collectStaticInfo: %v", r)
+		}
+	}()
+
 	hInfo, _ := host.Info()
 	mInfo, _ := mem.VirtualMemory()
 	cInfos, _ := cpu.Info()
@@ -665,6 +722,13 @@ func collectStaticInfo() MachineInfo {
 }
 
 func collectTelemetry() TelemetryData {
+	// --- PROTEÇÃO CONTRA CRASH: RECOVER ---
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("⚠️ Erro recuperado no collectTelemetry: %v", r)
+		}
+	}()
+
 	cpuPercent, err := cpu.Percent(1*time.Second, false)
 	cpuValue := 0.0
 	if err == nil && len(cpuPercent) > 0 {
@@ -799,7 +863,7 @@ func handleRemoteCommand(command string, payload string) {
 				# Tenta deletar o anterior se existir
 				if (Test-Path $path) { Remove-Item $path -Force }
 
-				# ADICIONE ESTA LINHA ABAIXO PARA O POWERSHELL ACEITAR O CERTIFICADO AUTOASSINADO:
+				# Aceita certificado autoassinado
 				[System.Net.ServicePointManager]::ServerCertificateValidationCallback = {$true}
 
 				# Download
@@ -811,7 +875,7 @@ func handleRemoteCommand(command string, payload string) {
 					exit
 				}
 				
-				# Código C# para forçar a atualização via API do Windows
+				# Troca Wallpaper via DLL
 				$code = @'
 				using System;
 				using System.Runtime.InteropServices;
@@ -821,10 +885,6 @@ func handleRemoteCommand(command string, payload string) {
 				}
 '@
 				Add-Type -TypeDefinition $code
-				
-				# SPI_SETDESKWALLPAPER = 0x0014
-				# SPIF_UPDATEINIFILE = 0x01
-				# SPIF_SENDWININICHANGE = 0x02
 				[Wallpaper]::SystemParametersInfo(0x0014, 0, $path, 0x03)
 			`, payload)
 
@@ -874,9 +934,9 @@ func createRestorePoint() {
 	log.Println("🛠️ Iniciando criação de Ponto de Restauração (7 dias)...")
 
 	psScript := `
-    Enable-ComputerRestore -Drive "C:\"
-    Checkpoint-Computer -Description "Agente Rede Facil Auto" -RestorePointType "MODIFY_SETTINGS"
-    `
+	Enable-ComputerRestore -Drive "C:\"
+	Checkpoint-Computer -Description "Agente Rede Facil Auto" -RestorePointType "MODIFY_SETTINGS"
+	`
 
 	_, err := runCommandHidden("powershell.exe", "-ExecutionPolicy", "Bypass", "-Command", psScript)
 
@@ -938,6 +998,13 @@ func postData(endpoint string, data interface{}) {
 }
 
 func registerMachine() {
+	// Proteção contra crash no registro
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("⚠️ Erro recuperado no registro: %v", r)
+		}
+	}()
+
 	info := collectStaticInfo()
 	url := fmt.Sprintf("%s/register", API_BASE_URL)
 	jsonValue, _ := json.Marshal(info)
@@ -960,6 +1027,8 @@ func registerMachine() {
 }
 
 func main() {
+	setupLogger()
+
 	log.Printf("Agente v%s Iniciando...", AGENT_VERSION)
 
 	ensureAutoStart()
