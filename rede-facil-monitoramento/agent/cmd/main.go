@@ -30,7 +30,7 @@ import (
 )
 
 // --- CONFIGURAÇÕES DE AUTO-UPDATE E SEGURANÇA ---
-const AGENT_VERSION = "5.1-LGPD" 
+const AGENT_VERSION = "5.2-LGPD" 
 const UPDATE_BASE_URL = "https://192.168.50.60:3001/updates"
 const UPDATE_URL_VERSION = "https://192.168.50.60:3001/updates/version.txt"
 const UPDATE_URL_EXE = "https://192.168.50.60:3001/updates/AgenteRedeFacil.exe"
