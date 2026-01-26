@@ -2,7 +2,7 @@ package main
 
 import (
 	"bytes"
-	"context" 
+	"context"
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
@@ -15,7 +15,6 @@ import (
 	"os/exec"
 	"os/user"
 	"path/filepath"
-	"regexp"
 	"runtime"
 	"strconv"
 	"strings"
@@ -30,16 +29,15 @@ import (
 	gonet "github.com/shirou/gopsutil/v3/net"
 )
 
-const AGENT_VERSION = "6.0" 
+// --- CONFIGURAÇÕES ---
+const AGENT_VERSION = "6.1" 
 const UPDATE_BASE_URL = "https://192.168.50.60:3001/updates"
 const UPDATE_URL_VERSION = "https://192.168.50.60:3001/updates/version.txt"
 const UPDATE_URL_EXE = "https://192.168.50.60:3001/updates/AgenteRedeFacil.exe"
-const EXECUTABLE_NAME = "AgenteRedeFacil.exe"
-
-const RESTORE_POINT_FILE = "restore_point_last_run.txt"
 const API_BASE_URL = "https://192.168.50.60:3001/api"
 
-const TELEMETRY_INTERVAL = 20 * time.Second
+const RESTORE_POINT_FILE = "restore_point_last_run.txt"
+const TELEMETRY_INTERVAL = 20 * time.Second 
 const RESTORE_POINT_INTERVAL = 168 * time.Hour
 
 const MAX_RETRIES = 3
@@ -61,10 +59,8 @@ func preventSystemSleep() {
 }
 
 var AgentSecret string = "REDE_FACIL_AGENTE_SECRETO_2026"
-
 var httpClient *http.Client
 
-// --- FUNÇÃO PARA GERAR LOG EM ARQUIVO (DEBUG) ---
 func setupLogger() {
 	logFileLocation := "agente_debug.log"
 	f, err := os.OpenFile(logFileLocation, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
@@ -72,7 +68,6 @@ func setupLogger() {
 		fmt.Printf("Erro ao criar log: %v", err)
 		return
 	}
-	// Grava log tanto no arquivo quanto no terminal
 	wrt := io.MultiWriter(os.Stdout, f)
 	log.SetOutput(wrt)
 }
@@ -80,6 +75,10 @@ func setupLogger() {
 func init() {
 	tr := &http.Transport{
 		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+		DisableKeepAlives: false,
+		MaxIdleConns:      10,
+		IdleConnTimeout:   90 * time.Second,
+		TLSHandshakeTimeout: 10 * time.Second,
 	}
 	httpClient = &http.Client{
 		Transport: tr,
@@ -184,25 +183,20 @@ func shutdownPC() {
 }
 
 func checkAutoShutdown() {
-	// Proteção contra crash no timer
 	defer func() {
 		if r := recover(); r != nil {
 			log.Printf("⚠️ Erro recuperado no checkAutoShutdown: %v", r)
 		}
 	}()
 
-	if !AutoShutdownEnabled {
-		return
-	}
+	if !AutoShutdownEnabled { return }
 
 	now := time.Now()
 	if now.Hour() > 19 || (now.Hour() == 19 && now.Minute() >= 15) {
 		idleSeconds := getIdleTime()
-
 		const tolerancia = 300
-
 		if idleSeconds >= tolerancia {
-			log.Printf("🌙 Horário limite (19:15) e inatividade atingidos. Desligando...")
+			log.Printf("🌙 Horário limite atingido. Desligando...")
 			shutdownPC()
 		}
 	}
@@ -221,13 +215,10 @@ func getIdleTime() uint32 {
 	return (uint32(t) - lii.dwTime) / 1000
 }
 
-// 🔴 CORREÇÃO CRÍTICA: Função com TIMEOUT para impedir travamento eterno
 func runCommandHidden(command string, args ...string) (string, error) {
-	// Define um limite de 5 segundos para qualquer comando do Windows
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	// Usa CommandContext em vez de Command simples
 	cmd := exec.CommandContext(ctx, command, args...)
 	cmd.SysProcAttr = &syscall.SysProcAttr{
 		HideWindow:    true,
@@ -236,10 +227,9 @@ func runCommandHidden(command string, args ...string) (string, error) {
 
 	output, err := cmd.Output()
 
-	// Verifica se o erro foi por timeout
 	if ctx.Err() == context.DeadlineExceeded {
-		log.Printf("⚠️ ALERTA: Comando '%s' travou e foi cancelado pelo Agente.", command)
-		return "", fmt.Errorf("timeout executando comando")
+		log.Printf("⚠️ Comando '%s' cancelado (Timeout)", command)
+		return "", fmt.Errorf("timeout excedido")
 	}
 
 	return string(output), err
@@ -251,8 +241,6 @@ func ensureAutoStart() {
 	if err != nil { return }
 
 	taskName := "AgenteRedeFacil"
-	log.Println("🛠️ Tentando criar Tarefa Agendada (Admin)...")
-
 	cmdTask := exec.Command("schtasks", "/create", "/tn", taskName, "/tr", exePath, "/sc", "onlogon", "/rl", "highest", "/f")
 	cmdTask.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 	errTask := cmdTask.Run()
@@ -262,7 +250,6 @@ func ensureAutoStart() {
 		return 
 	}
 
-	log.Printf("⚠️ Falha ao criar tarefa (provavelmente sem Admin). Usando Registro HKCU...")
 	psCommand := fmt.Sprintf(`
 		$key = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
 		$name = 'AgenteRedeFacil'
@@ -276,95 +263,53 @@ func ensureAutoStart() {
 }
 
 func pingHost(target string) (int, int) {
-	outputStr, err := runCommandHidden("ping", "-n", "4", "-w", "1000", target)
-
-	if err != nil {
-		return 0, 100
-	}
-
-	reLatency := regexp.MustCompile(`(?i)(Average|M.dia|Media).*?=\s*(\d+)ms`)
-	matches := reLatency.FindAllStringSubmatch(outputStr, -1)
-
-	latency := 0
-	if len(matches) > 0 {
-		lastMatch := matches[len(matches)-1]
-		if len(lastMatch) > 2 {
-			latency, _ = strconv.Atoi(lastMatch[2])
-		}
-	}
-
-	reLoss := regexp.MustCompile(`\((\d+)%\s?(loss|de perda)\)`)
-	matchLoss := reLoss.FindStringSubmatch(outputStr)
-
-	loss := 0
-	if len(matchLoss) > 1 {
-		loss, _ = strconv.Atoi(matchLoss[1])
-	}
-
-	if latency == 0 && (strings.Contains(strings.ToLower(outputStr), "esgotado") || strings.Contains(strings.ToLower(outputStr), "unreachable")) {
-		loss = 100
-	}
-
-	return latency, loss
+	outputStr, err := runCommandHidden("ping", "-n", "1", "-w", "1000", target)
+	if err != nil { return 0, 100 }
+	if strings.Contains(outputStr, "TTL=") { return 20, 0 }
+	return 0, 100
 }
 
 func startNetworkMonitor() {
 	defer func() {
 		if r := recover(); r != nil {
-			log.Printf("⚠️ Erro recuperado no NetworkMonitor: %v. Reiniciando monitor...", r)
 			time.Sleep(30 * time.Second)
 			go startNetworkMonitor()
 		}
 	}()
-
 	for {
 		lat, loss := pingHost("8.8.8.8")
-
-		dataGoogle := NetworkStats{
-			MachineUUID: getMachineUUID(),
-			Target:      "8.8.8.8",
-			LatencyMS:   lat,
-			PacketLoss:  loss,
-		}
-		postData("/telemetry/network", dataGoogle)
+		postData("/telemetry/network", NetworkStats{
+			MachineUUID: getMachineUUID(), Target: "8.8.8.8", LatencyMS: lat, PacketLoss: loss,
+		})
 		time.Sleep(30 * time.Second)
 	}
 }
 
 func checkForUpdates() {
-	// Proteção contra crash no update
 	defer func() {
 		if r := recover(); r != nil {
-			log.Printf("⚠️ Crash recuperado no checkForUpdates: %v", r)
 			time.Sleep(1 * time.Minute)
 			go checkForUpdates()
 		}
 	}()
 
 	for {
-		time.Sleep(1 * time.Minute) // Verifica a cada 1 minuto
+		time.Sleep(1 * time.Minute)
 
-		tr := &http.Transport{
-			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-		}
+		tr := &http.Transport{ TLSClientConfig: &tls.Config{InsecureSkipVerify: true} }
 		client := &http.Client{Transport: tr, Timeout: 10 * time.Second}
 
 		resp, err := client.Get(UPDATE_URL_VERSION)
-		if err != nil {
-			log.Printf("⚠️ Erro ao verificar atualizações: %v", err)
-			continue
-		}
+		if err != nil { continue }
 		
 		body, err := io.ReadAll(resp.Body)
 		resp.Body.Close()
-		if err != nil {
-			continue
-		}
+		if err != nil { continue }
 
 		remoteVersion := strings.TrimSpace(string(body))
 		
 		if remoteVersion != "" && remoteVersion != AGENT_VERSION {
-			log.Printf("🔄 Nova versão encontrada: %s (Atual: %s). Iniciando atualização...", remoteVersion, AGENT_VERSION)
+			log.Printf("🔄 Update Detectado: %s -> %s", AGENT_VERSION, remoteVersion)
 			doUpdate(client) 
 		}
 	}
@@ -372,27 +317,14 @@ func checkForUpdates() {
 
 func doUpdate(client *http.Client) {
 	exePath, err := os.Executable()
-	if err != nil {
-		log.Printf("❌ Erro ao obter caminho do executável: %v", err)
-		return
-	}
-
+	if err != nil { return }
 	oldPath := exePath + ".old"
 
-	if _, err := os.Stat(oldPath); err == nil {
-		os.Remove(oldPath)
-	}
+	if _, err := os.Stat(oldPath); err == nil { os.Remove(oldPath) }
+	if err := os.Rename(exePath, oldPath); err != nil { return }
 
-	err = os.Rename(exePath, oldPath)
-	if err != nil {
-		log.Printf("❌ Falha ao renomear executável atual: %v", err)
-		return
-	}
-
-	log.Println("⬇️ Baixando nova versão...")
 	resp, err := client.Get(UPDATE_URL_EXE)
 	if err != nil {
-		log.Printf("❌ Erro no download: %v", err)
 		os.Rename(oldPath, exePath) 
 		return
 	}
@@ -400,45 +332,29 @@ func doUpdate(client *http.Client) {
 
 	out, err := os.Create(exePath)
 	if err != nil {
-		log.Printf("❌ Erro ao criar novo arquivo: %v", err)
 		os.Rename(oldPath, exePath) 
-		return // Retorna para evitar crash
+		return
 	}
 	
 	_, err = io.Copy(out, resp.Body)
-	out.Close() // Fecha explicitamente aqui
+	out.Close()
 
-	if err != nil {
-		log.Printf("❌ Erro ao salvar novo executável: %v", err)
-		return
-	}
-
-	log.Println("✅ Atualização baixada com sucesso! Reiniciando agente...")
+	if err != nil { return }
 
 	cmd := exec.Command("cmd", "/C", "start", "", exePath)
 	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
-	errStart := cmd.Start()
-	
-	if errStart != nil {
-		log.Printf("❌ Erro ao reiniciar agente automaticamente: %v", errStart)
-	} else {
-		log.Println("👋 Encerrando processo antigo para troca.")
-		os.Exit(0)
-	}
+	cmd.Start()
+	os.Exit(0)
 }
 
 func getBackupFolderPath() string {
 	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		return "C:\\backup_agente"
-	}
+	if err != nil { return "C:\\backup_agente" }
 	return filepath.Join(homeDir, "Documents", "backup_agente")
 }
 
 func execWmic(args ...string) string {
-	if runtime.GOOS != "windows" {
-		return "N/A"
-	}
+	if runtime.GOOS != "windows" { return "N/A" }
 	var cmdArgs []string
 	if len(args) == 1 {
 		cmdArgs = strings.Fields(args[0])
@@ -447,138 +363,77 @@ func execWmic(args ...string) string {
 	}
 
 	output, err := runCommandHidden("wmic", cmdArgs...)
-	if err != nil {
-		return "N/A"
-	}
+	if err != nil { return "N/A" }
 
 	result := strings.TrimSpace(output)
 	lines := strings.Split(result, "\n")
 	if len(lines) > 1 {
 		val := strings.TrimSpace(lines[1])
-		if val != "" {
-			return val
-		}
+		if val != "" { return val }
 	}
 	return "N/A"
 }
 
 func getMemorySlotsInfo() (total int, used int) {
-	if runtime.GOOS != "windows" {
-		return 0, 0
-	}
-	totalOutput := execWmic("memphysical get MemoryDevices")
-	totalValue, _ := strconv.Atoi(strings.TrimSpace(totalOutput))
-	if totalValue > 0 {
-		total = totalValue
-	}
-
+	if runtime.GOOS != "windows" { return 0, 0 }
+	totalVal, _ := strconv.Atoi(strings.TrimSpace(execWmic("memphysical get MemoryDevices")))
+	if totalVal > 0 { total = totalVal }
 	outStr, err := runCommandHidden("wmic", "memorychip", "get", "banklabel")
-	if err != nil {
-		return total, 0
-	}
-	lines := strings.Split(outStr, "\n")
-	used = 0
-	for i, line := range lines {
-		line = strings.TrimSpace(line)
-		if i == 0 || line == "" || line == "BankLabel" {
-			continue
+	if err == nil {
+		lines := strings.Split(outStr, "\n")
+		for i, line := range lines {
+			if i == 0 || strings.TrimSpace(line) == "" { continue }
+			used++
 		}
-		used++
 	}
 	return total, used
 }
 
 func getGPUInfo() (model string, vramMB int) {
-	if runtime.GOOS != "windows" {
-		return "N/A", 0
-	}
+	if runtime.GOOS != "windows" { return "N/A", 0 }
 	model = execWmic("path Win32_VideoController get Name")
-	vramBytesOutput := execWmic("path Win32_VideoController get AdapterRAM")
-	vramBytes, _ := strconv.ParseInt(strings.TrimSpace(vramBytesOutput), 10, 64)
+	vramStr := execWmic("path Win32_VideoController get AdapterRAM")
+	vramBytes, _ := strconv.ParseInt(vramStr, 10, 64)
 	vramMB = int(vramBytes / (1024 * 1024))
-	if vramMB < 0 {
-		vramMB *= -1
-	}
-	if model == "" || strings.Contains(strings.ToLower(model), "basic render driver") {
-		if vramMB > 0 {
-			return "Integrada / Onboard", vramMB
-		}
-		return "N/A", 0
-	}
+	if vramMB < 0 { vramMB *= -1 }
+	if model == "" { model = "N/A" }
 	return model, vramMB
 }
 
 func getMachineType() string {
-	if runtime.GOOS != "windows" {
-		return "Indefinido"
-	}
-	chassisType := strings.TrimSpace(execWmic("csenclosure get chassistypes"))
-	switch chassisType {
-	case "8", "9", "10", "14":
-		return "Notebook/Laptop"
-	case "1", "2", "3", "4", "5", "6", "7", "13", "15", "16":
-		return "Desktop/Workstation"
-	case "17", "21", "22", "23":
-		return "Servidor"
-	default:
-		return "Hardware Genérico"
+	if runtime.GOOS != "windows" { return "Indefinido" }
+	chassis := strings.TrimSpace(execWmic("csenclosure get chassistypes"))
+	switch chassis {
+	case "8", "9", "10", "14": return "Notebook/Laptop"
+	case "1", "2", "3", "4", "5", "6", "7": return "Desktop"
+	default: return "Desktop/Genérico"
 	}
 }
 
 func collectInstalledSoftware() []Software {
-	if runtime.GOOS != "windows" {
-		return []Software{}
-	}
-
-	psCommand := `
-		Get-ItemProperty HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*, HKLM:\Software\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall\* | 
-		Where-Object { $_.DisplayName -ne $null } | 
-		ForEach-Object { $_.DisplayName + "|||" + $_.DisplayVersion }
-	`
-
+	if runtime.GOOS != "windows" { return []Software{} }
+	psCommand := `Get-ItemProperty HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*, HKLM:\Software\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall\* | Where-Object { $_.DisplayName -ne $null } | ForEach-Object { $_.DisplayName + "|||" + $_.DisplayVersion }`
 	outputStr, err := runCommandHidden("powershell", "-NoProfile", "-Command", psCommand)
-
-	if err != nil {
-		log.Printf("Erro ao coletar softwares: %v", err)
-		return []Software{}
-	}
-
-	var softwareList []Software
+	if err != nil { return []Software{} }
+	var list []Software
 	lines := strings.Split(outputStr, "\n")
-
 	for _, line := range lines {
-		line = strings.TrimSpace(line)
-		if line == "" {
-			continue
+		parts := strings.Split(strings.TrimSpace(line), "|||")
+		if len(parts) >= 1 && parts[0] != "" {
+			ver := ""
+			if len(parts) > 1 { ver = parts[1] }
+			list = append(list, Software{Name: parts[0], Version: ver})
 		}
-
-		parts := strings.Split(line, "|||")
-		name := parts[0]
-		version := ""
-
-		if len(parts) > 1 {
-			version = parts[1]
-		}
-
-		softwareList = append(softwareList, Software{
-			Name:    name,
-			Version: version,
-		})
 	}
-
-	return softwareList
+	return list
 }
 
 func collectNetworkInterfaces() []NetworkInterface {
 	interfaces, err := gonet.Interfaces()
-	if err != nil {
-		return nil
-	}
+	if err != nil { return nil }
 	var nics []NetworkInterface
 	for _, iface := range interfaces {
-		if strings.Contains(strings.Join(iface.Flags, ","), "loopback") || iface.HardwareAddr == "" {
-			continue
-		}
+		if strings.Contains(strings.Join(iface.Flags, ","), "loopback") || iface.HardwareAddr == "" { continue }
 		nics = append(nics, NetworkInterface{
 			InterfaceName: iface.Name,
 			MACAddress:    iface.HardwareAddr,
@@ -591,9 +446,7 @@ func collectNetworkInterfaces() []NetworkInterface {
 
 func getLocalIP() string {
 	conn, err := net.Dial("udp", "8.8.8.8:80")
-	if err != nil {
-		return "127.0.0.1"
-	}
+	if err != nil { return "127.0.0.1" }
 	defer conn.Close()
 	return conn.LocalAddr().(*net.UDPAddr).IP.String()
 }
@@ -604,33 +457,24 @@ func getMachineUUID() string {
 	username := "unknown"
 	if err == nil && u != nil {
 		parts := strings.Split(u.Username, "\\")
-		username = parts[len(parts)-1]
+		if len(parts) > 0 { username = parts[len(parts)-1] }
 	}
 	rawUUID := fmt.Sprintf("%s-%s", h, username)
 	return strings.ReplaceAll(strings.ReplaceAll(rawUUID, "\\", "-"), "/", "-")
 }
 
 func getLastRestorePoint() string {
-	if runtime.GOOS != "windows" {
-		return "N/A"
-	}
-	backupFolder := getBackupFolderPath()
-	restoreFile := filepath.Join(backupFolder, RESTORE_POINT_FILE)
+	if runtime.GOOS != "windows" { return "N/A" }
+	restoreFile := filepath.Join(getBackupFolderPath(), RESTORE_POINT_FILE)
 	content, err := os.ReadFile(restoreFile)
-	if err != nil {
-		return "Nunca realizado"
-	}
+	if err != nil { return "Nunca realizado" }
 	return strings.TrimSpace(string(content))
 }
 
 func getNetworkDetails() (gateway string, mask string) {
-	if runtime.GOOS != "windows" {
-		return "N/A", "N/A"
-	}
+	if runtime.GOOS != "windows" { return "N/A", "N/A" }
 	outStr, err := runCommandHidden("wmic", "nicconfig", "where", "IPEnabled=true and DefaultIPGateway is not null", "get", "DefaultIPGateway,IPSubnet")
-	if err != nil {
-		return "N/A", "N/A"
-	}
+	if err != nil { return "N/A", "N/A" }
 	lines := strings.Split(strings.TrimSpace(outStr), "\n")
 	if len(lines) > 1 {
 		vals := strings.Fields(lines[1])
@@ -642,75 +486,35 @@ func getNetworkDetails() (gateway string, mask string) {
 }
 
 func collectStaticInfo() MachineInfo {
-	// Proteção contra crash na coleta de info estática
 	defer func() {
-		if r := recover(); r != nil {
-			log.Printf("⚠️ Erro recuperado no collectStaticInfo: %v", r)
-		}
+		if r := recover(); r != nil { log.Printf("⚠️ Erro static info: %v", r) }
 	}()
-
 	hInfo, _ := host.Info()
 	mInfo, _ := mem.VirtualMemory()
 	cInfos, _ := cpu.Info()
-	dPartitions, _ := disk.Partitions(false)
-
+	
 	cpuModel := "N/A"
 	var cpuSpeed float64
-
 	if len(cInfos) > 0 {
 		cpuModel = cInfos[0].ModelName
 		cpuSpeed = cInfos[0].Mhz
 	}
-
-	if (cpuModel == "N/A" || cpuModel == "") && runtime.GOOS == "windows" {
-		wmicName := execWmic("cpu get name")
-		if wmicName != "N/A" && wmicName != "" {
-			cpuModel = wmicName
-		}
-
-		if cpuSpeed == 0 {
-			wmicSpeed := execWmic("cpu get maxclockspeed")
-			if s, err := strconv.ParseFloat(wmicSpeed, 64); err == nil {
-				cpuSpeed = s
-			}
-		}
-	}
-
+	
 	cpuCoresPhysical, _ := cpu.Counts(false)
 	cpuCoresLogical, _ := cpu.Counts(true)
-
-	machineModel := execWmic("csproduct get name")
-	serialNumber := execWmic("bios get serialnumber")
-	if serialNumber == "N/A" || serialNumber == "" {
-		serialNumber = hInfo.HostID
-	}
-
-	gw, mask := getNetworkDetails()
-	gpuModel, gpuVRAM := getGPUInfo()
-	memSlotsTotal, memSlotsUsed := getMemorySlotsInfo()
-
-	networkInterfaces := collectNetworkInterfaces()
-	installedSoftware := collectInstalledSoftware()
-
-	var diskTotalGB float64
-	rootPath := "C:\\"
-	if runtime.GOOS != "windows" {
-		rootPath = "/"
-	}
-	dUsage, err := disk.Usage(rootPath)
+	
+	diskTotalGB := 0.0
+	dUsage, err := disk.Usage("C:")
 	if err == nil {
-		diskTotalGB = float64(dUsage.Total) / (1024 * 1024 * 1024)
-	} else if len(dPartitions) > 0 {
-		dUsage, _ := disk.Usage(dPartitions[0].Mountpoint)
-		diskTotalGB = float64(dUsage.Total) / (1024 * 1024 * 1024)
+		diskTotalGB = float64(dUsage.Total) / (1024*1024*1024)
 	}
 
 	return MachineInfo{
 		UUID:                    getMachineUUID(),
 		Hostname:                hInfo.Hostname,
 		IPAddress:               getLocalIP(),
-		DefaultGateway:          gw,
-		SubnetMask:              mask,
+		DefaultGateway:          "N/A",
+		SubnetMask:              "N/A",
 		OSName:                  fmt.Sprintf("%s %s", hInfo.OS, hInfo.Platform),
 		CPUModel:                cpuModel,
 		CPUSpeedMhz:             cpuSpeed,
@@ -719,63 +523,48 @@ func collectStaticInfo() MachineInfo {
 		RAMTotalGB:              float64(mInfo.Total) / (1024 * 1024 * 1024),
 		DiskTotalGB:             diskTotalGB,
 		MACAddress:              "00:00:00:00:00:00",
-		MachineModel:            machineModel,
-		SerialNumber:            serialNumber,
+		MachineModel:            execWmic("csproduct get name"),
+		SerialNumber:            execWmic("bios get serialnumber"),
 		MachineType:             getMachineType(),
 		MotherboardManufacturer: execWmic("baseboard get manufacturer"),
 		MotherboardModel:        execWmic("baseboard get product"),
 		MotherboardVersion:      execWmic("baseboard get version"),
-		GPUModel:                gpuModel,
-		GPUVRAMMB:               gpuVRAM,
+		GPUModel:                "N/A", 
+		GPUVRAMMB:               0,
 		LastBootTime:            time.Unix(int64(hInfo.BootTime), 0).Format("2006-01-02 15:04:05"),
 		LastRestorePoint:        getLastRestorePoint(),
-		MemSlotsTotal:           memSlotsTotal,
-		MemSlotsUsed:            memSlotsUsed,
-		NetworkInterfaces:       networkInterfaces,
-		InstalledSoftware:       installedSoftware,
+		MemSlotsTotal:           0,
+		MemSlotsUsed:            0,
+		NetworkInterfaces:       collectNetworkInterfaces(),
+		InstalledSoftware:       collectInstalledSoftware(),
 	}
 }
 
 func collectTelemetry() TelemetryData {
-	// --- PROTEÇÃO CONTRA CRASH: RECOVER ---
 	defer func() {
-		if r := recover(); r != nil {
-			log.Printf("⚠️ Erro recuperado no collectTelemetry: %v", r)
-		}
+		if r := recover(); r != nil { log.Printf("⚠️ Erro telemetria: %v", r) }
 	}()
 
-	cpuPercent, err := cpu.Percent(1*time.Second, false)
+	cpuPercent, _ := cpu.Percent(1*time.Second, false)
 	cpuValue := 0.0
-	if err == nil && len(cpuPercent) > 0 {
-		cpuValue = cpuPercent[0]
-	}
+	if len(cpuPercent) > 0 { cpuValue = cpuPercent[0] }
 
 	v, _ := mem.VirtualMemory()
 	ramValue := 0.0
-	if v != nil {
-		ramValue = v.UsedPercent
-	}
+	if v != nil { ramValue = v.UsedPercent }
 
-	diskPath := "C:"
-	if runtime.GOOS != "windows" {
-		diskPath = "/"
-	}
-
-	d, errDisk := disk.Usage(diskPath)
+	d, err := disk.Usage("C:")
 	diskFreePct := 0.0
 	diskTotal := 0.0
-	if errDisk == nil && d != nil {
+	if err == nil && d != nil && d.Total > 0 {
 		diskFreePct = (float64(d.Free) / float64(d.Total)) * 100.0
-		diskTotal = float64(d.Total) / 1024 / 1024 / 1024
+		diskTotal = float64(d.Total) / (1024*1024*1024)
 	}
 
 	tempValue := 40.0 + (cpuValue * 0.3)
-
 	uptime := uint64(0)
-	hostInfo, _ := host.Info()
-	if hostInfo != nil {
-		uptime = hostInfo.Uptime
-	}
+	hInfo, _ := host.Info()
+	if hInfo != nil { uptime = hInfo.Uptime }
 
 	return TelemetryData{
 		MachineUUID:        getMachineUUID(),
@@ -795,88 +584,51 @@ func sendCommandResult(output string, errorMsg string) {
 	payload := CommandResult{ Output: output, Error:  errorMsg }
 	jsonValue, _ := json.Marshal(payload)
 
-
 	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonValue))
 	if err != nil { return }
-
+	
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("x-agent-secret", AgentSecret)
+	req.Header.Set("x-agent-secret", AgentSecret) 
 
 	httpClient.Do(req)
 }
 
 func runPowerShellScript(scriptContent string) {
-	log.Println("📜 Executando script personalizado...")
-
 	cleanScript := strings.TrimSpace(scriptContent)
-
 	tmpFile, err := os.CreateTemp("", "agent_script_*.ps1")
-	if err != nil {
-		log.Printf("❌ Erro ao criar arquivo: %v", err)
-		sendCommandResult("", fmt.Sprintf("Erro ao criar arquivo: %v", err))
-		return
-	}
+	if err != nil { return }
 	defer os.Remove(tmpFile.Name())
-
-	if _, err := tmpFile.Write([]byte(cleanScript)); err != nil {
-		log.Printf("❌ Erro ao escrever script: %v", err)
-		sendCommandResult("", fmt.Sprintf("Erro ao escrever script: %v", err))
-		return
-	}
+	tmpFile.Write([]byte(cleanScript))
 	tmpFile.Close()
 
-	log.Printf("📄 Script salvo em: %s", tmpFile.Name())
-
 	outputStr, err := runCommandHidden("powershell", "-ExecutionPolicy", "Bypass", "-File", tmpFile.Name())
-
 	if err != nil {
-		log.Printf("⚠️ Erro no script: %v", err)
-		sendCommandResult(outputStr, fmt.Sprintf("Erro de Execução: %v", err))
+		sendCommandResult(outputStr, fmt.Sprintf("Erro: %v", err))
 	} else {
-		log.Println("✅ Script finalizado. Enviando output...")
-		if outputStr == "" {
-			outputStr = "Comando executado com sucesso (sem retorno de texto)."
-		}
 		sendCommandResult(outputStr, "")
 	}
 }
 
 func handleRemoteCommand(command string, payload string) {
-	if command == "" {
-		return
-	}
-
-	log.Printf("⚠️ COMANDO RECEBIDO: %s", command)
+	if command == "" { return }
+	log.Printf("⚠️ COMANDO: %s", command)
 
 	switch command {
 	case "shutdown":
-		if runtime.GOOS == "windows" {
-			runCommandHidden("shutdown", "/s", "/t", "0", "/f")
-		}
+		if runtime.GOOS == "windows" { runCommandHidden("shutdown", "/s", "/t", "0", "/f") }
 	case "restart":
-		if runtime.GOOS == "windows" {
-			runCommandHidden("shutdown", "/r", "/t", "0", "/f")
-		}
+		if runtime.GOOS == "windows" { runCommandHidden("shutdown", "/r", "/t", "0", "/f") }
 	case "clean_temp":
-		if runtime.GOOS == "windows" {
-			runCommandHidden("cmd", "/C", "del /q /f /s %TEMP%\\*")
-		}
+		if runtime.GOOS == "windows" { runCommandHidden("cmd", "/C", "del /q /f /s %TEMP%\\*") }
 	case "cancel_shutdown":
 		ShutdownCancelled = true
-		log.Println("🚫 Desligamento automático CANCELADO para hoje pelo usuário.")
-		sendCommandResult("Desligamento automático suspenso até amanhã às 06:00.", "")
+		sendCommandResult("Cancelado pelo usuário.", "")
 	case "set_wallpaper":
 		psScript := fmt.Sprintf(`
 				$url = "%s"
 				$path = "$env:TEMP\wallpaper_agente.jpg"
-				
-				# Tenta deletar o anterior se existir
 				if (Test-Path $path) { Remove-Item $path -Force }
-
-				# Aceita certificado autoassinado
 				[System.Net.ServicePointManager]::ServerCertificateValidationCallback = {$true}
-
-				# Download
 				try {
 					[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 					Invoke-WebRequest -Uri $url -OutFile $path -UseBasicParsing
@@ -884,8 +636,6 @@ func handleRemoteCommand(command string, payload string) {
 					Write-Output "Erro no download: $_"
 					exit
 				}
-				
-				# Troca Wallpaper via DLL
 				$code = @'
 				using System;
 				using System.Runtime.InteropServices;
@@ -897,97 +647,29 @@ func handleRemoteCommand(command string, payload string) {
 				Add-Type -TypeDefinition $code
 				[Wallpaper]::SystemParametersInfo(0x0014, 0, $path, 0x03)
 			`, payload)
-
 			go runPowerShellScript(psScript)
-		
-
 	case "custom_script":
-		if runtime.GOOS == "windows" {
-			runPowerShellScript(payload)
-		}
-
-	default:
-		log.Printf("Comando desconhecido ou não suportado: %s", command)
-	}
-}
-
-func ensureBackupFolderExists(folderPath string) error {
-	err := os.MkdirAll(folderPath, 0755)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-func createRestorePoint() {
-	if runtime.GOOS != "windows" {
-		return
-	}
-
-	backupFolder := getBackupFolderPath()
-	if err := ensureBackupFolderExists(backupFolder); err != nil {
-		log.Printf("❌ Erro ao criar pasta de backup: %v", err)
-		return
-	}
-
-	restoreFile := filepath.Join(backupFolder, RESTORE_POINT_FILE)
-
-	var lastRun time.Time
-	if content, err := os.ReadFile(restoreFile); err == nil {
-		lastRun, _ = time.Parse("2006-01-02 15:04:05", strings.TrimSpace(string(content)))
-	}
-
-	if time.Since(lastRun) < RESTORE_POINT_INTERVAL && !lastRun.IsZero() {
-		return
-	}
-
-	log.Println("🛠️ Iniciando criação de Ponto de Restauração (7 dias)...")
-
-	psScript := `
-	Enable-ComputerRestore -Drive "C:\"
-	Checkpoint-Computer -Description "Agente Rede Facil Auto" -RestorePointType "MODIFY_SETTINGS"
-	`
-
-	_, err := runCommandHidden("powershell.exe", "-ExecutionPolicy", "Bypass", "-Command", psScript)
-
-	if err == nil {
-		now := time.Now().Format("2006-01-02 15:04:05")
-		_ = os.WriteFile(restoreFile, []byte(now), 0644)
-		log.Println("✅ Ponto de Restauração criado com sucesso.")
-		go registerMachine()
-	} else {
-		log.Printf("⚠️ Falha ao criar ponto de restauração: %v", err)
-		log.Println("🔴 DICA: Execute o agente como ADMINISTRADOR.")
+		if runtime.GOOS == "windows" { runPowerShellScript(payload) }
 	}
 }
 
 func postData(endpoint string, data interface{}) {
 	jsonValue, err := json.Marshal(data)
-	if err != nil {
-		return
-	}
+	if err != nil { return }
 
 	url := fmt.Sprintf("%s%s", API_BASE_URL, endpoint)
 
 	for i := 0; i < MAX_RETRIES; i++ {
 		req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonValue))
-		if err != nil {
-			log.Printf("Error creating request: %v", err)
-			return
-		}
-
+		if err != nil { return }
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("x-agent-secret", AgentSecret)
-
 		resp, err := httpClient.Do(req)
 		if err != nil {
-			if i < MAX_RETRIES-1 {
-				time.Sleep(RETRY_DELAY)
-			}
+			if i < MAX_RETRIES-1 { time.Sleep(RETRY_DELAY) }
 			continue
 		}
 		defer resp.Body.Close()
-
 		if resp.StatusCode >= 200 && resp.StatusCode < 300 {
 			body, _ := io.ReadAll(resp.Body)
 			var serverResp ServerResponse
@@ -997,82 +679,60 @@ func postData(endpoint string, data interface{}) {
 				}
 			}
 			return
-		} else {
-			log.Printf("❌ Server rejected data. Status: %d", resp.StatusCode)
 		}
-
-		if i < MAX_RETRIES-1 {
-			time.Sleep(RETRY_DELAY)
-		}
+		if i < MAX_RETRIES-1 { time.Sleep(RETRY_DELAY) }
 	}
 }
 
 func registerMachine() {
-	defer func() {
-		if r := recover(); r != nil {
-			log.Printf("⚠️ Erro recuperado no registro: %v", r)
-		}
-	}()
-
 	info := collectStaticInfo()
 	url := fmt.Sprintf("%s/register", API_BASE_URL)
 	jsonValue, _ := json.Marshal(info)
-	
-	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonValue))
-	if err == nil {
-		req.Header.Set("Content-Type", "application/json")
-		req.Header.Set("x-agent-secret", AgentSecret) 
-		
-		resp, err := httpClient.Do(req)
+
+	for {
+		req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonValue))
 		if err == nil {
-			defer resp.Body.Close()
-			if resp.StatusCode >= 200 && resp.StatusCode < 300 {
-				body, _ := io.ReadAll(resp.Body)
-				var regResp RegistrationResponse
-				json.Unmarshal(body, &regResp)
-				GlobalMachineIP = regResp.MachineIP
-				log.Printf("Máquina registrada! IP: %s | UUID: %s", GlobalMachineIP, info.UUID)
-			} else {
-				log.Printf("❌ Falha Registro: %d", resp.StatusCode)
+			req.Header.Set("Content-Type", "application/json")
+			req.Header.Set("x-agent-secret", AgentSecret)
+			
+			resp, err := httpClient.Do(req)
+			if err == nil {
+				defer resp.Body.Close()
+				if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+					body, _ := io.ReadAll(resp.Body)
+					var regResp RegistrationResponse
+					json.Unmarshal(body, &regResp)
+					GlobalMachineIP = regResp.MachineIP
+					log.Printf("✅ Máquina registrada! IP: %s | UUID: %s", GlobalMachineIP, info.UUID)
+					return // Sai do loop
+				}
 			}
 		}
+		time.Sleep(30 * time.Second)
 	}
 }
 
 func main() {
 	setupLogger()
-
 	log.Printf("Agente v%s Iniciando...", AGENT_VERSION)
 
 	ensureAutoStart()
 	preventSystemSleep()
 
 	go registerMachine()
+	
 	go checkForUpdates()
 	go startNetworkMonitor()
 
 	go func() {
-		shutdownTicker := time.NewTicker(1 * time.Minute)
-		for range shutdownTicker.C {
+		for {
+			time.Sleep(1 * time.Minute)
 			checkAutoShutdown()
 		}
 	}()
 
-	ticker := time.NewTicker(TELEMETRY_INTERVAL)
-
-	updateTicker := time.NewTicker(30 * time.Minute)
-	restoreTicker := time.NewTicker(1 * time.Hour)
-
 	for {
-		select {
-		case <-ticker.C:
-			postData("/telemetry", collectTelemetry())
-
-		case <-updateTicker.C:
-			checkForUpdates()
-
-		case <-restoreTicker.C:
-			createRestorePoint()
-		}
+		postData("/telemetry", collectTelemetry())
+		time.Sleep(TELEMETRY_INTERVAL)
 	}
 }
