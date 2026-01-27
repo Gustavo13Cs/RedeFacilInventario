@@ -25,6 +25,7 @@ const monitorService = require('./services/monitorServices');
 const whatsappService = require('./services/whatsappService');
 const deviceRoutes = require('./routes/deviceRoutes');
 
+
 const app = express();
 
 let server;
@@ -61,6 +62,7 @@ app.get('/', (req, res) => {
 app.use('/updates', express.static(path.join(__dirname, '../updates')));
 
 app.use('/api/credentials', require('./routes/credentialRoutes'));
+app.use('/api/support', require('./routes/supportRoutes'));
 app.use('/api/telemetry', telemetryRoutes); 
 app.use('/api', monitorRoutes); 
 app.use('/auth', authRoutes);  
@@ -76,6 +78,7 @@ app.use('/api/inventory', inventoryRoutes);
 app.use('/api/chips', simCardRoutes);
 app.use('/api/financial', financialRoutes); 
 app.use('/api', wallpaperRoutes);
+
 
 const PORT = process.env.PORT || 3001;
 

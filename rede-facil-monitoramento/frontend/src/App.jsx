@@ -22,7 +22,8 @@ import NetworkMap from './pages/NetworkMap';
 import Login from './components/Login';
 import TopNavbar from './components/ui/TopNavbar'; 
 import DashboardHome from './components/DashboardHome'; 
-import TagGenerator from './pages/TagGenerator'; 
+import TagGenerator from './pages/TagGenerator';
+import SupportCenter from './pages/SupportCenter';
 
 const getSocketUrl = (url) => {
   if (!url) return "";
@@ -36,7 +37,6 @@ const getSocketUrl = (url) => {
   return cleanUrl;
 };
 
-// Tempo de inatividade para Logout Automático (LGPD - Segurança)
 const INACTIVITY_LIMIT = 15 * 60 * 1000; // 15 Minutos
 
 function App() {
@@ -44,6 +44,7 @@ function App() {
   const [machines, setMachines] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [stats, setStats] = useState({ total: 0, online: 0, critical: 0 });
+  const [notifications, setNotifications] = useState([]);
   const [lastTelemetry, setLastTelemetry] = useState(null);
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -71,6 +72,7 @@ function App() {
       localStorage.removeItem('user_role');
       
       setMachines([]); 
+      setNotifications([]);
       setSelectedMachine(null);
       setIsAuthenticated(false); 
       setUserRole('');
@@ -82,6 +84,22 @@ function App() {
   const handleNavClick = () => {
     setMobileMenuOpen(false);
     setSelectedMachine(null);
+  };
+
+  const fetchNotifications = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) return;
+      
+      const res = await axios.get(`${getApiEndpoint('/support')}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      
+      const pending = res.data.filter(r => r.status === 'pending');
+      setNotifications(pending);
+    } catch (error) {
+      console.error("Erro ao buscar notificações:", error);
+    }
   };
 
   const getApiEndpoint = (endpoint) => {
@@ -200,6 +218,13 @@ function App() {
           prevMachines.map(m => m.uuid === data.machine_uuid ? { ...m, status: data.status || 'online' } : m)
       );
     });
+    
+    newSocket.on("support_alert", (data) => {
+      const audio = new Audio('https://actions.google.com/sounds/v1/alarms/beep_short.ogg'); 
+      audio.play().catch(e => console.log("Navegador bloqueou autoplay"));
+
+      alert(`🚨 PEDIDO DE AJUDA!\n\nMáquina: ${data.machine_name}\nIP: ${data.ip}`);
+    });
 
     setSocket(newSocket);
 
@@ -208,6 +233,7 @@ function App() {
       setCurrentUser(user || 'Usuário');
       setUserRole(role || 'suporte');
       fetchMachines(); 
+      fetchNotifications();
     }
 
     return () => {
@@ -249,6 +275,7 @@ function App() {
 
   const getPageTitle = () => {
     if (selectedMachine) return 'Detalhes do Ativo';
+    if (location.pathname.includes('/suporte')) return 'Central de Suporte';
     const path = location.pathname;
     
     if (path.includes('/inventario')) return 'Gestão de Inventário';
@@ -308,6 +335,10 @@ function App() {
           
           <Link to="/inventario" onClick={handleNavClick} className={getMenuClass('/inventario')}>
             <Package className="mr-3 h-5 w-5 text-emerald-500" /> Inventário
+          </Link>
+
+          <Link to="/suporte" onClick={handleNavClick} className="w-full flex items-center px-3 py-2.5 text-sm font-medium rounded-md hover:bg-slate-800 hover:text-white transition-colors">
+                <Shield className="mr-3 h-5 w-5 text-red-500" /> Central de Chamados
           </Link>
 
           <p className="px-3 text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2 mt-6">Gestão</p>
@@ -405,6 +436,7 @@ function App() {
                         userRole={userRole} 
                         onLogout={handleLogout}
                         isLoggingOut={isLoggingOut}
+                        notifications={notifications}
                     />
                 </div>
             </div>
@@ -467,6 +499,7 @@ function App() {
               <Route path="/mapa" element={<NetworkMap />} />
               <Route path="/etiquetas" element={<TagGenerator />} />
               <Route path="/seguranca/cofre" element={<CredentialVault />} />
+              <Route path="/suporte" element={<SupportCenter />} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
           )}

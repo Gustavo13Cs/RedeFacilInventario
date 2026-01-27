@@ -22,6 +22,7 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/getlantern/systray" 
 	"github.com/shirou/gopsutil/v3/cpu"
 	"github.com/shirou/gopsutil/v3/disk"
 	"github.com/shirou/gopsutil/v3/host"
@@ -30,7 +31,7 @@ import (
 )
 
 // --- CONFIGURAÇÕES ---
-const AGENT_VERSION = "6.1" 
+const AGENT_VERSION = "6.2" 
 const UPDATE_BASE_URL = "https://192.168.50.60:3001/updates"
 const UPDATE_URL_VERSION = "https://192.168.50.60:3001/updates/version.txt"
 const UPDATE_URL_EXE = "https://192.168.50.60:3001/updates/AgenteRedeFacil.exe"
@@ -43,6 +44,7 @@ const RESTORE_POINT_INTERVAL = 168 * time.Hour
 const MAX_RETRIES = 3
 const RETRY_DELAY = 10 * time.Second
 
+// Prevenção de suspensão
 const (
 	ES_CONTINUOUS       = 0x80000000
 	ES_SYSTEM_REQUIRED  = 0x00000001
@@ -175,6 +177,58 @@ type CommandResult struct {
 	Output string `json:"output"`
 	Error  string `json:"error"`
 }
+
+
+func onReady() {
+	systray.SetTitle("Agente Rede Fácil")
+	systray.SetTooltip("Rede Fácil - Monitoramento Ativo")
+	
+
+	mRequestHelp := systray.AddMenuItem("🆘 Solicitar Suporte TI", "Chamar técnico imediatamente")
+	systray.AddSeparator()
+	mInfo := systray.AddMenuItem("✅ Sistema Monitorado", "Este computador está sendo monitorado")
+	mInfo.Disable()
+	
+	go func() {
+		for {
+			select {
+			case <-mRequestHelp.ClickedCh:
+				log.Println("🆘 Usuário solicitou suporte via Tray!")
+				sendHelpRequest()
+			}
+		}
+	}()
+}
+
+func onExit() {}
+
+func sendHelpRequest() {
+	url := fmt.Sprintf("%s/support/request", API_BASE_URL)
+	payload := map[string]string{"uuid": getMachineUUID()}
+	jsonValue, _ := json.Marshal(payload)
+
+	req, _ := http.NewRequest("POST", url, bytes.NewBuffer(jsonValue))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("x-agent-secret", AgentSecret)
+
+	resp, err := httpClient.Do(req)
+	
+	msgTitle := "Suporte TI"
+	msgBody := ""
+
+	if err == nil && resp.StatusCode == 200 {
+		msgBody = "✅ Suporte solicitado com sucesso! Um técnico foi notificado."
+	} else if err == nil && resp.StatusCode == 200 {
+		msgBody = "⚠️ Chamado já está aberto. Aguarde atendimento."
+	} else {
+		msgBody = "❌ Erro ao solicitar. Por favor ligue para o TI."
+	}
+
+	exec.Command("msg", "*", msgBody).Run()
+
+	log.Println(msgTitle, ":", msgBody)
+}
+
 
 func shutdownPC() {
 	log.Println("🌙 Inatividade detectada. Desligando PC...")
@@ -593,22 +647,6 @@ func sendCommandResult(output string, errorMsg string) {
 	httpClient.Do(req)
 }
 
-func runPowerShellScript(scriptContent string) {
-	cleanScript := strings.TrimSpace(scriptContent)
-	tmpFile, err := os.CreateTemp("", "agent_script_*.ps1")
-	if err != nil { return }
-	defer os.Remove(tmpFile.Name())
-	tmpFile.Write([]byte(cleanScript))
-	tmpFile.Close()
-
-	outputStr, err := runCommandHidden("powershell", "-ExecutionPolicy", "Bypass", "-File", tmpFile.Name())
-	if err != nil {
-		sendCommandResult(outputStr, fmt.Sprintf("Erro: %v", err))
-	} else {
-		sendCommandResult(outputStr, "")
-	}
-}
-
 func handleRemoteCommand(command string, payload string) {
 	if command == "" { return }
 	log.Printf("⚠️ COMANDO: %s", command)
@@ -704,7 +742,7 @@ func registerMachine() {
 					json.Unmarshal(body, &regResp)
 					GlobalMachineIP = regResp.MachineIP
 					log.Printf("✅ Máquina registrada! IP: %s | UUID: %s", GlobalMachineIP, info.UUID)
-					return // Sai do loop
+					return 
 				}
 			}
 		}
@@ -720,7 +758,6 @@ func main() {
 	preventSystemSleep()
 
 	go registerMachine()
-	
 	go checkForUpdates()
 	go startNetworkMonitor()
 
@@ -730,9 +767,12 @@ func main() {
 			checkAutoShutdown()
 		}
 	}()
+	go func() {
+		for {
+			postData("/telemetry", collectTelemetry())
+			time.Sleep(TELEMETRY_INTERVAL)
+		}
+	}()
 
-	for {
-		postData("/telemetry", collectTelemetry())
-		time.Sleep(TELEMETRY_INTERVAL)
-	}
+	systray.Run(onReady, onExit)
 }

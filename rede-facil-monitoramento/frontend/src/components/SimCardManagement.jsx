@@ -192,12 +192,17 @@ export default function SimCardManagement({ userRole }) {
     </Card>
   );
 
-  const renderGeneralTab = () => (
+ const renderGeneralTab = () => (
     <Card className="border-slate-200 shadow-sm mt-6">
         <div className="p-4 border-b bg-slate-50/50 flex flex-col md:flex-row gap-4">
             <div className="flex-1 relative">
                 <Search className="absolute left-2 top-2 h-4 w-4 text-slate-400" />
-                <input className="w-full pl-8 p-1.5 text-sm border rounded outline-none" placeholder="Buscar vínculo..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
+                <input 
+                    className="w-full pl-8 p-1.5 text-sm border rounded outline-none" 
+                    placeholder="Buscar vínculo..." 
+                    value={searchTerm} 
+                    onChange={e => setSearchTerm(e.target.value)} 
+                />
             </div>
         </div>
         <CardContent className="p-0">
@@ -212,31 +217,51 @@ export default function SimCardManagement({ userRole }) {
                     </TableRow>
                 </TableHeader>
                 <TableBody>
-                    {chips.filter(c => c.phone_number.includes(searchTerm) || (c.employee_name || '').toLowerCase().includes(searchTerm.toLowerCase())).map(chip => (
-                        <TableRow key={chip.id}>
-                            <TableCell className="font-mono font-medium">{formatPhoneNumber(chip.phone_number)}</TableCell>
-                            <TableCell>{getStatusBadge(chip.status)}</TableCell>
-                            <TableCell className="text-slate-600">
-                                {chip.device_name ? <div className="flex items-center gap-1"><Smartphone className="h-3 w-3"/> {chip.device_name}</div> : '-'}
-                            </TableCell>
-                            <TableCell className="text-slate-600">
-                                {chip.employee_name ? <div className="flex items-center gap-1"><User className="h-3 w-3"/> {chip.employee_name}</div> : '-'}
-                            </TableCell>
-                            <TableCell className="text-right">
-                                {userRole === 'admin' && (
-                                    <div className="flex justify-end gap-2">
-                                        <Button variant="ghost" size="sm" onClick={() => handleOpenModal('general', chip)}><Edit2 className="h-4 w-4 text-blue-600"/></Button>
-                                        <Button variant="ghost" size="sm" onClick={() => setDeleteData({id: chip.id, type: 'general'})}><Trash2 className="h-4 w-4 text-red-600"/></Button>
-                                    </div>
-                                )}
+                    {chips
+                        .filter(chip => {
+                            // REGRA: Só aparece nesta aba se tiver Aparelho E Responsável vinculados
+                            const temVinculoCompleto = chip.device_link_id && chip.employee_link_id;
+                            
+                            const matchesSearch = 
+                                chip.phone_number.includes(searchTerm) || 
+                                (chip.employee_name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+                                (chip.device_name || '').toLowerCase().includes(searchTerm.toLowerCase());
+
+                            return temVinculoCompleto && matchesSearch;
+                        })
+                        .map(chip => (
+                            <TableRow key={chip.id}>
+                                <TableCell className="font-mono font-medium">{formatPhoneNumber(chip.phone_number)}</TableCell>
+                                <TableCell>{getStatusBadge(chip.status)}</TableCell>
+                                <TableCell className="text-slate-600">
+                                    {chip.device_name ? <div className="flex items-center gap-1"><Smartphone className="h-3 w-3"/> {chip.device_name}</div> : '-'}
+                                </TableCell>
+                                <TableCell className="text-slate-600">
+                                    {chip.employee_name ? <div className="flex items-center gap-1"><User className="h-3 w-3"/> {chip.employee_name}</div> : '-'}
+                                </TableCell>
+                                <TableCell className="text-right">
+                                    {userRole === 'admin' && (
+                                        <div className="flex justify-end gap-2">
+                                            <Button variant="ghost" size="sm" onClick={() => handleOpenModal('general', chip)}><Edit2 className="h-4 w-4 text-blue-600"/></Button>
+                                            <Button variant="ghost" size="sm" onClick={() => setDeleteData({id: chip.id, type: 'general'})}><Trash2 className="h-4 w-4 text-red-600"/></Button>
+                                        </div>
+                                    )}
+                                </TableCell>
+                            </TableRow>
+                        ))}
+                    {/* Mensagem caso a tabela esteja vazia após o filtro */}
+                    {chips.filter(chip => chip.device_link_id && chip.employee_link_id).length === 0 && (
+                        <TableRow>
+                            <TableCell colSpan={5} className="text-center py-10 text-slate-400">
+                                Nenhum chip configurado com aparelho e responsável.
                             </TableCell>
                         </TableRow>
-                    ))}
+                    )}
                 </TableBody>
             </Table>
         </CardContent>
     </Card>
-  );
+);
 
   const renderDevicesTab = () => (
     <Card className="border-slate-200 shadow-sm mt-6">
