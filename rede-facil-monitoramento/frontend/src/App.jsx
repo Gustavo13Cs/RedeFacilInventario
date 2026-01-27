@@ -8,6 +8,7 @@ import { Routes, Route, Link, useLocation, Navigate, useNavigate } from 'react-r
 import io from 'socket.io-client';
 import axios from 'axios';
 import { API_URL } from './config'; 
+import { Toaster, toast } from 'sonner'; 
 
 import CredentialVault from './components/CredentialVault';
 import PublicDetails from './pages/PublicDetails';
@@ -37,14 +38,14 @@ const getSocketUrl = (url) => {
   return cleanUrl;
 };
 
-const INACTIVITY_LIMIT = 15 * 60 * 1000; // 15 Minutos
+const INACTIVITY_LIMIT = 15 * 60 * 1000; 
 
 function App() {
   const [socket, setSocket] = useState(null);
   const [machines, setMachines] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [stats, setStats] = useState({ total: 0, online: 0, critical: 0 });
-  const [notifications, setNotifications] = useState([]);
+  const [notifications, setNotifications] = useState([]); 
   const [lastTelemetry, setLastTelemetry] = useState(null);
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -60,10 +61,8 @@ function App() {
   const [userRole, setUserRole] = useState('');
   const [isLoggingOut, setIsLoggingOut] = useState(false);
 
-  // Ref para o Timer de Inatividade
   const idleTimerRef = useRef(null);
 
-  // 1. Defina handleLogout PRIMEIRO para evitar erros de referência
   const handleLogout = () => {
     setIsLoggingOut(true);
     setTimeout(() => {
@@ -95,6 +94,7 @@ function App() {
         headers: { Authorization: `Bearer ${token}` }
       });
       
+      // Filtra apenas chamados pendentes
       const pending = res.data.filter(r => r.status === 'pending');
       setNotifications(pending);
     } catch (error) {
@@ -170,7 +170,6 @@ function App() {
     }
   };
 
-  // --- LÓGICA DE AUTO-LOGOUT (LGPD) ---
   const resetIdleTimer = () => {
     if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
     if (isAuthenticated) {
@@ -220,10 +219,29 @@ function App() {
     });
     
     newSocket.on("support_alert", (data) => {
-      const audio = new Audio('https://actions.google.com/sounds/v1/alarms/beep_short.ogg'); 
+      const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3'); 
       audio.play().catch(e => console.log("Navegador bloqueou autoplay"));
 
-      alert(`🚨 PEDIDO DE AJUDA!\n\nMáquina: ${data.machine_name}\nIP: ${data.ip}`);
+      setNotifications(prev => [data, ...prev]);
+
+      toast.error(
+        <div className="flex flex-col gap-1">
+          <span className="font-bold text-base">🚨 PEDIDO DE AJUDA!</span>
+          <span className="text-sm">Máquina: <b>{data.machine_name}</b></span>
+          <span className="text-xs text-slate-500">IP: {data.ip}</span>
+          <button 
+            onClick={() => navigate('/suporte')}
+            className="mt-2 bg-red-600 text-white text-xs py-1 px-2 rounded hover:bg-red-700 transition-colors w-full"
+          >
+            Ver Chamado
+          </button>
+        </div>,
+        {
+          duration: 10000, 
+          position: 'top-right',
+          style: { border: '1px solid #ef4444', background: '#fef2f2' }
+        }
+      );
     });
 
     setSocket(newSocket);
@@ -246,7 +264,10 @@ function App() {
     setCurrentUser(user.name);
     setUserRole(user.role);
     localStorage.setItem('user_role', user.role);
-    setTimeout(() => fetchMachines(), 100);
+    setTimeout(() => {
+        fetchMachines();
+        fetchNotifications();
+    }, 100);
     
     if (location.state?.from) {
         navigate(location.state.from);
@@ -303,6 +324,8 @@ function App() {
   return (
     <div className="flex h-screen w-full bg-slate-50 overflow-hidden relative">
       
+      <Toaster position="top-right" richColors expand={true} />
+
       {mobileMenuOpen && (
         <div 
             className="fixed inset-0 bg-black/50 z-30 md:hidden transition-opacity"
@@ -337,8 +360,13 @@ function App() {
             <Package className="mr-3 h-5 w-5 text-emerald-500" /> Inventário
           </Link>
 
-          <Link to="/suporte" onClick={handleNavClick} className="w-full flex items-center px-3 py-2.5 text-sm font-medium rounded-md hover:bg-slate-800 hover:text-white transition-colors">
+          <Link to="/suporte" onClick={handleNavClick} className={`w-full flex items-center px-3 py-2.5 text-sm font-medium rounded-md transition-colors ${location.pathname.includes('/suporte') ? 'bg-red-900/20 text-red-400' : 'hover:bg-slate-800 hover:text-white'}`}>
                 <Shield className="mr-3 h-5 w-5 text-red-500" /> Central de Chamados
+                {notifications.length > 0 && (
+                    <span className="ml-auto bg-red-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full animate-pulse">
+                        {notifications.length}
+                    </span>
+                )}
           </Link>
 
           <p className="px-3 text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2 mt-6">Gestão</p>
@@ -436,7 +464,7 @@ function App() {
                         userRole={userRole} 
                         onLogout={handleLogout}
                         isLoggingOut={isLoggingOut}
-                        notifications={notifications}
+                        notifications={notifications} 
                     />
                 </div>
             </div>
@@ -453,6 +481,13 @@ function App() {
                 </div>
 
                 <div className="flex items-center gap-2 md:gap-4 shrink-0">
+                    <div className="md:hidden relative mr-2">
+                        {notifications.length > 0 && (
+                            <span className="absolute -top-1 -right-1 h-3 w-3 bg-red-500 rounded-full animate-pulse border border-white"></span>
+                        )}
+                        <Link to="/suporte" className="text-slate-600"><Shield size={20} /></Link>
+                    </div>
+
                     {selectedMachine && (
                         <button onClick={() => setSelectedMachine(null)} className="text-sm text-blue-600 hover:underline">
                             Voltar
