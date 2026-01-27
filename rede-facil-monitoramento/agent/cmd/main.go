@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/tls"
-	_ "embed" // Essencial para o ícone funcionar
+	_ "embed" 
 	"encoding/json"
 	"fmt"
 	"io"
@@ -31,13 +31,11 @@ import (
 	gonet "github.com/shirou/gopsutil/v3/net"
 )
 
-// --- EMBED DO ÍCONE ---
-// O arquivo 'icon.ico' DEVE estar na mesma pasta que este arquivo main.go
-//go:embed icon.ico
+
 var iconData []byte
 
 // --- CONFIGURAÇÕES ---
-const AGENT_VERSION = "7.2-FINAL" 
+const AGENT_VERSION = "7.3" 
 const UPDATE_BASE_URL = "https://192.168.50.60:3001/updates"
 const UPDATE_URL_VERSION = "https://192.168.50.60:3001/updates/version.txt"
 const UPDATE_URL_EXE = "https://192.168.50.60:3001/updates/AgenteRedeFacil.exe"
@@ -800,13 +798,18 @@ func registerMachine() {
 }
 
 func main() {
+	lockListener, err := net.Listen("tcp", "127.0.0.1:65432")
+	if err != nil {
+		return 
+	}
+	defer lockListener.Close()
+
 	setupLogger()
 	log.Printf("Agente v%s Iniciando...", AGENT_VERSION)
 
 	ensureAutoStart()
 	preventSystemSleep()
 
-	// Inicia os processos em paralelo (Goroutines)
 	go registerMachine()
 	go checkForUpdates()
 	go startNetworkMonitor()
@@ -818,7 +821,6 @@ func main() {
 		}
 	}()
 
-	// Loop de Telemetria agora é Goroutine (pq o Systray trava a thread principal)
 	go func() {
 		for {
 			postData("/telemetry", collectTelemetry())
@@ -826,6 +828,5 @@ func main() {
 		}
 	}()
 
-	// O Systray assume o controle da thread principal
 	systray.Run(onReady, onExit)
 }
