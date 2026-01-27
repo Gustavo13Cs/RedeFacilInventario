@@ -1,14 +1,13 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { 
   LayoutDashboard, Package, Users, Smartphone, DollarSign, 
-  Network, MessageCircle, Layers, QrCode, Lock, Menu, X, LogOut 
+  Network, MessageCircle, Layers, QrCode, Lock, Menu, X, LogOut, Shield 
 } from 'lucide-react';
 import { Badge } from "@/components/ui/badge";
 import { Routes, Route, Link, useLocation, Navigate, useNavigate } from 'react-router-dom';
 import io from 'socket.io-client';
 import axios from 'axios';
 import { API_URL } from './config'; 
-
 
 import CredentialVault from './components/CredentialVault';
 import PublicDetails from './pages/PublicDetails';
@@ -37,6 +36,8 @@ const getSocketUrl = (url) => {
   return cleanUrl;
 };
 
+// Tempo de inatividade para Logout Automático (LGPD - Segurança)
+const INACTIVITY_LIMIT = 15 * 60 * 1000; // 15 Minutos
 
 function App() {
   const [socket, setSocket] = useState(null);
@@ -58,6 +59,26 @@ function App() {
   const [userRole, setUserRole] = useState('');
   const [isLoggingOut, setIsLoggingOut] = useState(false);
 
+  // Ref para o Timer de Inatividade
+  const idleTimerRef = useRef(null);
+
+  // 1. Defina handleLogout PRIMEIRO para evitar erros de referência
+  const handleLogout = () => {
+    setIsLoggingOut(true);
+    setTimeout(() => {
+      localStorage.removeItem('token');
+      localStorage.removeItem('user_name');
+      localStorage.removeItem('user_role');
+      
+      setMachines([]); 
+      setSelectedMachine(null);
+      setIsAuthenticated(false); 
+      setUserRole('');
+      setIsLoggingOut(false); 
+      navigate('/');
+    }, 1500); 
+  };
+
   const handleNavClick = () => {
     setMobileMenuOpen(false);
     setSelectedMachine(null);
@@ -70,7 +91,6 @@ function App() {
     }
     return `${baseUrl}/api${endpoint}`;
   };
-
 
   const filteredMachines = machines.filter(m => {
     if (!searchTerm) return true;
@@ -132,6 +152,32 @@ function App() {
     }
   };
 
+  // --- LÓGICA DE AUTO-LOGOUT (LGPD) ---
+  const resetIdleTimer = () => {
+    if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
+    if (isAuthenticated) {
+        idleTimerRef.current = setTimeout(() => {
+            console.log("🔒 Auto-Logout por inatividade (LGPD)");
+            handleLogout();
+        }, INACTIVITY_LIMIT);
+    }
+  };
+
+  useEffect(() => {
+    const events = ['mousedown', 'mousemove', 'keypress', 'scroll', 'touchstart'];
+    const handleActivity = () => resetIdleTimer();
+
+    if (isAuthenticated) {
+        events.forEach(event => document.addEventListener(event, handleActivity));
+        resetIdleTimer(); 
+    }
+
+    return () => {
+        events.forEach(event => document.removeEventListener(event, handleActivity));
+        if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
+    };
+  }, [isAuthenticated]);
+
   useEffect(() => {
     const token = localStorage.getItem('token');
     const user = localStorage.getItem('user_name');
@@ -148,7 +194,6 @@ function App() {
       reconnectionDelay: 2000
     });
 
-    
     newSocket.on("new_telemetry", (data) => {
       setLastTelemetry(data);
       setMachines(prevMachines => 
@@ -182,22 +227,6 @@ function App() {
     } else {
         navigate('/'); 
     }
-  };
-
-  const handleLogout = () => {
-    setIsLoggingOut(true);
-    setTimeout(() => {
-      localStorage.removeItem('token');
-      localStorage.removeItem('user_name');
-      localStorage.removeItem('user_role');
-      
-      setMachines([]); 
-      setSelectedMachine(null);
-      setIsAuthenticated(false); 
-      setUserRole('');
-      setIsLoggingOut(false); 
-      navigate('/');
-    }, 1500); 
   };
 
   const handleMachineClick = (machine) => {
@@ -336,7 +365,9 @@ function App() {
                 </div>
                 <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-white truncate">{currentUser}</p>
-                    <p className="text-xs text-slate-500 truncate capitalize">{userRole}</p>
+                    <p className="text-xs text-slate-500 truncate capitalize">
+                        {userRole === 'admin' ? 'Administrador' : userRole}
+                    </p>
                 </div>
                 <button 
                     onClick={handleLogout}
@@ -371,6 +402,7 @@ function App() {
                         searchTerm={searchTerm}
                         onSearchChange={setSearchTerm}
                         currentUser={currentUser}
+                        userRole={userRole} 
                         onLogout={handleLogout}
                         isLoggingOut={isLoggingOut}
                     />
@@ -395,7 +427,8 @@ function App() {
                         </button>
                     )}
                     <Badge variant="outline" className="hidden md:flex bg-emerald-50 text-emerald-700 border-emerald-200 px-3 py-1">
-                        Sistema Online
+                        <Shield className="h-3 w-3 mr-1" />
+                        Ambiente Seguro
                     </Badge>
                 </div>
             </header>
