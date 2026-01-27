@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/tls"
-	"encoding/base64"
+	_ "embed" 
 	"encoding/json"
 	"fmt"
 	"io"
@@ -31,8 +31,11 @@ import (
 	gonet "github.com/shirou/gopsutil/v3/net"
 )
 
+
+var iconData []byte
+
 // --- CONFIGURAÇÕES ---
-const AGENT_VERSION = "6.6" 
+const AGENT_VERSION = "6.9" 
 const UPDATE_BASE_URL = "https://192.168.50.60:3001/updates"
 const UPDATE_URL_VERSION = "https://192.168.50.60:3001/updates/version.txt"
 const UPDATE_URL_EXE = "https://192.168.50.60:3001/updates/AgenteRedeFacil.exe"
@@ -45,11 +48,12 @@ const RESTORE_POINT_INTERVAL = 168 * time.Hour
 const MAX_RETRIES = 3
 const RETRY_DELAY = 10 * time.Second
 
+// Constantes Windows
 const (
 	MB_OK                = 0x00000000
 	MB_ICONASTERISK      = 0x00000040 
 	MB_ICONEXCLAMATION   = 0x00000030
-	MB_TOPMOST           = 0x00040000 
+	MB_TOPMOST           = 0x00040000
 )
 
 const (
@@ -188,19 +192,18 @@ func showNativeMessage(title, text string, iconType uintptr) {
 	if runtime.GOOS == "windows" {
 		titlePtr, _ := syscall.UTF16PtrFromString(title)
 		textPtr, _ := syscall.UTF16PtrFromString(text)
-
-		messageBox.Call(
-			0, 
-			uintptr(unsafe.Pointer(textPtr)), 
-			uintptr(unsafe.Pointer(titlePtr)), 
-			iconType | 0x00040000, 
-		)
+		messageBox.Call(0, uintptr(unsafe.Pointer(textPtr)), uintptr(unsafe.Pointer(titlePtr)), iconType|MB_TOPMOST)
 	}
 }
 
 
 func onReady() {
-	systray.SetIcon(getIconData()) 
+	if len(iconData) > 0 {
+		log.Printf("✅ Ícone carregado com sucesso! Tamanho: %d bytes", len(iconData))
+		systray.SetIcon(iconData)
+	} else {
+		log.Println("❌ ERRO CRÍTICO: Ícone não encontrado ou vazio!")
+	}
 	
 	systray.SetTitle("Rede Fácil Monitoramento")
 	systray.SetTooltip("Agente Ativo - Monitoramento e Suporte")
@@ -215,7 +218,7 @@ func onReady() {
 			select {
 			case <-mRequestHelp.ClickedCh:
 				log.Println("🆘 Usuário clicou em Solicitar Suporte")
-				showNativeMessage("Aguarde", "Enviando solicitação para a central de TI...", MB_ICONASTERISK)
+				go showNativeMessage("Aguarde", "Enviando solicitação para a central de TI...", MB_ICONASTERISK)
 				sendHelpRequest()
 			}
 		}
@@ -224,99 +227,6 @@ func onReady() {
 
 func onExit() {
 	// Limpeza
-}
-
-func getIconData() []byte {
-	iconB64 := `
-	/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAMCAgMCAgMDAwMEAwMEBQgFBQQEBQoHBwYIDAoMDAsK
-	CwsNDhIQDQ4RDgsLEBYQERMUFRUVDA8XGBYUGBIUFRT/2wBDAQMEBAUEBQkFBQkUDQsNFBQUFBQU
-	FBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBT/wgARCADIAMgDASIA
-	AhEBAxEB/8QAGwABAAMBAQEBAAAAAAAAAAAAAAUGBwQDCAH/xAAbAQEAAwEBAQEAAAAAAAAAAAAA
-	BAUGBwECA//aAAwDAQACEAMQAAABwgaTMgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAPR
-	ulBd5v12mLzGiikq+vmKSoikqK/U9glPfMHenn0LDB74AAAABcLpVpXnO9y8dGwQAHZdu3TeZdC+
-	bNbr/ZOh1+n3uiaWgC6qAAAAAL3KxUrzvd5f2cchvcVu1Ov0Bw/sGGW7pp/W+Y3mTr1MqrPu0LL9
-	Q/b8YqiXuiToYXtMAAAABe5WKled7vLx0TCet44K1Q3W10P3sGM1mS+WtZNucd+ahl+oQJsVRL3R
-	JUYL2mAAAAAvcrFSvO93nmgc2sRpGRcc7l97S+m+fP8AJS430R84yMFElNQy/UJMeKol7okqMF7T
-	AAAAAXC6Y/unPN1iN4sUX+n551yagta3L2oPv5y9qAy/ZEpl9Fm9P9PPoWGCbEAAAAAenm89uHXR
-	FNbXtRHx9XtRBe1EFwqfmsIITYgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAH//EACgQ
-	AAEDBAICAAYDAAAAAAAAAAQCAwYAAQUWMTUQMBESExQgcCIjJv/aAAgBAQABBQL9OoQpxTEVOetp
-	xlacZWnGVpxlacZWnGVpxlPxU5my0KbV7UIu4vD4drFMGywYde6WrdLVulq3S1bpat0tW6WoKWDEL
-	zGHayrC0XbX7IqxZ7LSw1Q4P5CCOmv3hr/0yB3BHomaogGVMWZy3sh3ZTTj8oY3bxMrJ+5hfEx7L
-	2Q7sppxQY1zChMWMG1JcKzYa1vjdrGMY5vG5Ys7JPzJCbmGOHkQviY9l7Id2U04oAr7IwclstrPK
-	W/j/wCqOoW44U8X8MKB4hfEx7L2Q7sppx4QpabtrtHGchiQyghmUYEd11TzniF8THsvZDuymnHjF
-	tIAGcccLfY/z7LWKZz6T4kypq9vlvUL4mPZeyHdlNOBBHDn0Qv+OTx5Z+QuWLhrOOKdXhH0P4tSr
-	ISY7Z8uoXxMey9kO7KacQ26fuamJN0+QsiRj1GZsw9HiF8THsvZFX7M5aWBKIBGJcEe3J/6ZRThj
-	35RMJQ4Mqfs9lvYhd214fMNZVg2JjEL0u1aXatLtWl2rS7Vpdq0u1BRMYdeYzDWKYWu7i/aham1M
-	So5m24mVuJlbiZW4mVuJlbiZW4mU/KjnrLWpxX6d//EAD4RAAECAwIJBBEFAAAAAAAAAAECAwAEB
-	RExEhMgIUFRU2FxBoGh0RAUFRYiNDU2UGKRorGywcLwMjNCQ1L/2gAIAQMBAT8B9FUuluVJwgGxI
-	vMGVoDJwFuknn+gsjFcndofe6oxXJ3aH3uqMVyd2h97qh2iSk20XaY5aRo/M454uzHLlSWaA6tF5
-	P1A+GRR6HLTMqH385V0RTWjIVrtZBzZx0WxVkhE86Bry2vN1zj9whnAxicZ+m3PwiflpZyRUlKRZ
-	Z4NnDNZGA3I/uDCc1aE8dZ3XDTqhyqTkinEpc8O9W7cNVmn2aIoS1OVRC1G0m34GKx4+7xy2vN1z
-	j9w7DajIthz+xV3qjXxOj26oWkTywthsJfAu1esc140Dn3RP0+YkF2TGnTHJ/yk3z/KYrHj7vHLa
-	83XOP3CKHRpSZlce+MInoipupkptxLOdf8Ao6NydVl1vssikVMU58uOC0Kv1xW6uipYKGhYka45P
-	+Um+f5TFY8fd45dEdam5RymOmwm783HPDVMrUjaiWu3EfWFUKqLJUpu08R1x3v1LZ9KeuO9+pbPp
-	T1xS6WaWTPTxwcGJt/tp9bx/kcu7OITVp5AsDpjuxP7Ux3Yn9qY7sT+1MPzb81neWVejP/EADsRAA
-	EBBQMIBQsFAQAAAAAAAAEDAAIEBREhQXEGEhMgMVFTYTI1gaHRFBUWNlBiorGywvAQIjNCQ1L/2
-	gAIAQIBAT8B9lTebpypMEirx2BnYzKRcaRNEAHAfM1bTZT8MfD4tpsp+GPh8W02U/DHw+LIz+Mgl
-	gjNks0G/wDLD2MDW0a8Y6F8pEk1LQB8gT89SeZQxcJGGHhrA721vaarCYyHyt92hsPbWjSV4vy5E
-	vbtdb1nTw+0svn6J7RdKhpi0tiotOYuPPPmucM6uNtW0ikw/jOalvvew3DntN29kpRAzB7TvJ/sF
-	jt1d7x31u5W3tlE46nKFHHBQDN+oNI+rUcNdb1nTw+0/oq6Jgo8l/k70veO7AX87N7JvGXplyIVL
-	0MT0t/ui3om8jDm0tmULMXCYa67c2UvVSvZ9QaR9Wo4a63rOnh9pbKCexkJF+Tw5zQKXba4tKUX4
-	+CSfXsc/wCRfzeN9dtNm+rTuUmZw4TSNC7s3NIJKpKs99Z6rz25speqlez6g0j6tRw15+itBRiU2R
-	FQ7t/OYsZabSGYh1SK28wa9zO5RShx0OuqUA917wb0llXF7nvBvSWVcXue8GnE4E3Al8vBezjafz
-	vLQcOISHcQH9RTXIrYWeksufOcUQ3mOW8EN5jlvBDeY5bwQ0PBw8IKIOB3D2Z//8QAPBAAAQMBAQw
-	GCAYDAAAAAAAAAQACAxEEEiEzNHOCkaOxwdHhECIwMUFxBRMyQkNRcvAgI1JhcIEUJKH/2gAIAQ
-	EABj8C/h0NY0uce4BVLWRfW5YWDSeCwsGk8FhYNJ4LCwaTwWFg0ngsLBpPBYWDSeCqGsl+hyLX
-	tLXDvB7ZrGirnGgCqaGcjrvRbE02gjxF4LFNZyWKazksU1nJYprOSxTWclims5LFNZyQbK02cnx
-	N8KooJwOo9OY4Uc00I7VpPw2l/wB6U2JpoZjQ+X4xFC26eVX18d38k6KVty9veE6JxqYTQeScR8
-	Rof96O1lyR2hWTO3fjtT6X7wr0Wcj27k1Vrzd6iyQ2ntZckdoVkzt3RFC28XmlUGRxN+oipKNq
-	hYI3M9oN7iFQXyhN6RPWN9tmb7R81EyK5s9nZfMbR1Q1PEdnur95xd3p00pq4/8AFa83eoskNp7
-	WXJHaFZM7d0QzUrcOrRCSJ4ew+IU0FnHrZbwc1pvgL3ZvSJH9Rc1dOJkkef7K/wARp/25xWYj3R
-	+nptebvUWSG09rLkjtCsmdu6eoSCfkgTR3pCUXwe6Nqme2Ft25peHsF8lC1TitsePyYj7v7lOe
-	83T3GpJ6bXm71FkhtPay5I7QrJnbuk+kZxWl6Bh953zRc6skrzpTZbQ8vtVPy7PdXm/uVFbpg+
-	Jzx1mA3iibKXMkHuuNQVQ3j0WvN3qLJDae1lyR2hWTO3JsMQq8oXVqv+IDF6iOL1dngFywn2QPm
-	i2x0tFq8bQe5v0ove4uce8lWcs91gafMIucaAd5U0jfZc8uGnotebvUWSG09rLkjtCsmduVor7d
-	yKeX3Tos8LXkVqXNB7/l0kwSFle8eBVxLL1P0tFOm15u9RZIbT2rQfiNLPvQmytFTCanyTZYnXL
-	2+Kp6iO7/AFJ0srrp5/G6VwoZjUeScB8NoZ96e1a9po5pqCqGgnA67EXRONnJ8BfCxvV81jer5rG
-	9XzWN6vmsb1fNY3q+axvV80HSuNoI8DeCoKGcjqMTnuNXONSe2DmOLXDuIVC5kv1tWCg0HisFBo
-	PFYKDQeKwUGg8VgoNB4rBQaDxWCg0HiqBzIvoai57i5x7yf4e//8QAKBABAAECBAYCAwEBAAAAAA
-	AAAREAYSExQaEQMFFxkfAggXDB4bHR/9oACAEDAQE/EPxX0JqbAar2y8ujDKK79p0Agg6jyNzxcE
-	dIQ8UikITrdOEC/Kf6dB+siAUAKaZbTe2LU5m3nJMzyITyUZsE37u932AQj0n2X7U1kGwCyJs/Gm
-	SZtNWgG/v4XvDIIolkhkgBIkBgELQgqRVyrea87g9kEl3KTubf8BuaTGfTbFTBC9cuSKUKFA1oG
-	R3vmb3m/oZ53B7AIKYUiUAMaJdzfRLUHVy8ChBACIEyJFDGDRDlMk55uZzSTclmEq8CwHzf0M87g
-	67mMr3w23QIanxSbr9YLyDEeYGpywyq6rqvqMMPzAwSMSQqlpiwEzNKKiRjYWx/B1ioSEo5Fm7P
-	dlrzj9V5x+q84/VNEIxKofBg/Gf/xAAnEQEBAAECBAYDAQEAAAAAAAABESEAMUFRYfAQIDBxodFQ
-	gZHB4f/aAAgBAgEBPxD8V7fb9m6vAP6uDigbYAJ8HzvI++/wbhJJ1woHGqcnbQASj5wcgIex/wCv
-	IxxLVBJDi2CzEd88jYsN0i06Is6JpdqyfzB8HoPov9AM+ZoUxBVCIMvvx2ZMzWUvy+Pe98wIlY8Q
-	liKoEaOStGgfAgBgAiGu76vovszCxcnn/wC/kA1ExuDLBwNYOCYiC6KxMRRHkxtMYjMTwt7vq+g+
-	1nqWFQvA4LMcRzyRnDiwMUUNoOwrxNE9da6JGbdEGSTOjBoCVAK7oVfbE43wt7vq+fFTgeUpnkI1
-	wZzNBDibRuilE6VOmppxAAANgPGaankDAgg0AcgMUAA071hXNDL+3PnAIUdM67yJ8ENd+/eu/fvX
-	fv3p9WbwC+7u/v8AGf/EACgQAQABAwQBBAICAwAAAAAAAAERACExQVFhcYEwQJGhECBwweHw8f/a
-	AAgBAQABPxD+HZPFgv2Au0FAJIEORR0w+glSpUqVKlCgEsiHAp6Jak8WC/ZG56wcWPlZAHa187nRF
-	3B+4l0BA8IOflF7BGy+hTTTTTTSgeAHPwg9kjdK+dzog5l/UyaiHFj4WQj0nqhAKjiErwy7KScE0
-	MI+ZF4k1/e4IADAMpgDestXW89rZp997BiOES4maScE0sK+JE4g0oIBUMSleWXb7WRVqqlupDsJO
-	vwVgGhmOfy+y1SJFQsZMEhXBwS+KTKAGT1UJZ2xsFO74AILCwFGTJM6U/kQOVOANaQzslbCvq+5K
-	I/AP5Zxliw2BCBS66JlGFEr5j7oZEIgQTBaB/llX2VUiRU0qKLOEHMmj4bMlHAyJqNypmXBhMize
-	zpXSoVchWDJ8QP/AAoRygyMsAHwAdFImAyVSQTVm/C6J7WqRIqskZFhlgtmhQkB20YI3ixxsUJLm
-	1SiXJOlxmlN+g3QiPR2PGVoh3TkqMr7WqRIqUC3zqzhb7jqEzl4AKqwB4AOAoRDcOwiAwMLbvLLSO
-	/E0jkmVAbW07o5IUpRubp3mONaW6kFCjI+yqkSKpvdYlgWU0D/AG9QQpjMQm4k/KeKexVrSF+Kwli
-	YAJZpmiCajZEs/TlLDrnMEuqtI9COuQCaXJ6R1pHJ2YASq6AVavNUQA+n2VUiRU1wSlmGPy/g+fo
-	BIKBm5GdvzZzKyRNki85pon+hnJ6LHsapAQGo4lC8sO2gnBNLCHiVeJdKyTUJ2I2RLI0OZ7Gr73z
-	R+Z3SAGAwBt+4TgmhhTzKnEOtBAahiELww7PVTix8LJE6Svjc6Im5f1MOioHhBz8qPQY2D0Kaaaa
-	aaUDwA5+FXosbjXxudEDMH7iDVE4sfKyVe19aTxYL9xLlBQCCRDlU9svoJUqVKlSpQoBDAhwqOyG
-	pPFgv3Vu/w9//2Q==`
-
-	iconB64 = strings.TrimSpace(iconB64)
-	iconB64 = strings.ReplaceAll(iconB64, "\n", "")
-	iconB64 = strings.ReplaceAll(iconB64, "\t", "")
-	iconB64 = strings.ReplaceAll(iconB64, " ", "")
-	
-	data, err := base64.StdEncoding.DecodeString(iconB64)
-	if err != nil {
-		log.Println("Erro ao carregar ícone:", err)
-		return nil 
-	}
-	return data
 }
 
 func sendHelpRequest() {
@@ -338,6 +248,7 @@ func sendHelpRequest() {
 		showNativeMessage("Erro de Conexão", "❌ Não foi possível contatar o servidor.\n\nPor favor, ligue para o ramal do TI ou tente novamente mais tarde.", MB_ICONEXCLAMATION)
 	}
 }
+
 
 
 func shutdownPC() {
@@ -788,39 +699,30 @@ func handleRemoteCommand(command string, payload string) {
 		ShutdownCancelled = true
 		sendCommandResult("Cancelado pelo usuário.", "")
 	case "set_wallpaper":
-    psScript := fmt.Sprintf(`
-        $url = "%s"
-        $path = "$env:TEMP\wallpaper_agente.jpg"
-        
-        # Forçar TLS 1.2 e ignorar erros de certificado SSL (necessário para HTTPS local)
-        [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-        [System.Net.ServicePointManager]::ServerCertificateValidationCallback = {$true}
-        
-        if (Test-Path $path) { Remove-Item $path -Force }
-        
-        try {
-            # O parâmetro -UseBasicParsing evita dependência do motor do Internet Explorer
-            Invoke-WebRequest -Uri $url -OutFile $path -UseBasicParsing -UserAgent "Mozilla/5.0"
-        } catch {
-            Write-Output "Erro no download: $_"
-            exit
-        }
-
-        if (Test-Path $path) {
-            $code = @'
-            using System;
-            using System.Runtime.InteropServices;
-            public class Wallpaper {
-                [DllImport("user32.dll", CharSet = CharSet.Auto)]
-                public static extern int SystemParametersInfo(int uAction, int uParam, string lpvParam, int fuWinIni);
-            }
+		psScript := fmt.Sprintf(`
+				$url = "%s"
+				$path = "$env:TEMP\wallpaper_agente.jpg"
+				if (Test-Path $path) { Remove-Item $path -Force }
+				[System.Net.ServicePointManager]::ServerCertificateValidationCallback = {$true}
+				try {
+					[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+					Invoke-WebRequest -Uri $url -OutFile $path -UseBasicParsing
+				} catch {
+					Write-Output "Erro no download: $_"
+					exit
+				}
+				$code = @'
+				using System;
+				using System.Runtime.InteropServices;
+				public class Wallpaper {
+					[DllImport("user32.dll", CharSet = CharSet.Auto)]
+					public static extern int SystemParametersInfo(int uAction, int uParam, string lpvParam, int fuWinIni);
+				}
 '@
-            Add-Type -TypeDefinition $code
-            # 0x0014 = SETDESKWALLPAPER | 0x03 = UpdateIniFile e SendWinIniChange
-            [Wallpaper]::SystemParametersInfo(0x0014, 0, $path, 0x03)
-        }
-    `, payload)
-    go runPowerShellScript(psScript)
+				Add-Type -TypeDefinition $code
+				[Wallpaper]::SystemParametersInfo(0x0014, 0, $path, 0x03)
+			`, payload)
+			go runPowerShellScript(psScript)
 	case "custom_script":
 		if runtime.GOOS == "windows" { runPowerShellScript(payload) }
 	}
@@ -876,6 +778,7 @@ func registerMachine() {
 					var regResp RegistrationResponse
 					json.Unmarshal(body, &regResp)
 					GlobalMachineIP = regResp.MachineIP
+					log.Printf("✅ Máquina registrada! IP: %s | UUID: %s", GlobalMachineIP, info.UUID)
 					return 
 				}
 			}
@@ -908,6 +811,5 @@ func main() {
 			time.Sleep(TELEMETRY_INTERVAL)
 		}
 	}()
-
 	systray.Run(onReady, onExit)
 }
