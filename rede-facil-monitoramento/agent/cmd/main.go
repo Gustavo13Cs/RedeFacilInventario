@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/tls"
+	"encoding/base64" 
 	"encoding/json"
 	"fmt"
 	"io"
@@ -22,7 +23,7 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/getlantern/systray" 
+	"github.com/getlantern/systray"
 	"github.com/shirou/gopsutil/v3/cpu"
 	"github.com/shirou/gopsutil/v3/disk"
 	"github.com/shirou/gopsutil/v3/host"
@@ -31,7 +32,7 @@ import (
 )
 
 // --- CONFIGURAÇÕES ---
-const AGENT_VERSION = "6.2" 
+const AGENT_VERSION = "6.3" 
 const UPDATE_BASE_URL = "https://192.168.50.60:3001/updates"
 const UPDATE_URL_VERSION = "https://192.168.50.60:3001/updates/version.txt"
 const UPDATE_URL_EXE = "https://192.168.50.60:3001/updates/AgenteRedeFacil.exe"
@@ -180,9 +181,10 @@ type CommandResult struct {
 
 
 func onReady() {
+	systray.SetIcon(getIconData()) 
+	
 	systray.SetTitle("Agente Rede Fácil")
 	systray.SetTooltip("Rede Fácil - Monitoramento Ativo")
-	
 
 	mRequestHelp := systray.AddMenuItem("🆘 Solicitar Suporte TI", "Chamar técnico imediatamente")
 	systray.AddSeparator()
@@ -200,7 +202,19 @@ func onReady() {
 	}()
 }
 
-func onExit() {}
+func onExit() {
+}
+
+func getIconData() []byte {
+	iconB64 := "iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAABGdBTUEAALGPC/xhBQAAACBjSFJNAAB6JgAAgIQAAPoAAACA6AAAdTAAAOpgAAA6mAAAF3CculE8AAAABmJLR0QA/wD/AP+gvaeTAAAAB3RJTUUH6AEbBw0x8+02/gAAAMdJREFUOMutkzEOwjAMRZ+hY+AEOACbI2TjGByD7TFrx8DMxMgREm6QokqK4C9Z/uX/b8tWUZT04w57Y6V5HIO71Kz1DngFW+AOnAGj1rLwF3ACLoBZ2/4W2AAv4Gn1Y8/bB9jZ/xXwAGa73q0XwA14B042Yw+s7XoF7F5QVR/gE9gC98A62wzB7J2B5x/N1tX1A9h/0Fp/h2CMsU7gKI5O4CiOTuAojk7gKI5O4CiO/g7BGOOSwFEcnUBxXJ3AURydwFEc/Q48A48S7+0tP9J5AAAAAElFTkSuQmCC"
+	
+	data, err := base64.StdEncoding.DecodeString(iconB64)
+	if err != nil {
+		log.Println("Erro ao carregar ícone:", err)
+		return nil
+	}
+	return data
+}
 
 func sendHelpRequest() {
 	url := fmt.Sprintf("%s/support/request", API_BASE_URL)
@@ -225,10 +239,10 @@ func sendHelpRequest() {
 	}
 
 	exec.Command("msg", "*", msgBody).Run()
-
 	log.Println(msgTitle, ":", msgBody)
 }
 
+// --- FUNÇÕES DE SISTEMA ---
 
 func shutdownPC() {
 	log.Println("🌙 Inatividade detectada. Desligando PC...")
@@ -647,6 +661,22 @@ func sendCommandResult(output string, errorMsg string) {
 	httpClient.Do(req)
 }
 
+func runPowerShellScript(scriptContent string) {
+	cleanScript := strings.TrimSpace(scriptContent)
+	tmpFile, err := os.CreateTemp("", "agent_script_*.ps1")
+	if err != nil { return }
+	defer os.Remove(tmpFile.Name())
+	tmpFile.Write([]byte(cleanScript))
+	tmpFile.Close()
+
+	outputStr, err := runCommandHidden("powershell", "-ExecutionPolicy", "Bypass", "-File", tmpFile.Name())
+	if err != nil {
+		sendCommandResult(outputStr, fmt.Sprintf("Erro: %v", err))
+	} else {
+		sendCommandResult(outputStr, "")
+	}
+}
+
 func handleRemoteCommand(command string, payload string) {
 	if command == "" { return }
 	log.Printf("⚠️ COMANDO: %s", command)
@@ -758,6 +788,7 @@ func main() {
 	preventSystemSleep()
 
 	go registerMachine()
+	
 	go checkForUpdates()
 	go startNetworkMonitor()
 
@@ -767,6 +798,7 @@ func main() {
 			checkAutoShutdown()
 		}
 	}()
+
 	go func() {
 		for {
 			postData("/telemetry", collectTelemetry())
