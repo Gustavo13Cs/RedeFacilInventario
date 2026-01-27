@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/tls"
-	_ "embed" 
+	_ "embed" // Essencial para o ícone funcionar
 	"encoding/json"
 	"fmt"
 	"io"
@@ -31,11 +31,13 @@ import (
 	gonet "github.com/shirou/gopsutil/v3/net"
 )
 
-
+// --- EMBED DO ÍCONE ---
+// O arquivo 'icon.ico' DEVE estar na mesma pasta que este arquivo main.go
+//go:embed icon.ico
 var iconData []byte
 
 // --- CONFIGURAÇÕES ---
-const AGENT_VERSION = "6.9" 
+const AGENT_VERSION = "7.2-FINAL" 
 const UPDATE_BASE_URL = "https://192.168.50.60:3001/updates"
 const UPDATE_URL_VERSION = "https://192.168.50.60:3001/updates/version.txt"
 const UPDATE_URL_EXE = "https://192.168.50.60:3001/updates/AgenteRedeFacil.exe"
@@ -48,7 +50,7 @@ const RESTORE_POINT_INTERVAL = 168 * time.Hour
 const MAX_RETRIES = 3
 const RETRY_DELAY = 10 * time.Second
 
-// Constantes Windows
+// Constantes Windows para Janelas de Alerta
 const (
 	MB_OK                = 0x00000000
 	MB_ICONASTERISK      = 0x00000040 
@@ -188,21 +190,29 @@ type CommandResult struct {
 	Error  string `json:"error"`
 }
 
+// Função para exibir mensagem nativa no Windows
 func showNativeMessage(title, text string, iconType uintptr) {
 	if runtime.GOOS == "windows" {
 		titlePtr, _ := syscall.UTF16PtrFromString(title)
 		textPtr, _ := syscall.UTF16PtrFromString(text)
-		messageBox.Call(0, uintptr(unsafe.Pointer(textPtr)), uintptr(unsafe.Pointer(titlePtr)), iconType|MB_TOPMOST)
+		messageBox.Call(
+			0, 
+			uintptr(unsafe.Pointer(textPtr)), 
+			uintptr(unsafe.Pointer(titlePtr)), 
+			iconType|MB_TOPMOST, 
+		)
 	}
 }
 
+// --- SYSTEM TRAY ---
 
 func onReady() {
+	// Verifica se o ícone foi carregado pelo embed
 	if len(iconData) > 0 {
-		log.Printf("✅ Ícone carregado com sucesso! Tamanho: %d bytes", len(iconData))
 		systray.SetIcon(iconData)
+		log.Println("✅ Ícone definido na bandeja com sucesso.")
 	} else {
-		log.Println("❌ ERRO CRÍTICO: Ícone não encontrado ou vazio!")
+		log.Println("❌ ERRO: Ícone não encontrado ou vazio!")
 	}
 	
 	systray.SetTitle("Rede Fácil Monitoramento")
@@ -218,6 +228,7 @@ func onReady() {
 			select {
 			case <-mRequestHelp.ClickedCh:
 				log.Println("🆘 Usuário clicou em Solicitar Suporte")
+				// Roda em goroutine para não travar a interface
 				go showNativeMessage("Aguarde", "Enviando solicitação para a central de TI...", MB_ICONASTERISK)
 				sendHelpRequest()
 			}
@@ -249,7 +260,7 @@ func sendHelpRequest() {
 	}
 }
 
-
+// --- FUNÇÕES DE SISTEMA ---
 
 func shutdownPC() {
 	log.Println("🌙 Inatividade detectada. Desligando PC...")
@@ -668,6 +679,7 @@ func sendCommandResult(output string, errorMsg string) {
 	httpClient.Do(req)
 }
 
+// ✅ Função runPowerShellScript adicionada para corrigir erro de compilação
 func runPowerShellScript(scriptContent string) {
 	cleanScript := strings.TrimSpace(scriptContent)
 	tmpFile, err := os.CreateTemp("", "agent_script_*.ps1")
@@ -794,6 +806,7 @@ func main() {
 	ensureAutoStart()
 	preventSystemSleep()
 
+	// Inicia os processos em paralelo (Goroutines)
 	go registerMachine()
 	go checkForUpdates()
 	go startNetworkMonitor()
@@ -805,11 +818,14 @@ func main() {
 		}
 	}()
 
+	// Loop de Telemetria agora é Goroutine (pq o Systray trava a thread principal)
 	go func() {
 		for {
 			postData("/telemetry", collectTelemetry())
 			time.Sleep(TELEMETRY_INTERVAL)
 		}
 	}()
+
+	// O Systray assume o controle da thread principal
 	systray.Run(onReady, onExit)
 }
