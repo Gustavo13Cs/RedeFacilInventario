@@ -6,7 +6,7 @@ const dbConfig = {
     password: process.env.DB_PASS || 'adminpassword', 
     database: process.env.DB_NAME || 'inventarioredefacil',
     waitForConnections: true,
-    connectionLimit: 10,
+    connectionLimit: 100,
     queueLimit: 0,
     enableKeepAlive: true,      
     keepAliveInitialDelay: 0,
