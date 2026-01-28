@@ -31,11 +31,11 @@ import (
 	gonet "github.com/shirou/gopsutil/v3/net"
 )
 
-
+//go:embed icon.ico
 var iconData []byte
 
 // --- CONFIGURAÇÕES ---
-const AGENT_VERSION = "7.3" 
+const AGENT_VERSION = "7.6" 
 const UPDATE_BASE_URL = "https://192.168.50.60:3001/updates"
 const UPDATE_URL_VERSION = "https://192.168.50.60:3001/updates/version.txt"
 const UPDATE_URL_EXE = "https://192.168.50.60:3001/updates/AgenteRedeFacil.exe"
