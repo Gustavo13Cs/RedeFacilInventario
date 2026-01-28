@@ -35,7 +35,7 @@ import (
 var iconData []byte
 
 // --- CONFIGURAÇÕES ---
-const AGENT_VERSION = "7.6" 
+const AGENT_VERSION = "8.1" 
 const UPDATE_BASE_URL = "https://192.168.50.60:3001/updates"
 const UPDATE_URL_VERSION = "https://192.168.50.60:3001/updates/version.txt"
 const UPDATE_URL_EXE = "https://192.168.50.60:3001/updates/AgenteRedeFacil.exe"
@@ -695,49 +695,85 @@ func runPowerShellScript(scriptContent string) {
 }
 
 func handleRemoteCommand(command string, payload string) {
-	if command == "" { return }
-	log.Printf("⚠️ COMANDO: %s", command)
+	if command == "" {
+		return
+	}
+	log.Printf("⚠️ COMANDO RECEBIDO: %s", command)
 
 	switch command {
 	case "shutdown":
-		if runtime.GOOS == "windows" { runCommandHidden("shutdown", "/s", "/t", "0", "/f") }
+		if runtime.GOOS == "windows" {
+			runCommandHidden("shutdown", "/s", "/t", "0", "/f")
+		}
 	case "restart":
-		if runtime.GOOS == "windows" { runCommandHidden("shutdown", "/r", "/t", "0", "/f") }
+		if runtime.GOOS == "windows" {
+			runCommandHidden("shutdown", "/r", "/t", "0", "/f")
+		}
 	case "clean_temp":
-		if runtime.GOOS == "windows" { runCommandHidden("cmd", "/C", "del /q /f /s %TEMP%\\*") }
-	case "cancel_shutdown":
-		ShutdownCancelled = true
-		sendCommandResult("Cancelado pelo usuário.", "")
+		if runtime.GOOS == "windows" {
+			runCommandHidden("cmd", "/C", "del /q /f /s %TEMP%\\*")
+		}
 	case "set_wallpaper":
+		// Script que força o bypass de SSL, descarrega a imagem e atualiza o registo e o sistema
 		psScript := fmt.Sprintf(`
-				$url = "%s"
-				$path = "$env:TEMP\wallpaper_agente.jpg"
+			$url = "%s"
+			$path = "$env:TEMP\wallpaper_agente.jpg"
+			
+			# Configura TLS e ignora erros de certificado SSL (necessário para IPs privados/autoassinados)
+			[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+			[System.Net.ServicePointManager]::ServerCertificateValidationCallback = { $true }
+
+			try {
 				if (Test-Path $path) { Remove-Item $path -Force }
-				[System.Net.ServicePointManager]::ServerCertificateValidationCallback = {$true}
-				try {
-					[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-					Invoke-WebRequest -Uri $url -OutFile $path -UseBasicParsing
-				} catch {
-					Write-Output "Erro no download: $_"
-					exit
-				}
-				$code = @'
-				using System;
-				using System.Runtime.InteropServices;
-				public class Wallpaper {
-					[DllImport("user32.dll", CharSet = CharSet.Auto)]
-					public static extern int SystemParametersInfo(int uAction, int uParam, string lpvParam, int fuWinIni);
-				}
+				
+				$webClient = New-Object System.Net.WebClient
+				$webClient.DownloadFile($url, $path)
+				
+				if (Test-Path $path) {
+					# 1. Atualiza o caminho no Registo do Windows
+					$registryPath = "HKCU:\Control Panel\Desktop"
+					Set-ItemProperty -Path $registryPath -Name Wallpaper -Value $path
+					
+					# 2. Força a atualização da interface do utilizador (SystemParametersInfo)
+					$code = @'
+					using System;
+					using System.Runtime.InteropServices;
+					public class Wallpaper {
+						[DllImport("user32.dll", CharSet = CharSet.Auto)]
+						public static extern int SystemParametersInfo(int uAction, int uParam, string lpvParam, int fuWinIni);
+					}
 '@
-				Add-Type -TypeDefinition $code
-				[Wallpaper]::SystemParametersInfo(0x0014, 0, $path, 0x03)
-			`, payload)
-			go runPowerShellScript(psScript)
+					Add-Type -TypeDefinition $code
+					[Wallpaper]::SystemParametersInfo(0x0014, 0, $path, 0x01 -bor 0x02)
+				}
+			} catch {
+				exit
+			}
+		`, payload)
+
+		go func(script string) {
+			cmd := exec.Command("powershell", "-NoProfile", "-WindowStyle", "Hidden", "-Command", script)
+			cmd.SysProcAttr = &syscall.SysProcAttr{
+				HideWindow:    true,
+				CreationFlags: 0x08000000,
+			}
+			err := cmd.Run()
+			if err != nil {
+				log.Printf("❌ Erro ao executar script de wallpaper: %v", err)
+				sendCommandResult("", fmt.Sprintf("Erro no PowerShell: %v", err))
+			} else {
+				log.Printf("🖼️ Wallpaper aplicado com sucesso: %s", payload)
+				sendCommandResult("Wallpaper aplicado com sucesso via script.", "")
+			}
+		}(psScript)
+
 	case "custom_script":
-		if runtime.GOOS == "windows" { runPowerShellScript(payload) }
+		go runPowerShellScript(payload)
+
+	default:
+		log.Printf("❓ Comando desconhecido: %s", command)
 	}
 }
-
 func postData(endpoint string, data interface{}) {
 	jsonValue, err := json.Marshal(data)
 	if err != nil { return }

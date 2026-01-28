@@ -53,13 +53,14 @@ if (monitorService.setSocketIo) {
 }
 
 const uploadsPath = path.resolve(__dirname, 'uploads');
-app.use('/uploads', express.static(uploadsPath));
+app.use('/uploads', express.static(uploadsPath)); 
+
+app.use('/updates', express.static(path.join(__dirname, '../updates')));
 
 app.get('/', (req, res) => {
     res.json({ message: 'API Rede Fácil Financeira - Online e Segura (HTTPS) 🔒🚀' });
 });
 
-app.use('/updates', express.static(path.join(__dirname, '../updates')));
 
 app.use('/api/credentials', require('./routes/credentialRoutes'));
 app.use('/api/support', require('./routes/supportRoutes'));

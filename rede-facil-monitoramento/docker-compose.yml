@@ -44,6 +44,7 @@ services:
     volumes:
       - ./backend:/app
       - /app/node_modules
+      - ./src/uploads:/app/src/uploads
     networks:
       - app_network
 

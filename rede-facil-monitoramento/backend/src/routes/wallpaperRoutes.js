@@ -1,13 +1,11 @@
 const express = require('express');
-const router = express.Router(); // <--- ESSA LINHA É ESSENCIAL
+const router = express.Router(); 
 const multer = require('multer');
 const path = require('path');
 const wallpaperController = require('../controllers/wallpaperController');
 
-// Configuração do Armazenamento
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
-        // Certifique-se que esta pasta existe no seu container
         cb(null, 'src/uploads/');
     },
     filename: (req, file, cb) => {
@@ -16,7 +14,6 @@ const storage = multer.diskStorage({
     }
 });
 
-// Filtro de Arquivos
 const fileFilter = (req, file, cb) => {
     const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png'];
     if (allowedTypes.includes(file.mimetype)) {
@@ -32,13 +29,10 @@ const upload = multer({
     limits: { fileSize: 5 * 1024 * 1024 } 
 });
 
-/**
- * Rota para Upload e Aplicação de Wallpaper
- */
 router.post(
   '/machines/:uuid/wallpaper',
   upload.single('file'),
-  wallpaperController.setWallpaper // <--- Usando a lógica do Controller que já corrigimos
+  wallpaperController.setWallpaper 
 );
 
 module.exports = router;
